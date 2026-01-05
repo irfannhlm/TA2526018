@@ -66,8 +66,8 @@ const float hpf_alpha = 0.98;
 #define BIT_SHIFT 14       
 #define SILENCE_THRESHOLD 300    
 #define SILENCE_LIMIT_MS 2500    
-#define MAX_DURASI_DETIK 300    
-#define PRE_BUFFER_SEC 3         
+#define MAX_DURASI_DETIK 30    
+#define PRE_BUFFER_SEC 3
 #define PRE_BUFFER_SIZE (SAMPLE_RATE * PRE_BUFFER_SEC) 
 
 struct WavHeader {
@@ -208,7 +208,7 @@ void rekamSuara() {
 
   if (timeOutTriggered) { 
       lcd.clear(); lcd.print("WAKTU HABIS!"); 
-      beepLong(); 
+      beep(1, 1000);
   }
   
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("SAVED!");
@@ -249,7 +249,7 @@ void runAudioSession() {
        
        if (avgLoudness > SILENCE_THRESHOLD) { 
            rekamSuara(); 
-           sessionActive = false; 
+           break; 
        }
     }
     
@@ -367,7 +367,7 @@ void loop() {
       // SUDAH PERNAH DIGUNAKAN
       lcd.clear();
       lcd.setCursor(0, 0); lcd.print("KARTU SUDAH");
-      lcd.setCursor(0, 1); lcd.print("TERDAFTAR!");
+      lcd.setCursor(0, 1); lcd.print("DIGUNAKAN!");
       beep(3, 100); 
       delay(2000); 
     } else {
