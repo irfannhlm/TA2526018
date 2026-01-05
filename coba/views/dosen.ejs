@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <title>Dosen Dashboard - <%= currentClass %></title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --bg-color: #ffe6f2;
+        --card-bg: #ffffff;
+        --primary-pink: #ff80ab;
+        --dark-pink: #d81b60;
+        --text-dark: #4a4a4a;
+        --text-muted: #888888;
+        --shadow-soft: 0 10px 30px rgba(255, 105, 180, 0.15);
+      }
+      body {
+        background-color: var(--bg-color);
+        font-family: "Poppins", sans-serif;
+        color: var(--text-dark);
+        overflow-x: hidden;
+      }
+
+      .sidebar {
+        background: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(255, 255, 255, 0.8);
+        height: 100vh;
+        position: fixed;
+        width: 250px;
+        padding: 30px 20px;
+        z-index: 1000;
+      }
+
+      .brand-title {
+        margin-bottom: 30px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .logo-img {
+        max-width: 100%;
+        max-height: 75px;
+        object-fit: contain;
+      }
+
+      .nav-pills .nav-link {
+        color: var(--text-muted);
+        font-weight: 500;
+        border-radius: 15px;
+        padding: 12px 20px;
+        margin-bottom: 10px;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .nav-pills .nav-link:hover {
+        background-color: rgba(255, 128, 171, 0.1);
+        color: var(--dark-pink);
+      }
+      .nav-pills .nav-link.active {
+        background: linear-gradient(135deg, #ff80ab, #f06292);
+        color: white;
+        box-shadow: 0 8px 20px rgba(240, 98, 146, 0.4);
+      }
+      .main-content {
+        margin-left: 250px;
+        padding: 40px;
+      }
+      .header-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin-bottom: 5px;
+      }
+      .header-subtitle {
+        color: var(--text-muted);
+        margin-bottom: 30px;
+      }
+
+      .dashboard-card {
+        background: var(--card-bg);
+        border-radius: 25px;
+        border: none;
+        padding: 25px;
+        box-shadow: var(--shadow-soft);
+        height: 100%;
+        transition: transform 0.3s ease;
+      }
+      .battery-indicator {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--dark-pink);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .uid-table {
+        border-collapse: separate;
+        border-spacing: 0 10px;
+      }
+      .uid-table tbody tr {
+        background-color: #fff;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+        border-radius: 10px;
+      }
+      .uid-table td:first-child {
+        border-top-left-radius: 15px;
+        border-bottom-left-radius: 15px;
+      }
+      .uid-table td:last-child {
+        border-top-right-radius: 15px;
+        border-bottom-right-radius: 15px;
+      }
+      .badge-custom {
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.8rem;
+      }
+
+      .transcript-box {
+        background-color: #f8f9fa;
+        border-radius: 15px;
+        padding: 15px;
+        font-size: 0.95rem;
+        color: var(--text-dark);
+        cursor: pointer;
+        position: relative;
+        transition: all 0.3s ease;
+        margin-bottom: 10px;
+        border: 1px solid #f0f0f0;
+      }
+      .transcript-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 0;
+        line-height: 1.5;
+      }
+      .transcript-box.expanded .transcript-text {
+        -webkit-line-clamp: unset;
+        overflow: visible;
+      }
+      .read-more-label {
+        font-size: 0.75rem;
+        color: var(--primary-pink);
+        font-weight: 600;
+        margin-top: 8px;
+        display: none;
+      }
+
+      .date-header-row {
+        cursor: pointer;
+        transition: transform 0.2s ease;
+      }
+      .date-header {
+        background-color: #ffc2d4;
+        color: #880e4f;
+        font-weight: 700;
+        font-size: 0.9rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        border-bottom: 1px solid #f8bbd0;
+        border-top: none !important;
+        border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(255, 64, 129, 0.15);
+      }
+      .question-header-row {
+        cursor: pointer;
+      }
+      .question-header {
+        background-color: #fff0f6;
+        color: var(--dark-pink);
+        font-weight: 600;
+        font-size: 0.9rem;
+        border-radius: 10px;
+        border-left: 5px solid var(--primary-pink);
+        margin-top: 10px;
+      }
+      .date-collapsed .chevron-icon {
+        transform: rotate(-90deg);
+      }
+      .chevron-icon {
+        transition: transform 0.3s ease;
+        color: #880e4f;
+      }
+
+      .nav-pills-custom .nav-link {
+        color: var(--primary-pink);
+        background-color: white;
+        border: 1px solid var(--primary-pink);
+        font-weight: 600;
+        margin: 0 5px;
+      }
+      .nav-pills-custom .nav-link.active {
+        color: white;
+        background-color: var(--primary-pink);
+        border: 1px solid var(--primary-pink);
+      }
+
+      .btn-request {
+        background-color: #fff3e0;
+        color: #e65100;
+        border: 1px solid #ffe0b2;
+        font-weight: 600;
+        transition: 0.3s;
+      }
+      .btn-request:hover {
+        background-color: #ffe0b2;
+      }
+      
+      .class-badge {
+          background-color: var(--dark-pink);
+          color: white;
+          padding: 5px 15px;
+          border-radius: 20px;
+          font-size: 0.5em;
+          vertical-align: middle;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #fff0f5;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #ffb6c1;
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="brand-title">
+        <img src="/images/logo.png" alt="Logo Aplikasi" class="logo-img" />
+      </div>
+
+      <div
+        class="nav flex-column nav-pills"
+        id="v-pills-tab"
+        role="tablist"
+        aria-orientation="vertical"
+      >
+        <button
+          class="nav-link active"
+          id="v-pills-control-tab"
+          data-bs-toggle="pill"
+          data-bs-target="#v-pills-control"
+        >
+          <i class="fas fa-gamepad"></i> Dashboard
+        </button>
+        <button
+          class="nav-link"
+          id="v-pills-logs-tab"
+          data-bs-toggle="pill"
+          data-bs-target="#v-pills-logs"
+        >
+          <i class="fas fa-history"></i> Riwayat
+        </button>
+        <button
+          class="nav-link"
+          id="v-pills-stats-tab"
+          data-bs-toggle="pill"
+          data-bs-target="#v-pills-stats"
+        >
+          <i class="fas fa-chart-pie"></i> Statistik
+        </button>
+      </div>
+      <div style="position: absolute; bottom: 30px; width: 85%">
+        <div class="card border-0 bg-white shadow-sm p-3 rounded-4">
+          <div class="d-flex align-items-center gap-3">
+            <img
+              src="https://ui-avatars.com/api/?name=Dosen&background=ff80ab&color=fff"
+              class="rounded-circle"
+              width="40"
+            />
+            <div>
+              <h6 class="mb-0 small fw-bold">Prof. Dosen</h6>
+              <small class="text-muted" style="font-size: 10px"
+                >Teacher Mode</small
+              >
+            </div>
+          </div>
+          <a
+            href="/"
+            class="btn btn-sm btn-outline-danger w-100 mt-3 rounded-pill"
+            >Logout</a
+          >
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h1 class="header-title">
+            Monitoring Sesi 
+            <span class="class-badge"><%= currentClass %></span>
+          </h1>
+          <p class="header-subtitle">
+            Kelola perangkat dan pantau diskusi mahasiswa.
+          </p>
+        </div>
+        <div>
+            <a href="/pilih-kelas?role=dosen" class="btn btn-outline-secondary rounded-pill">
+                <i class="fas fa-exchange-alt me-2"></i>Ganti Kelas
+            </a>
+        </div>
+      </div>
+
+      <div class="tab-content" id="v-pills-tabContent">
+        <div class="tab-pane fade show active" id="v-pills-control">
+          <div class="row g-4">
+            
+            <div class="col-lg-5">
+              <div class="dashboard-card position-relative overflow-hidden">
+                <div
+                  style="
+                    position: absolute;
+                    top: -20px;
+                    right: -20px;
+                    width: 100px;
+                    height: 100px;
+                    background: #ff80ab;
+                    opacity: 0.1;
+                    border-radius: 50%;
+                  "
+                ></div>
+
+                <div class="mb-4">
+                    <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
+                    <form action="/dosen" method="GET">
+                        <input type="hidden" name="kelas" value="<%= currentClass %>">
+                        
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
+                            <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
+                                <% devices.forEach(dev => { %>
+                                    <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %>>
+                                        <%= dev.name %> (<%= dev.status.toUpperCase() %>)
+                                    </option>
+                                <% }) %>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" 
+                     style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                  <div>
+                    <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <% if(currentDevice.status === 'online') { %>
+                            <span class="badge bg-success text-white badge-custom shadow-sm">
+                                <i class="fas fa-wifi me-1"></i> ONLINE
+                            </span>
+                        <% } else { %>
+                            <span class="badge bg-danger text-white badge-custom shadow-sm">
+                                <i class="fas fa-wifi-slash me-1"></i> OFFLINE
+                            </span>
+                        <% } %>
+                        <small class="text-muted font-monospace"><%= currentDevice.id %></small>
+                    </div>
+                  </div>
+                  
+                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>"
+                    class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary"
+                    data-bs-toggle="tooltip" title="Cek Status">
+                    <i class="fas fa-sync-alt"></i>
+                  </a>
+                </div>
+
+                <div class="d-flex align-items-end gap-3 mb-4">
+                  <div class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? (currentDevice.battery > 20 ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
+                    <% if(currentDevice.battery > 80) { %> <i class="fas fa-battery-full"></i>
+                    <% } else if (currentDevice.battery > 50) { %> <i class="fas fa-battery-three-quarters"></i>
+                    <% } else if (currentDevice.battery > 20) { %> <i class="fas fa-battery-half"></i>
+                    <% } else { %> <i class="fas fa-battery-quarter"></i> <% } %>
+                    
+                    <%= currentDevice.status === 'online' ? currentDevice.battery + '%' : '--' %>
+                  </div>
+                  <small class="text-muted mb-2">
+                      <%= currentDevice.status === 'online' ? 'Daya Tersisa' : 'Perangkat Tidak Terdeteksi' %>
+                  </small>
+                </div>
+
+                <form action="/dosen/update-settings" method="POST">
+                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
+                  
+                  <div class="mb-4">
+                    <label class="small text-muted fw-bold mb-2">MAX DURASI BICARA (DETIK)</label>
+                    <div class="input-group bg-light rounded-pill overflow-hidden border">
+                      <span class="input-group-text border-0 bg-transparent ps-3">
+                        <i class="fas fa-clock text-secondary"></i>
+                      </span>
+                      <input
+                        type="number"
+                        name="timer"
+                        class="form-control border-0 bg-transparent"
+                        value="<%= session.maxTime %>"
+                        <%= currentDevice.status === 'offline' ? 'disabled' : '' %>
+                      />
+                      <button
+                        class="btn btn-link text-decoration-none text-dark fw-bold pe-3"
+                        <%= currentDevice.status === 'offline' ? 'disabled' : '' %>
+                      >
+                        SET
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                <form action="/api/simulate" method="POST" class="mt-auto">
+                   <input type="hidden" name="current_class" value="<%= currentClass %>">
+                   <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
+                  <button class="btn btn-light w-100 py-2 text-secondary fw-bold rounded-pill border">
+                    <i class="fas fa-magic me-2"></i> Simulasi Data Masuk
+                  </button>
+                </form>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <div class="dashboard-card">
+                <div
+                  class="d-flex justify-content-between align-items-center mb-4"
+                >
+                  <div>
+                    <h5 class="fw-bold mb-0">Peserta Aktif</h5>
+                    <small class="text-muted"
+                      >Total <%= currentList.length %> Perangkat</small
+                    >
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button
+                      class="btn btn-outline-secondary rounded-pill px-3"
+                      data-bs-toggle="modal"
+                      data-bs-target="#uploadUidModal"
+                    >
+                      <i class="fas fa-upload me-1"></i> Upload UID
+                    </button>
+                    <button
+                      class="btn btn-primary rounded-pill px-4"
+                      style="background: var(--dark-pink); border: none"
+                      data-bs-toggle="modal"
+                      data-bs-target="#addUidModal"
+                    >
+                      + Tambah
+                    </button>
+                  </div>
+                </div>
+                <div style="max-height: 400px; overflow-y: auto">
+                  <table class="table uid-table align-middle border-0">
+                    <tbody>
+                      <% if (currentList.length === 0) { %>
+                      <tr>
+                        <td class="text-center text-muted py-5">
+                          Belum ada peserta di sesi ini.
+                        </td>
+                      </tr>
+                      <% } %> <% currentList.forEach(item => { %>
+                      <tr>
+                        <td class="ps-4">
+                          <div class="d-flex align-items-center gap-3">
+                            <div
+                              class="bg-light rounded-circle p-2 text-secondary"
+                            >
+                              <i class="fas fa-wifi"></i>
+                            </div>
+                            <div>
+                              <div class="fw-bold small text-secondary">
+                                RFID TAG
+                              </div>
+                              <div class="font-monospace text-dark">
+                                <%= item.uid %>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <% if(item.isRegistered) { %>
+                          <div class="fw-bold text-dark"><%= item.name %></div>
+                          <small class="text-muted"><%= item.nim %></small> <% }
+                          else { %>
+                          <span
+                            class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3"
+                            >Unknown</span
+                          >
+                          <% } %>
+                        </td>
+                        <td class="text-end pe-3">
+                          <form action="/dosen/manage-uid" method="POST">
+                            <input type="hidden" name="current_class" value="<%= currentClass %>">
+                            <input
+                              type="hidden"
+                              name="action"
+                              value="delete"
+                            /><input
+                              type="hidden"
+                              name="uid"
+                              value="<%= item.uid %>"
+                            /><button class="btn btn-link text-danger">
+                              <i class="fas fa-times"></i>
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane fade" id="v-pills-logs">
+          <div class="dashboard-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h5 class="fw-bold mb-0">Riwayat Diskusi</h5>
+              <div class="d-flex gap-3">
+                <form
+                  action="/dosen/request-audio-sync"
+                  method="POST"
+                  onsubmit="alert('Permintaan sinkronisasi dikirim ke perangkat!'); return false;"
+                >
+                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <button
+                    class="btn text-white rounded-pill px-3 shadow-sm fw-bold"
+                    style="background-color: var(--dark-pink)"
+                  >
+                    <i class="fas fa-cloud-download-alt me-2"></i> Minta File
+                    Perangkat
+                  </button>
+                </form>
+                <div
+                  class="bg-light rounded-pill px-3 py-2 d-flex align-items-center gap-2"
+                  style="width: 250px"
+                >
+                  <i class="fas fa-search text-muted"></i>
+                  <input
+                    type="text"
+                    id="searchLog"
+                    class="form-control border-0 bg-transparent p-0 shadow-none"
+                    placeholder="Cari transkrip..."
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table
+                class="table align-middle"
+                id="logTable"
+                style="border-collapse: separate; border-spacing: 0 5px"
+              >
+                <tbody>
+                  <% let lastDate = ''; let lastQuestion = ''; const options = {
+                  weekday: 'long', year: 'numeric', month: 'long', day:
+                  'numeric' }; %> <% if (logs.length === 0) { %>
+                  <tr>
+                    <td class="text-center py-5 text-muted">
+                      Belum ada data data.
+                    </td>
+                  </tr>
+                  <% } %> <% logs.forEach(log => { %> <% let logDate = new
+                  Date(log.dateObj); let currentDate =
+                  logDate.toLocaleDateString('id-ID', options); let isoDate =
+                  logDate.getFullYear() + '-' + String(logDate.getMonth() +
+                  1).padStart(2, '0') + '-' +
+                  String(logDate.getDate()).padStart(2, '0'); let isoTime =
+                  String(logDate.getHours()).padStart(2, '0') + ':' +
+                  String(logDate.getMinutes()).padStart(2, '0'); let studentObj
+                  = students.find(s => s.nim === log.nim); let studentId =
+                  studentObj ? studentObj.id : ''; let dateClass = 'date-group-'
+                  + currentDate.replace(/[^a-zA-Z0-9]/g, ''); let
+                  currentQuestion = log.question || "Sesi Tanpa Pertanyaan"; let
+                  questionClass = dateClass + '-q-' +
+                  currentQuestion.substring(0, 5).replace(/[^a-zA-Z0-9]/g, '');
+                  %> <% if (currentDate !== lastDate) { %>
+                  <tr
+                    class="date-header-row"
+                    onclick="toggleGroup(this, '<%= dateClass %>')"
+                  >
+                    <td colspan="4" class="date-header px-4 py-3">
+                      <div
+                        class="d-flex justify-content-between align-items-center"
+                      >
+                        <span
+                          ><i class="far fa-calendar-alt me-2"></i> <%=
+                          currentDate %></span
+                        >
+                        <i class="fas fa-chevron-down chevron-icon"></i>
+                      </div>
+                    </td>
+                  </tr>
+                  <% lastDate = currentDate; lastQuestion = ''; %> <% } %> <% if
+                  (currentQuestion !== lastQuestion) { %>
+                  <tr
+                    class="question-header-row <%= dateClass %>"
+                    onclick="toggleGroup(this, '<%= questionClass %>')"
+                  >
+                    <td colspan="4" class="px-4 py-2">
+                      <div
+                        class="question-header p-3 d-flex justify-content-between align-items-center"
+                      >
+                        <span
+                          ><i class="fas fa-question-circle me-2"></i> <%=
+                          currentQuestion %></span
+                        >
+                        <small class="text-muted"
+                          ><i class="fas fa-chevron-down"></i
+                        ></small>
+                      </div>
+                    </td>
+                  </tr>
+                  <% lastQuestion = currentQuestion; %> <% } %>
+
+                  <tr
+                    class="bg-white border-bottom <%= dateClass %> <%= questionClass %>"
+                  >
+                    <td style="width: 1%; white-space: nowrap">
+                      <div class="fw-bold text-dark">
+                        <%= logDate.toLocaleTimeString('id-ID', {hour:
+                        '2-digit', minute:'2-digit'}) %>
+                      </div>
+                    </td>
+                    <td
+                      style="
+                        width: 1%;
+                        white-space: nowrap;
+                        padding-left: 20px;
+                        padding-right: 30px;
+                      "
+                    >
+                      <div class="d-flex align-items-center gap-2">
+                        <div
+                          class="bg-light rounded-circle text-center d-flex align-items-center justify-content-center"
+                          style="
+                            width: 35px;
+                            height: 35px;
+                            color: var(--primary-pink);
+                          "
+                        >
+                          <i class="fas fa-user"></i>
+                        </div>
+                        <div>
+                          <div class="fw-bold small"><%= log.name %></div>
+                          <div class="text-muted" style="font-size: 11px">
+                            <%= log.nim %>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div
+                        class="transcript-box"
+                        onclick="toggleTranscript(this)"
+                      >
+                        <p class="transcript-text"><%= log.transcript %></p>
+                        <small class="read-more-label"
+                          >Lihat Selengkapnya</small
+                        >
+                      </div>
+
+                      <% if (log.audio_url) { %>
+                      <audio
+                        controls
+                        src="<%= log.audio_url %>"
+                        style="
+                          width: 100%;
+                          height: 35px;
+                          border-radius: 20px;
+                          opacity: 0.8;
+                          margin-top: 5px;
+                          background-color: #fce4ec;
+                        "
+                      ></audio>
+                      <% } else { %>
+                      <form
+                        action="/dosen/request-audio"
+                        method="POST"
+                        class="mt-2"
+                      >
+                        <input type="hidden" name="current_class" value="<%= currentClass %>">
+                        <input type="hidden" name="id" value="<%= log.id %>" />
+                        <button
+                          class="btn btn-request btn-sm w-100 rounded-pill py-2"
+                        >
+                          <i class="fas fa-cloud-download-alt me-2"></i> Unduh
+                          File Audio (Server)
+                        </button>
+                      </form>
+                      <% } %>
+                    </td>
+                    <td
+                      class="text-end"
+                      style="width: 1%; white-space: nowrap; padding-left: 20px"
+                    >
+                      <button
+                        class="btn btn-sm btn-light text-secondary rounded-circle"
+                        data-id="<%= log.id %>"
+                        data-student="<%= studentId %>"
+                        data-date="<%= isoDate %>"
+                        data-time="<%= isoTime %>"
+                        data-question="<%= currentQuestion %>"
+                        data-transcript="<%= log.transcript %>"
+                        onclick="openEditLogModal(this)"
+                      >
+                        <i class="fas fa-pen"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane fade" id="v-pills-stats">
+          <div class="dashboard-card">
+            <h5 class="fw-bold mb-4">Statistik Keaktifan</h5>
+            <% if (stats.length === 0) { %>
+            <p class="text-muted">Belum ada data.</p>
+            <% } else { %>
+            <div class="row">
+              <% stats.forEach((s, i) => { %>
+              <div class="col-md-6 mb-4">
+                <div
+                  class="d-flex align-items-center justify-content-between mb-2"
+                >
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-dark rounded-circle"
+                      ><%= i+1 %></span
+                    >
+                    <span class="fw-bold text-dark"><%= s.name %></span>
+                  </div>
+                  <span class="fw-bold" style="color: var(--dark-pink)"
+                    ><%= s.count %>x</span
+                  >
+                </div>
+                <div
+                  class="progress rounded-pill"
+                  style="height: 8px; background: #fce4ec"
+                >
+                  <% let pct = (stats[0].count > 0) ? (s.count / stats[0].count)
+                  * 100 : 0; %>
+                  <div
+                    class="progress-bar rounded-pill"
+                    style="
+                      width: <%= pct %>%;
+                      background: linear-gradient(90deg, #ff80ab, #f06292);
+                    "
+                  ></div>
+                </div>
+              </div>
+              <% }) %>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="addUidModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-3">
+          <div class="modal-header border-0">
+            <h5 class="modal-title fw-bold">Tambah Peserta</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body pt-0">
+            <ul
+              class="nav nav-pills nav-pills-custom mb-3 w-100 bg-light p-1 rounded-pill"
+              id="pills-tab"
+              role="tablist"
+            >
+              <li class="nav-item w-50">
+                <button
+                  class="nav-link active w-100 rounded-pill text-center"
+                  data-bs-toggle="pill"
+                  data-bs-target="#pills-single"
+                >
+                  Perorangan
+                </button>
+              </li>
+              <li class="nav-item w-50">
+                <button
+                  class="nav-link w-100 rounded-pill text-center"
+                  data-bs-toggle="pill"
+                  data-bs-target="#pills-date"
+                >
+                  Group (Tanggal)
+                </button>
+              </li>
+            </ul>
+            <div class="tab-content">
+              <div class="tab-pane fade show active" id="pills-single">
+                <form action="/dosen/manage-uid" method="POST">
+                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="action" value="add_single" />
+                  <div class="mb-3">
+                    <label class="small text-muted fw-bold"
+                      >NAMA MAHASISWA</label
+                    ><select
+                      name="student_id"
+                      class="form-select bg-light border-0 py-2 rounded-3"
+                      required
+                    >
+                      <option value="" disabled selected>Pilih...</option>
+                      <% students.forEach(s => { %>
+                      <option value="<%= s.id %>">
+                        <%= s.name %> (<%= s.nim %>)
+                      </option>
+                      <% }) %>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    class="btn btn-primary w-100 rounded-pill py-2 border-0"
+                    style="background: var(--dark-pink)"
+                  >
+                    Simpan
+                  </button>
+                </form>
+              </div>
+              <div class="tab-pane fade" id="pills-date">
+                <form action="/dosen/manage-uid" method="POST">
+                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="action" value="add_date" />
+                  <div class="mb-3">
+                    <label class="small text-muted fw-bold"
+                      >TANGGAL SESI LALU</label
+                    ><select
+                      name="target_date"
+                      class="form-select bg-light border-0 py-2 rounded-3"
+                      required
+                    >
+                      <option value="" disabled selected>
+                        Pilih Tanggal...
+                      </option>
+                      <% availableDates.forEach(dateStr => { %>
+                      <option value="<%= dateStr %>">
+                        <%= new Date(dateStr).toLocaleDateString('id-ID', {
+                        weekday: 'long', year: 'numeric', month: 'long', day:
+                        'numeric' }) %>
+                      </option>
+                      <% }) %>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    class="btn btn-primary w-100 rounded-pill py-2 border-0"
+                    style="background: var(--dark-pink)"
+                  >
+                    Import Data
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="uploadUidModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-4 text-center">
+          <div class="mb-3">
+            <i
+              class="fas fa-cloud-upload-alt fa-3x"
+              style="color: var(--primary-pink)"
+            ></i>
+          </div>
+          <h5 class="modal-title fw-bold mb-2">Upload File UID</h5>
+          <p class="text-muted small mb-4">
+            Unggah file .csv atau .xlsx berisi daftar UID peserta.
+          </p>
+
+          <form
+            action="/dosen/upload-uid"
+            method="POST"
+            enctype="multipart/form-data"
+          >
+           <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <div class="mb-4">
+              <input class="form-control" type="file" id="formFile" required />
+            </div>
+            <div class="d-flex gap-2">
+              <button
+                type="button"
+                class="btn btn-light flex-grow-1 rounded-pill"
+                data-bs-dismiss="modal"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                class="btn text-white flex-grow-1 rounded-pill"
+                style="background: var(--dark-pink)"
+              >
+                Upload
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="editLogModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-3">
+          <div class="modal-header border-0">
+            <h5 class="modal-title fw-bold">Edit Data</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <form action="/dosen/edit-log" method="POST">
+             <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <div class="modal-body pt-0">
+              <input type="hidden" name="id" id="editLogId" />
+              <div class="mb-3">
+                <label class="small text-muted fw-bold">MAHASISWA</label
+                ><select
+                  name="student_id"
+                  id="editLogStudent"
+                  class="form-select bg-light border-0"
+                  required
+                >
+                  <% students.forEach(s => { %>
+                  <option value="<%= s.id %>"><%= s.name %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="small text-muted fw-bold">TANGGAL</label
+                  ><input
+                    type="date"
+                    name="edit_date"
+                    id="editLogDate"
+                    class="form-control bg-light border-0"
+                    required
+                  />
+                </div>
+                <div class="col-6">
+                  <label class="small text-muted fw-bold">JAM</label
+                  ><input
+                    type="time"
+                    name="edit_time"
+                    id="editLogTime"
+                    class="form-control bg-light border-0"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="small text-muted fw-bold">PERTANYAAN</label
+                ><input
+                  type="text"
+                  name="question"
+                  id="editLogQuestion"
+                  class="form-control bg-light border-0"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="small text-muted fw-bold"
+                  >JAWABAN (TRANSKRIP)</label
+                ><textarea
+                  name="transcript"
+                  id="editLogTranscript"
+                  class="form-control bg-light border-0"
+                  rows="4"
+                ></textarea>
+              </div>
+              <button
+                type="submit"
+                class="btn btn-primary w-100 rounded-pill py-2 border-0"
+                style="background: var(--dark-pink)"
+              >
+                Simpan Perubahan
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      document
+        .getElementById("searchLog")
+        .addEventListener("keyup", function () {
+          let val = this.value.toLowerCase();
+          let rows = document.querySelectorAll(
+            "#logTable tbody tr:not(.date-header-row):not(.question-header-row)"
+          );
+          rows.forEach((r) => {
+            let text = r.innerText.toLowerCase();
+            r.style.display = text.includes(val) ? "" : "none";
+          });
+        });
+
+      function toggleTranscript(element) {
+        element.classList.toggle("expanded");
+        let label = element.querySelector(".read-more-label");
+        if (element.classList.contains("expanded")) label.innerText = "Tutup";
+        else label.innerText = "Lihat Selengkapnya";
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        const transcripts = document.querySelectorAll(".transcript-text");
+        transcripts.forEach((t) => {
+          if (t.scrollHeight > t.clientHeight)
+            t.nextElementSibling.style.display = "block";
+          else t.nextElementSibling.style.display = "none";
+        });
+      });
+
+      function toggleGroup(headerRow, className) {
+        headerRow.classList.toggle("date-collapsed");
+        let rows = document.querySelectorAll("." + className);
+        rows.forEach((row) => {
+          row.style.display =
+            row.style.display === "none" ? "table-row" : "none";
+        });
+      }
+
+      function openEditLogModal(button) {
+        document.getElementById("editLogId").value = button.dataset.id;
+        document.getElementById("editLogStudent").value =
+          button.dataset.student;
+        document.getElementById("editLogDate").value = button.dataset.date;
+        document.getElementById("editLogTime").value = button.dataset.time;
+        document.getElementById("editLogQuestion").value =
+          button.dataset.question;
+        document.getElementById("editLogTranscript").value =
+          button.dataset.transcript;
+        new bootstrap.Modal(document.getElementById("editLogModal")).show();
+      }
+    </script>
+  </body>
+</html>
