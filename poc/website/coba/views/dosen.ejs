@@ -235,6 +235,14 @@
           vertical-align: middle;
       }
 
+      /* Animasi Pulse untuk Unknown Device */
+      .pulse-red { animation: pulse-animation 2s infinite; }
+      @keyframes pulse-animation {
+        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+      }
+
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -438,6 +446,7 @@
                 </form>
               </div>
             </div>
+
             <div class="col-lg-7">
               <div class="dashboard-card">
                 <div
@@ -476,8 +485,10 @@
                           Belum ada peserta di sesi ini.
                         </td>
                       </tr>
-                      <% } %> <% currentList.forEach(item => { %>
-                      <tr>
+                      <% } %> 
+                      
+                      <% currentList.forEach(item => { %>
+                      <tr class="<%= !item.isRegistered ? 'pulse-red' : '' %>">
                         <td class="ps-4">
                           <div class="d-flex align-items-center gap-3">
                             <div
@@ -498,8 +509,8 @@
                         <td>
                           <% if(item.isRegistered) { %>
                           <div class="fw-bold text-dark"><%= item.name %></div>
-                          <small class="text-muted"><%= item.nim %></small> <% }
-                          else { %>
+                          <small class="text-muted"><%= item.nim %></small> 
+                          <% } else { %>
                           <span
                             class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3"
                             >Unknown</span
@@ -507,20 +518,32 @@
                           <% } %>
                         </td>
                         <td class="text-end pe-3">
-                          <form action="/dosen/manage-uid" method="POST">
-                            <input type="hidden" name="current_class" value="<%= currentClass %>">
-                            <input
-                              type="hidden"
-                              name="action"
-                              value="delete"
-                            /><input
-                              type="hidden"
-                              name="uid"
-                              value="<%= item.uid %>"
-                            /><button class="btn btn-link text-danger">
-                              <i class="fas fa-times"></i>
-                            </button>
-                          </form>
+                            <% if(!item.isRegistered) { %>
+                                <button onclick="registerUnknown('<%= item.uid %>')" 
+                                        class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" 
+                                        style="background: var(--dark-pink); border: none;">
+                                    <i class="fas fa-plus me-1"></i> Add
+                                </button>
+                                
+                                <form action="/dosen/manage-uid" method="POST" class="d-inline">
+                                    <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="uid" value="<%= item.uid %>">
+                                    <button class="btn btn-sm btn-link text-secondary" title="Hapus">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+
+                            <% } else { %>
+                                <form action="/dosen/manage-uid" method="POST">
+                                    <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="uid" value="<%= item.uid %>">
+                                    <button class="btn btn-link text-danger">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                            <% } %>
                         </td>
                       </tr>
                       <% }) %>
@@ -1062,6 +1085,15 @@
         document.getElementById("editLogTranscript").value =
           button.dataset.transcript;
         new bootstrap.Modal(document.getElementById("editLogModal")).show();
+      }
+
+      // 4. Tambahkan script untuk handle Add Unknown
+      function registerUnknown(uid) {
+          const triggerEl = document.querySelector('#pills-tab button[data-bs-target="#pills-single"]');
+          const tabInstance = new bootstrap.Tab(triggerEl);
+          tabInstance.show();
+          new bootstrap.Modal(document.getElementById('addUidModal')).show();
+          alert(`Silakan pilih mahasiswa untuk UID: ${uid} dari dropdown.`);
       }
     </script>
   </body>

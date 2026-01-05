@@ -360,48 +360,6 @@ app.post("/dosen/update-settings", (req, res) => {
   res.redirect(`/dosen?kelas=${current_class}`);
 });
 
-app.post("/dosen/manage-uid", (req, res) => {
-  const { action, uid, student_id, target_date, current_class } = req.body;
-
-  if (action === "delete") {
-    sessionData.scannedList = sessionData.scannedList.filter(
-      (item) => item.uid !== uid
-    );
-  } else if (action === "add_single") {
-    const student = students.find((s) => s.id == student_id);
-    if (
-      student &&
-      !sessionData.scannedList.find((item) => item.uid === student.rfid)
-    ) {
-      sessionData.scannedList.push({ uid: student.rfid });
-    }
-  } else if (action === "add_date") {
-    // Logic import dari tanggal (sekarang sudah lengkap kembali)
-    const targetLogs = activityLogs.filter((log) => {
-      const logDateStr = new Date(log.dateObj).toISOString().split("T")[0];
-      return logDateStr === target_date;
-    });
-
-    // Ambil NIM unik dari log tanggal tersebut
-    const activeNims = [...new Set(targetLogs.map((l) => l.nim))];
-
-    activeNims.forEach((nim) => {
-      // Cari student berdasarkan NIM
-      const s = students.find((st) => st.nim === nim);
-      // Pastikan student ada, kelasnya sesuai, dan belum ada di list scan
-      if (
-        s &&
-        s.kelas === currentClass &&
-        !sessionData.scannedList.find((item) => item.uid === s.rfid)
-      ) {
-        sessionData.scannedList.push({ uid: s.rfid });
-      }
-    });
-  }
-
-  res.redirect(`/dosen?kelas=${current_class}`);
-});
-
 app.post("/dosen/edit-log", (req, res) => {
   const {
     id,
@@ -459,51 +417,103 @@ app.post("/dosen/request-audio", (req, res) => {
   res.redirect(`/dosen?kelas=${current_class}`);
 });
 
-// Simulasi Data Masuk (Hardware Simulation)
-// Simulasi Data Masuk (Hardware Simulation)
+// --- UPDATE ROUTE: MANAGE UID (DOSEN & ADMIN) ---
+app.post("/dosen/manage-uid", (req, res) => {
+  // Pastikan ambil current_class dari body
+  const { action, uid, student_id, target_date, current_class } = req.body;
+
+  if (action === "delete") {
+    sessionData.scannedList = sessionData.scannedList.filter((item) => item.uid !== uid);
+  } 
+  else if (action === "add_single") {
+    const student = students.find((s) => s.id == student_id);
+    // Cek duplikasi
+    if (student && !sessionData.scannedList.find((item) => item.uid === student.rfid)) {
+      sessionData.scannedList.unshift({ uid: student.rfid }); // Tambah ke paling atas
+    }
+  } 
+  else if (action === "add_date") {
+    // FIX ERROR: Pastikan current_class tersedia
+    if (!current_class) {
+        console.error("Error: current_class undefined pada add_date");
+        // Fallback atau return error page jika perlu
+        return res.redirect('back');
+    }
+
+    const targetLogs = activityLogs.filter((log) => {
+      const logDateStr = new Date(log.dateObj).toISOString().split("T")[0];
+      return logDateStr === target_date;
+    });
+    
+    const activeNims = [...new Set(targetLogs.map((l) => l.nim))];
+    
+    activeNims.forEach((nim) => {
+      const s = students.find((st) => st.nim === nim);
+      // GUNAKAN 'current_class' yang diambil dari req.body
+      if (s && s.kelas === current_class && !sessionData.scannedList.find((item) => item.uid === s.rfid)) {
+        sessionData.scannedList.push({ uid: s.rfid });
+      }
+    });
+  }
+
+  // Redirect kembali ke halaman yang benar
+  res.redirect(`/dosen?kelas=${current_class}`);
+});
+
+
+// --- UPDATE ROUTE: SIMULASI TAP (UNKNOWN + RANDOM) ---
 app.post("/api/simulate", (req, res) => {
-  const { current_class, current_device_id } = req.body; // Ambil ID device target
+  const { current_class, source } = req.body;
+  
+  // 1. Logika Random (Sama untuk Admin & Dosen)
+  const isUnknown = Math.random() < 0.3; // 30% peluang Unknown
+  let simulatedUid = "";
 
-  // Simulasi pengurangan baterai pada device yang aktif
-  const devIndex = devices.findIndex((d) => d.id === current_device_id);
-  if (devIndex !== -1 && devices[devIndex].status === "online") {
-    devices[devIndex].battery = Math.max(0, devices[devIndex].battery - 2);
-  }
-
-  // Simulasi Random Status Change (kadang online, kadang offline)
-  // Hanya untuk demo biar terlihat dinamis
-  if (Math.random() > 0.8) {
-    const randomDev = Math.floor(Math.random() * devices.length);
-    devices[randomDev].status =
-      devices[randomDev].status === "online" ? "offline" : "online";
-  }
-
-  // ... (Sisa logika tambah log chat sama seperti sebelumnya) ...
-  // Pilih random student dari KELAS YANG AKTIF
+  // Filter siswa kelas ini agar simulasi 'Terdaftar' masuk akal
   let targetStudents = students;
-  if (current_class) {
-    targetStudents = students.filter((s) => s.kelas === current_class);
+  if(current_class) {
+      targetStudents = students.filter(s => s.kelas === current_class);
   }
-  if (targetStudents.length === 0) targetStudents = students;
+  
+  if (isUnknown || targetStudents.length === 0) {
+    // Generate UID Acak (Unknown)
+    simulatedUid = "UNK-" + Math.floor(1000 + Math.random() * 9000);
+  } else {
+    // Ambil siswa random dari kelas yang aktif
+    const randomStudent = targetStudents[Math.floor(Math.random() * targetStudents.length)];
+    simulatedUid = randomStudent.rfid;
+  }
 
-  const student =
-    targetStudents[Math.floor(Math.random() * targetStudents.length)];
-  const randQ = questionsBank[Math.floor(Math.random() * questionsBank.length)];
+  // 2. Masukkan ke List Scan (Cek Duplikasi)
+  const isAlreadyScanned = sessionData.scannedList.find(item => item.uid === simulatedUid);
+  
+  if (!isAlreadyScanned) {
+      sessionData.scannedList.unshift({ uid: simulatedUid });
+      if(sessionData.battery > 0) sessionData.battery -= 2;
+  }
 
-  activityLogs.push({
-    id: Date.now(),
-    dateObj: new Date(),
-    name: student.name,
-    nim: student.nim,
-    question: randQ,
-    transcript: "Jawaban simulasi baru masuk...",
-    audio_url: null,
-  });
+  // 3. Tambah Log Chat (Opsional: Hanya jika Terdaftar)
+  // Jika ingin chat muncul hanya saat mahasiswa terdaftar tap:
+  const student = students.find(s => s.rfid === simulatedUid);
+  if (student) {
+      const randQ = questionsBank[Math.floor(Math.random() * questionsBank.length)];
+      activityLogs.push({
+        id: Date.now(),
+        dateObj: new Date(),
+        name: student.name,
+        nim: student.nim,
+        question: randQ,
+        transcript: "Jawaban simulasi otomatis...",
+        audio_url: null,
+      });
+  }
 
-  // Redirect balik dengan parameter device yang sama
-  if (current_class)
-    res.redirect(`/dosen?kelas=${current_class}&device=${current_device_id}`);
-  else res.redirect("/dosen");
+  // 4. Redirect
+  if (source === 'admin') {
+      res.redirect(`/admin?kelas=${current_class}`);
+  } else {
+      res.redirect(`/dosen?kelas=${current_class}`);
+  }
 });
 
 app.listen(3000, () => {
