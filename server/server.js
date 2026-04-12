@@ -3,6 +3,8 @@ const app = express();
 const path = require("path");
 const mysql = require("mysql2/promise");
 const mqtt = require("mqtt");
+const multer = require("multer");
+const fs = require("fs");
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -105,6 +107,24 @@ mqttClient.on("message", async (topic, message) => {
     console.error("Gagal memproses pesan MQTT:", error);
   }
 });
+
+// Pastikan folder untuk menyimpan audio ada
+const uploadDir = path.join(__dirname, "public/recordings");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Konfigurasi Penyimpanan Multer
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Nama file: audio-1712345678.wav
+    cb(null, `audio-${Date.now()}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage: storage });
 
 // ================= ROUTES =================
 app.get("/", (req, res) => res.render("login", { error: null }));
@@ -436,7 +456,43 @@ app.post("/dosen/update-settings", (req, res) => {
   const { status, mode, timer, current_class } = req.body;
   if (status) sessionData.status = status;
   if (mode) sessionData.mode = mode;
-  if (timer) sessionData.maxTime = timer;
+  
+  if (timer) {
+    sessionData.maxTime = parseInt(timer);
+    
+    // PUBLISH KE MQTT UNTUK DITERIMA ESP32
+    // Mengirim payload JSON agar mudah di-parsing di ESP32 (menggunakan ArduinoJson)
+    const payload = JSON.stringify({
+      perintah: "set_timer",
+      durasi_detik: sessionData.maxTime
+    });
+
+    mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+      if (err) console.error("Gagal mengirim timer ke MQTT:", err);
+      else console.log("Berhasil mengirim timer ke MQTT:", payload);
+    });
+  }
+  
+  res.redirect(`/dosen?kelas=${current_class}`);
+});
+
+// ROUTE BARU: Untuk mengirimkan daftar UID ke ESP32
+app.post("/dosen/sync-uid", (req, res) => {
+  const { current_class } = req.body;
+  
+  // Ambil hanya array UID dari scannedList saat ini
+  const daftarUid = sessionData.scannedList.map(item => item.uid);
+  
+  const payload = JSON.stringify({
+    perintah: "sync_uid",
+    uids: daftarUid
+  });
+
+  mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+    if (err) console.error("Gagal sinkronisasi UID ke MQTT:", err);
+    else console.log("Berhasil sinkronisasi UID ke MQTT:", payload);
+  });
+
   res.redirect(`/dosen?kelas=${current_class}`);
 });
 
@@ -554,4 +610,52 @@ app.post("/dosen/manage-uid", async (req, res) => {
 
 app.listen(3000, () => {
   console.log("Server berjalan di http://localhost:3000");
+});
+
+// ================= ROUTE BARU: REQUEST SYNC KE ESP32 =================
+
+app.post("/dosen/request-audio-sync", (req, res) => {
+  const { current_class } = req.body;
+
+  // Kirim perintah ke ESP32 via MQTT untuk mulai mengunggah file yang ada di SD Card
+  const payload = JSON.stringify({
+    perintah: "request_sync_audio",
+    target_kelas: current_class
+  });
+
+  mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+    if (err) {
+      console.error("Gagal mengirim perintah sync ke MQTT:", err);
+      return res.status(500).send("Gagal menghubungi alat.");
+    }
+    console.log("Perintah sync audio dikirim:", payload);
+    res.redirect(`/dosen?kelas=${current_class}`);
+  });
+});
+
+// ================= ROUTE BARU: TERIMA FILE DARI ESP32 =================
+
+// Endpoint ini akan dipanggil oleh ESP32 menggunakan HTTP POST
+app.post("/api/upload-audio", upload.single("audio"), async (req, res) => {
+  try {
+    const { log_id } = req.body; // ESP32 harus mengirim log_id agar server tahu file ini milik siapa
+    
+    if (!req.file) {
+      return res.status(400).send("Tidak ada file yang diunggah.");
+    }
+
+    const audioUrl = `/recordings/${req.file.filename}`;
+
+    // Update database dengan URL file yang baru diunggah
+    await pool.query(
+      "UPDATE activity_logs SET audio_url = ? WHERE id = ?",
+      [audioUrl, log_id]
+    );
+
+    console.log(`File audio diterima untuk Log ID ${log_id}: ${audioUrl}`);
+    res.status(200).json({ status: "success", url: audioUrl });
+  } catch (error) {
+    console.error("Gagal memproses upload audio:", error);
+    res.status(500).send("Server Error");
+  }
 });
