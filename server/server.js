@@ -107,7 +107,6 @@ mqttClient.on("message", async (topic, message) => {
 });
 
 // ================= ROUTES =================
-
 app.get("/", (req, res) => res.render("login", { error: null }));
 
 app.post("/login", async (req, res) => {
