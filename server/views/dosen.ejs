@@ -337,61 +337,40 @@
       <div class="tab-content" id="v-pills-tabContent">
         <div class="tab-pane fade show active" id="v-pills-control">
           <div class="row g-4">
-            
             <div class="col-lg-5">
               <div class="dashboard-card position-relative overflow-hidden">
-                <div
-                  style="
-                    position: absolute;
-                    top: -20px;
-                    right: -20px;
-                    width: 100px;
-                    height: 100px;
-                    background: #ff80ab;
-                    opacity: 0.1;
-                    border-radius: 50%;
-                  "
-                ></div>
+                <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: #ff80ab; opacity: 0.1; border-radius: 50%;"></div>
 
                 <div class="mb-4">
-                    <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
-                    <form action="/dosen" method="GET">
-                        <input type="hidden" name="kelas" value="<%= currentClass %>">
-                        
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
-                            <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
-                                <% devices.forEach(dev => { %>
-                                    <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %>>
-                                        <%= dev.name %> (<%= dev.status.toUpperCase() %>)
-                                    </option>
-                                <% }) %>
-                            </select>
-                        </div>
-                    </form>
+                  <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
+                  <form action="/dosen" method="GET">
+                    <input type="hidden" name="kelas" value="<%= currentClass %>">
+                    <div class="input-group">
+                      <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
+                      <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
+                        <% devices.forEach(dev => { %>
+                          <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %>>
+                            <%= dev.name %> (<%= dev.status.toUpperCase() %>)
+                          </option>
+                        <% }) %>
+                      </select>
+                    </div>
+                  </form>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" 
-                     style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                <div class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
                   <div>
                     <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
                     <div class="d-flex align-items-center gap-2">
-                        <% if(currentDevice.status === 'online') { %>
-                            <span class="badge bg-success text-white badge-custom shadow-sm">
-                                <i class="fas fa-wifi me-1"></i> ONLINE
-                            </span>
-                        <% } else { %>
-                            <span class="badge bg-danger text-white badge-custom shadow-sm">
-                                <i class="fas fa-wifi-slash me-1"></i> OFFLINE
-                            </span>
-                        <% } %>
-                        <small class="text-muted font-monospace"><%= currentDevice.id %></small>
+                      <% if(currentDevice.status === 'online') { %>
+                        <span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>
+                      <% } else { %>
+                        <span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>
+                      <% } %>
+                      <small class="text-muted font-monospace"><%= currentDevice.id %></small>
                     </div>
                   </div>
-                  
-                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>"
-                    class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary"
-                    data-bs-toggle="tooltip" title="Cek Status">
+                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>" class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary" data-bs-toggle="tooltip" title="Refresh Status">
                     <i class="fas fa-sync-alt"></i>
                   </a>
                 </div>
@@ -402,11 +381,10 @@
                     <% } else if (currentDevice.battery > 50) { %> <i class="fas fa-battery-three-quarters"></i>
                     <% } else if (currentDevice.battery > 20) { %> <i class="fas fa-battery-half"></i>
                     <% } else { %> <i class="fas fa-battery-quarter"></i> <% } %>
-                    
                     <%= currentDevice.status === 'online' ? currentDevice.battery + '%' : '--' %>
                   </div>
                   <small class="text-muted mb-2">
-                      <%= currentDevice.status === 'online' ? 'Daya Tersisa' : 'Perangkat Tidak Terdeteksi' %>
+                    <%= currentDevice.status === 'online' ? 'Status Daya Perangkat' : 'Belum ada data dari broker' %>
                   </small>
                 </div>
 
@@ -417,135 +395,95 @@
                   <div class="mb-4">
                     <label class="small text-muted fw-bold mb-2">MAX DURASI BICARA (DETIK)</label>
                     <div class="input-group bg-light rounded-pill overflow-hidden border">
-                      <span class="input-group-text border-0 bg-transparent ps-3">
-                        <i class="fas fa-clock text-secondary"></i>
-                      </span>
-                      <input
-                        type="number"
-                        name="timer"
-                        class="form-control border-0 bg-transparent"
-                        value="<%= session.maxTime %>"
-                        <%= currentDevice.status === 'offline' ? 'disabled' : '' %>
-                      />
-                      <button
-                        class="btn btn-link text-decoration-none text-dark fw-bold pe-3"
-                        <%= currentDevice.status === 'offline' ? 'disabled' : '' %>
-                      >
-                        SET
+                      <span class="input-group-text border-0 bg-transparent ps-3"><i class="fas fa-clock text-secondary"></i></span>
+                      <input type="number" name="timer" class="form-control border-0 bg-transparent" value="<%= session.maxTime %>" <%= currentDevice.status === 'offline' ? 'disabled' : '' %> />
+                      <button class="btn btn-link text-decoration-none text-dark fw-bold pe-3" <%= currentDevice.status === 'offline' ? 'disabled' : '' %>>
+                        SET KE ALAT
                       </button>
                     </div>
+                    <small class="text-muted" style="font-size: 11px;">*Meneban SET akan mengirimkan pengaturan ini ke mikrokontroler via MQTT.</small>
                   </div>
-                </form>
-
-                <form action="/api/simulate" method="POST" class="mt-auto">
-                   <input type="hidden" name="current_class" value="<%= currentClass %>">
-                   <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
-                  <button class="btn btn-light w-100 py-2 text-secondary fw-bold rounded-pill border">
-                    <i class="fas fa-magic me-2"></i> Simulasi Data Masuk
-                  </button>
                 </form>
               </div>
             </div>
 
             <div class="col-lg-7">
               <div class="dashboard-card">
-                <div
-                  class="d-flex justify-content-between align-items-center mb-4"
-                >
+                <div class="d-flex justify-content-between align-items-center mb-4">
                   <div>
                     <h5 class="fw-bold mb-0">Peserta Aktif</h5>
-                    <small class="text-muted"
-                      >Total <%= currentList.length %> Perangkat</small
-                    >
+                    <small class="text-muted">Kartu yang didaftarkan pada sesi ini.</small>
                   </div>
-                  <div class="d-flex gap-2">
-                    <button
-                      class="btn btn-outline-secondary rounded-pill px-3"
-                      data-bs-toggle="modal"
-                      data-bs-target="#uploadUidModal"
-                    >
-                      <i class="fas fa-upload me-1"></i> Upload UID
-                    </button>
-                    <button
-                      class="btn btn-primary rounded-pill px-4"
-                      style="background: var(--dark-pink); border: none"
-                      data-bs-toggle="modal"
-                      data-bs-target="#addUidModal"
-                    >
-                      + Tambah
+                  
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-dark border me-2"><%= currentList.length %> Peserta</span>
+                    
+                    <form id="formSyncUid" action="/dosen/sync-uid" method="POST" class="m-0">
+                      <input type="hidden" name="current_class" value="<%= currentClass %>">
+                      <button type="button" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2">
+                        <i class="fas fa-satellite-dish me-1"></i> Sinkron ke Alat
+                      </button>
+                    </form>
+                    <button class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background: var(--dark-pink); border: none" data-bs-toggle="modal" data-bs-target="#addUidModal">
+                      <i class="fas fa-plus me-1"></i> Tambah
                     </button>
                   </div>
                 </div>
-                <div style="max-height: 400px; overflow-y: auto">
+
+                <div style="max-height: 400px; overflow-y: auto;">
                   <table class="table uid-table align-middle border-0">
                     <tbody>
                       <% if (currentList.length === 0) { %>
-                      <tr>
-                        <td class="text-center text-muted py-5">
-                          Belum ada peserta di sesi ini.
-                        </td>
-                      </tr>
-                      <% } %> 
+                        <tr><td class="text-center text-muted py-5">Belum ada peserta di sesi ini.</td></tr>
+                      <% } %>
                       
                       <% currentList.forEach(item => { %>
-                      <tr class="<%= !item.isRegistered ? 'pulse-red' : '' %>">
-                        <td class="ps-4">
-                          <div class="d-flex align-items-center gap-3">
-                            <div
-                              class="bg-light rounded-circle p-2 text-secondary"
-                            >
-                              <i class="fas fa-wifi"></i>
-                            </div>
-                            <div>
-                              <div class="fw-bold small text-secondary">
-                                RFID TAG
+                        <tr class="<%= !item.isRegistered ? 'pulse-red' : '' %>">
+                          <td class="ps-4">
+                            <div class="d-flex align-items-center gap-3">
+                              <div class="bg-light rounded-circle p-2 text-secondary">
+                                <i class="fas fa-id-card"></i>
                               </div>
-                              <div class="font-monospace text-dark">
-                                <%= item.uid %>
+                              <div>
+                                <div class="fw-bold small text-secondary">RFID UID</div>
+                                <div class="font-monospace text-dark fw-bold"><%= item.uid %></div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td>
-                          <% if(item.isRegistered) { %>
-                          <div class="fw-bold text-dark"><%= item.name %></div>
-                          <small class="text-muted"><%= item.nim %></small> 
-                          <% } else { %>
-                          <span
-                            class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3"
-                            >Unknown</span
-                          >
-                          <% } %>
-                        </td>
-                        <td class="text-end pe-3">
-                            <% if(!item.isRegistered) { %>
-                                <button onclick="registerUnknown('<%= item.uid %>')" 
-                                        class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" 
-                                        style="background: var(--dark-pink); border: none;">
-                                    <i class="fas fa-plus me-1"></i> Add
-                                </button>
-                                
-                                <form action="/dosen/manage-uid" method="POST" class="d-inline">
-                                    <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="uid" value="<%= item.uid %>">
-                                    <button class="btn btn-sm btn-link text-secondary" title="Hapus">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </form>
-
+                          </td>
+                          <td>
+                            <% if(item.isRegistered) { %>
+                              <div class="fw-bold text-dark"><%= item.name %></div>
+                              <small class="text-muted"><%= item.nim %></small>
                             <% } else { %>
-                                <form action="/dosen/manage-uid" method="POST">
-                                    <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="uid" value="<%= item.uid %>">
-                                    <button class="btn btn-link text-danger">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </form>
+                              <span class="badge bg-danger rounded-pill px-3 py-2 mb-1">UNKNOWN</span>
+                              <div style="font-size: 10px;" class="text-danger">Belum Terdaftar</div>
                             <% } %>
-                        </td>
-                      </tr>
+                          </td>
+                          <td class="text-end pe-3">
+                            <% if(!item.isRegistered) { %>
+                              <button onclick="registerUnknown('<%= item.uid %>')" class="btn btn-sm text-white rounded-pill px-3 fw-bold" style="background: var(--dark-pink); border: none;">
+                                <i class="fas fa-user-plus me-1"></i> Daftarkan
+                              </button>
+                              <form action="/dosen/manage-uid" method="POST" class="d-inline">
+                                <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="uid" value="<%= item.uid %>">
+                                <button class="btn btn-sm btn-light text-secondary rounded-circle ms-1" title="Hapus dari sesi">
+                                  <i class="fas fa-times"></i>
+                                </button>
+                              </form>
+                            <% } else { %>
+                              <form action="/dosen/manage-uid" method="POST">
+                                <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="uid" value="<%= item.uid %>">
+                                <button class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi">
+                                  <i class="fas fa-times"></i>
+                                </button>
+                              </form>
+                            <% } %>
+                          </td>
+                        </tr>
                       <% }) %>
                     </tbody>
                   </table>
@@ -560,19 +498,11 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
               <h5 class="fw-bold mb-0">Riwayat Diskusi</h5>
               <div class="d-flex gap-3">
-                <form
-                  action="/dosen/request-audio-sync"
-                  method="POST"
-                  onsubmit="alert('Permintaan sinkronisasi dikirim ke perangkat!'); return false;"
-                >
-                  <input type="hidden" name="current_class" value="<%= currentClass %>">
-                  <button
-                    class="btn text-white rounded-pill px-3 shadow-sm fw-bold"
-                    style="background-color: var(--dark-pink)"
-                  >
-                    <i class="fas fa-cloud-download-alt me-2"></i> Minta File
-                    Perangkat
-                  </button>
+                <form id="formSyncAudio" action="/dosen/request-audio-sync" method="POST">
+                    <input type="hidden" name="current_class" value="<%= currentClass %>">
+                    <button type="button" onclick="confirmAudioSync()" class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background-color: var(--dark-pink)">
+                        <i class="fas fa-cloud-download-alt me-2"></i> Minta File Perangkat
+                    </button>
                 </form>
                 <div
                   class="bg-light rounded-pill px-3 py-2 d-flex align-items-center gap-2"
@@ -1035,6 +965,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
       document
         .getElementById("searchLog")
@@ -1095,6 +1026,64 @@
           new bootstrap.Modal(document.getElementById('addUidModal')).show();
           alert(`Silakan pilih mahasiswa untuk UID: ${uid} dari dropdown.`);
       }
+
+      // --- 1. SCRIPT UNTUK SWEETALERT CUSTOM ---
+      function confirmSyncUid() {
+          Swal.fire({
+              title: 'Sinkronisasi UID',
+              text: "Kirim seluruh daftar UID ini ke alat (ESP32)?",
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonColor: '#d81b60', // Sesuai warna var(--dark-pink)
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Sinkronkan!',
+              cancelButtonText: 'Batal',
+              borderRadius: '15px'
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  document.getElementById('formSyncUid').submit();
+              }
+          });
+      }
+
+      function confirmAudioSync() {
+          Swal.fire({
+              title: 'Minta File Rekaman',
+              text: "Minta perangkat (ESP32) untuk mengunggah semua file rekaman yang tersisa?",
+              icon: 'info',
+              showCancelButton: true,
+              confirmButtonColor: '#d81b60',
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Minta File!',
+              cancelButtonText: 'Batal',
+              borderRadius: '15px'
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  document.getElementById('formSyncAudio').submit();
+              }
+          });
+      }
+
+      // --- 2. SCRIPT UNTUK MENYIMPAN STATUS TAB (AGAR TIDAK KEMBALI KE DASHBOARD) ---
+      document.addEventListener("DOMContentLoaded", function () {
+          // A. Saat halaman dimuat, cek apakah ada tab terakhir yang disimpan
+          let activeTabId = localStorage.getItem('activeDosenTab');
+          if (activeTabId) {
+              let triggerEl = document.querySelector(`button[data-bs-target="${activeTabId}"]`);
+              if (triggerEl) {
+                  let tabInstance = new bootstrap.Tab(triggerEl);
+                  tabInstance.show();
+              }
+          }
+
+          // B. Simpan nama tab ke localStorage setiap kali dosen mengklik tab di sidebar
+          let tabEls = document.querySelectorAll('button[data-bs-toggle="pill"]');
+          tabEls.forEach(function(tab) {
+              tab.addEventListener('shown.bs.tab', function (event) {
+                  localStorage.setItem('activeDosenTab', event.target.getAttribute('data-bs-target'));
+              });
+          });
+      });
     </script>
   </body>
 </html>
