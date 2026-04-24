@@ -42,18 +42,47 @@ void writeWavHeader(File &file, int dataSize) {
 
 // Inisialisasi nama file rekaman
 void initFileIndex() {
-  while (true) {
-    String filename = "/rec_" + String(nextFileIndex) + ".wav";
-    if (!SD.exists(filename)) break;
-    nextFileIndex++;
-  }
+    File root = SD.open("/");
+    int maxIndex = 0;
+
+    Serial.println("Scanning SD Card...");
+    unsigned long startScan = millis();
+
+    while (true) {
+        File entry = root.openNextFile();
+        if (!entry) break; // Sudah tidak ada file lagi
+
+        String name = String(entry.name());
+        
+        // Cek apakah file diawali MHS_ atau DSN_
+        if (name.startsWith("MHS_") || name.startsWith("DSN_")) {
+            // Ambil angka di antara "_" dan "."
+            int underscorePos = name.indexOf('_');
+            int dotPos = name.lastIndexOf('.');
+            if (underscorePos != -1 && dotPos != -1) {
+                int indexNum = name.substring(underscorePos + 1, dotPos).toInt();
+                if (indexNum > maxIndex) {
+                    maxIndex = indexNum;
+                }
+            }
+        }
+        entry.close();
+    }
+    root.close();
+
+    nextFileIndex = maxIndex + 1;
+    
+    Serial.print("Scan selesai dalam: ");
+    Serial.print(millis() - startScan);
+    Serial.println(" ms");
+    Serial.print("Next Index: ");
+    Serial.println(nextFileIndex);
 }
 
 // Fungsi mengambil nama file terbaru
 String getFastFilename(String prefix) {
-  String name = "/" + prefix + "_" + String(nextFileIndex) + ".wav";
-  nextFileIndex++; 
-  return name;
+    // Langsung return nama tanpa cek SD.exists agar instan
+    return "/" + prefix + "_" + String(nextFileIndex) + ".wav";
 }
 
 // Inisialisasi modul Audio dan SD Card
@@ -73,7 +102,7 @@ void initAudioSD() {
   // Inisialisasi SD Card
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS); 
 
-  if (!SD.begin(SD_CS, SPI, 20000000)) {
+  if (!SD.begin(SD_CS, SPI, 16000000)) {
     Serial.println("SD Card Gagal");
   }
 
@@ -81,6 +110,10 @@ void initAudioSD() {
 
   // Konfigurasi I2S untuk INMP441 (32-bit MSB, mono)
   i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+
+  chan_cfg.dma_desc_num = 16;    // Default cuma 6. Set 16 agar antrean lebih panjang
+  chan_cfg.dma_frame_num = 1024; // Kapasitas 1024 frame
+
   i2s_new_channel(&chan_cfg, NULL, &rx_handle);
 
   i2s_std_config_t std_cfg = {
@@ -142,23 +175,27 @@ void tulisMetadata(String filename, String uid, unsigned long waktuBerpikir) {
 // Funsgi record
 void rekamSuara(String uid, unsigned long waktuBerpikir) {
     String prefix = (uid == "DOSEN") ? "DSN" : "MHS";
-
     String filename = getFastFilename(prefix);
-    tulisMetadata(filename, uid, waktuBerpikir);
+    
+    File file = SD.open(filename, FILE_WRITE); 
+    if(!file) {
+        Serial.println("Gagal membuka file untuk rekam!");
+        return;
+    }
 
-    File file = SD.open(filename, FILE_WRITE);
-    if(!file) return;
+    uint8_t blank[44] = {0}; 
+    file.write(blank, 44);
 
-    uint8_t blank[44] = {0}; file.write(blank, 44);
+    size_t totalDataWritten = 0; // Tambahkan counter data
     
     // Tulis Pre Buffer 3 detik 
     if (bufferIsFull) {
-      int part1Len = PRE_BUFFER_SIZE - bufferHead;
-      file.write((uint8_t*)&preRecordBuffer[bufferHead], part1Len * 2);
-      file.write((uint8_t*)&preRecordBuffer[0], bufferHead * 2);
-    } else {
-      file.write((uint8_t*)&preRecordBuffer[0], bufferHead * 2);
-    }
+          int part1Len = PRE_BUFFER_SIZE - bufferHead;
+          totalDataWritten += file.write((uint8_t*)&preRecordBuffer[bufferHead], part1Len * 2);
+          totalDataWritten += file.write((uint8_t*)&preRecordBuffer[0], bufferHead * 2);
+        } else {
+          totalDataWritten += file.write((uint8_t*)&preRecordBuffer[0], bufferHead * 2);
+        }
 
     unsigned long startTime = millis();
     unsigned long lastSoundTime = millis();
@@ -186,7 +223,13 @@ while (isRecording) {
         sumLoudness);
 
     // Tulis 16-bit PCM ke SD
-    file.write((uint8_t *)processed_buffer, samples * 2);
+    size_t written = file.write((uint8_t *)processed_buffer, samples * 2);
+    totalDataWritten += written;
+
+    if (written == 0 && samples > 0) {
+        Serial.println("Error: Gagal menulis ke SD!");
+        isRecording = false;
+    }
 
     unsigned long now = millis();
     unsigned long elapsed = now - startTime;
@@ -244,6 +287,22 @@ while (isRecording) {
 }
 
   // Save File
+
+  if (totalDataWritten > 0) {
+        lcd.clear();
+        lcd.setCursor(0, 1);
+        lcd.print(" SAVING FILE... ");
+        long dataSize = file.size() - 44;
+        writeWavHeader(file, dataSize);
+        file.flush(); // Paksa data keluar dari buffer RAM ke fisik SD
+        Serial.print("File Saved: "); Serial.print(filename);
+        Serial.print(" Size: "); Serial.println(file.size());
+    }
+
+  file.close();
+  nextFileIndex++;
+  tulisMetadata(filename, uid, waktuBerpikir);
+
   lcd.clear(); 
 
   if (thrown) {
@@ -253,13 +312,6 @@ while (isRecording) {
     lcd.setCursor(0, 0);
     lcd.print(" RECORD SELESAI ");
   }
-
-  lcd.setCursor(0, 1);
-  lcd.print(" SAVING FILE... ");
-
-  long dataSize = file.size() - 44;
-  writeWavHeader(file, dataSize);
-  file.close();
 
   delay(1500); 
 }

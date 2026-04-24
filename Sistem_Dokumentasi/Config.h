@@ -33,6 +33,7 @@
 #define PRE_BUFFER_SIZE   (SAMPLE_RATE * PRE_BUFFER_SEC)
 #define MAX_RECORD_SECONDS 300
 #define MAX_RECORD_MS (MAX_RECORD_SECONDS * 1000UL)
+#define DOSEN_COUNTDOWN 8 // Jeda 8 detik
 
 // Accelerometer Config
 #define FLYING_THRESHOLD 0.35f  // Di bawah 0.35g dianggap dilempar
