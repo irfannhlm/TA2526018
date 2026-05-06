@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pilih Kelas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
     <style>
-        :root {
-            --bg-color: #ffe6f2;
+        :root { 
+            --bg-color: #ffe6f2; 
             --card-bg: #ffffff;
             --primary-pink: #ff80ab;
             --dark-pink: #d81b60;
@@ -18,154 +17,166 @@
             --text-muted: #888888;
             --shadow-soft: 0 10px 30px rgba(255, 105, 180, 0.15);
         }
+        * { box-sizing: border-box; }
+        body { background: var(--bg-color); font-family: "Poppins", sans-serif; min-height: 100vh; color: var(--text-dark); }
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--bg-color);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin: 0;
-            color: var(--text-dark);
+        .top-nav {
+            background: rgba(255, 255, 255, 0.9); padding: 14px 40px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 2px 15px rgba(255, 105, 180, 0.08);
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(10px);
         }
+        .nav-logo { max-height: 38px; object-fit: contain; }
+        .user-pill {
+            display: flex; align-items: center; gap: 10px;
+            background: #fff0f5; border-radius: 50px; padding: 6px 16px 6px 6px;
+            border: 1px solid rgba(255, 128, 171, 0.3);
+        }
+        .user-pill img { width: 32px; height: 32px; border-radius: 50%; }
+        .user-pill span { font-weight: 600; font-size: 0.85rem; color: var(--dark-pink); }
 
-        .login-card {
-            background: var(--card-bg);
-            border-radius: 25px;
-            padding: 40px;
-            box-shadow: var(--shadow-soft);
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        .brand-logo {
-            width: 80px;
-            height: 80px;
-            background-color: #fff0f6;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px auto;
-            color: var(--dark-pink);
-            font-size: 2rem;
-        }
-
-        h2 {
-            font-weight: 700;
-            color: var(--text-dark);
-            margin-bottom: 5px;
-        }
-
-        .role-badge {
-            background-color: var(--primary-pink);
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 30px;
-            display: inline-block;
-        }
+        .main-wrap { padding: 40px; max-width: 1300px; margin: 0 auto; }
+        .page-title { font-size: 1.5rem; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; }
+        .page-sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 32px; }
 
         .class-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 2 Kolom */
-            gap: 15px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 22px;
         }
-
-        .class-btn {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            background: white;
-            border: 2px solid #fce4ec; /* Pink sangat muda */
-            border-radius: 20px;
-            text-decoration: none;
-            color: var(--dark-pink);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+        .class-card {
+            background: var(--card-bg); border-radius: 18px; overflow: hidden;
+            box-shadow: 0 2px 12px rgba(255, 105, 180, 0.05);
+            cursor: pointer; text-decoration: none; color: inherit;
+            display: flex; flex-direction: column;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.8);
         }
+        .class-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-soft); color: inherit; }
 
-        .class-btn i {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-            color: var(--primary-pink);
-            transition: color 0.3s;
+        .card-banner { height: 160px; position: relative; overflow: hidden; }
+        .card-banner::before {
+            content: ""; position: absolute;
+            width: 170px; height: 170px; border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            top: -50px; right: -30px;
         }
+        .card-banner::after {
+            content: ""; position: absolute;
+            width: 110px; height: 110px; border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            bottom: -25px; right: 35px;
+        }
+        .banner-0 { background: linear-gradient(135deg, #fff9c4, #f5e090); }
+        .banner-1 { background: linear-gradient(135deg, #d4f5e2, #a8ddb5); }
+        .banner-2 { background: linear-gradient(135deg, #ffd6d6, #f5b8b8); }
+        .banner-3 { background: linear-gradient(135deg, #d4e8ff, #b3cfee); }
+        .banner-4 { background: linear-gradient(135deg, #ead5ff, #d0b0f0); }
+        .banner-5 { background: linear-gradient(135deg, #ffe0cc, #f5c4a0); }
 
-        .class-btn span {
+        .card-body-custom { padding: 16px 18px 18px; flex: 1; display: flex; flex-direction: column; }
+        .card-codes { font-size: 0.72rem; font-weight: 600; color: #bbb; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+        .card-codes .code-highlight { color: var(--dark-pink); font-weight: 700; }
+        .card-codes .divider { color: #ddd; }
+        .card-class-title { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); margin-bottom: 14px; line-height: 1.35; }
+
+        .card-lecturer { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .lecturer-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: #fff0f5; display: flex; align-items: center; justify-content: center;
+            color: var(--primary-pink); font-size: 0.85rem; flex-shrink: 0;
+        }
+        .lecturer-name { font-size: 0.8rem; font-weight: 600; color: var(--text-dark); line-height: 1.2; }
+        .lecturer-role { font-size: 0.7rem; color: var(--text-muted); }
+
+        .card-footer-custom {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-top: 12px; border-top: 1px solid #fff0f5; margin-top: auto;
+        }
+        .semester-text { font-size: 0.78rem; color: var(--text-muted); }
+        .semester-text span { color: var(--dark-pink); font-weight: 700; }
+        .student-badge { font-size: 0.75rem; font-weight: 700; padding: 4px 12px; border-radius: 20px; transition: 0.3s; }
+        .student-badge.has { background: #ffe6f2; color: var(--dark-pink); border: 1px solid var(--primary-pink); }
+        .student-badge.zero { background: #f9fafb; color: #9ca3af; border: 1px solid #e5e7eb; }
+
+        .empty-state { text-align: center; padding: 80px 40px; color: #aaa; background: var(--card-bg); border-radius: 25px; box-shadow: var(--shadow-soft); }
+        .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; color: var(--primary-pink); }
+
+        .logout-btn {
+            background: none; border: 1px solid #ffb6c1; color: var(--dark-pink);
+            border-radius: 50px; padding: 6px 16px; font-size: 0.82rem;
+            font-family: "Poppins", sans-serif; cursor: pointer;
+            transition: all 0.3s; text-decoration: none; display: flex; align-items: center; gap: 6px;
             font-weight: 600;
-            font-size: 1.1rem;
         }
-
-        .class-btn:hover {
-            background: linear-gradient(135deg, #ff80ab, #f06292);
-            color: white;
-            border-color: transparent;
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(240, 98, 146, 0.4);
-        }
-
-        .class-btn:hover i {
-            color: white;
-        }
-
-        .btn-logout {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-logout:hover {
-            color: var(--dark-pink);
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .logout-btn:hover { background: var(--dark-pink); border-color: var(--dark-pink); color: white; }
+        
+        ::-webkit-scrollbar { width: 8px; } 
+        ::-webkit-scrollbar-track { background: #fff0f5; } 
+        ::-webkit-scrollbar-thumb { background: #ffb6c1; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="login-card">
-        <div class="brand-logo">
-            <i class="fas fa-university"></i>
-        </div>
-
-        <h2>Selamat Datang</h2>
-        <div class="role-badge"><%= role %> Mode</div>
-        
-        <p class="text-muted mb-4">Silakan pilih kelas untuk memulai sesi:</p>
-
-        <div class="class-grid">
-            <% classes.forEach(cls => { %>
-                <a href="/<%= role %>?kelas=<%= cls %>" class="class-btn">
-                    <i class="fas fa-chalkboard-teacher"></i>
-                    <span><%= cls %></span>
-                </a>
-            <% }) %>
-        </div>
-
-        <div class="border-top pt-3 mt-2">
-            <a href="/" class="btn-logout">
-                <i class="fas fa-sign-out-alt"></i> Logout / Ganti Akun
+    <nav class="top-nav">
+        <img src="/images/logo.png" alt="Logo" class="nav-logo">
+        <div class="d-flex align-items-center gap-3">
+            <div class="user-pill">
+                <img src="https://ui-avatars.com/api/?name=<%= encodeURIComponent(username || role) %>&background=d81b60&color=fff" alt="avatar">
+                <span><%= username || role %></span>
+            </div>
+            <a href="/" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Logout
             </a>
         </div>
+    </nav>
+
+    <div class="main-wrap">
+        <h1 class="page-title">Selamat datang, <strong><%= username %></strong>!</h1>
+        <p class="page-sub">Pilih kelas yang ingin dibuka untuk memulai sesi Catch Note.</p>
+
+        <% if (classes.length === 0) { %>
+        <div class="empty-state">
+            <i class="fas fa-chalkboard"></i>
+            <% if (role === 'dosen') { %>
+            <p class="fw-bold mb-1">Tidak ada kelas yang Anda ampu</p>
+            <small>Pastikan nama dosen pada data kelas sesuai dengan username login Anda, atau hubungi administrator.</small>
+            <% } else { %>
+            <p class="fw-bold mb-1">Belum ada kelas tersedia</p>
+            <small>Hubungi administrator untuk menambahkan kelas ke dalam sistem.</small>
+            <% } %>
+        </div>
+        <% } else { %>
+        <div class="class-grid">
+            <% classes.forEach((cls, i) => { %>
+            <a href="/<%= role %>?kelas=<%= encodeURIComponent(cls.name) %>&username=<%= encodeURIComponent(username) %>" class="class-card">
+                <div class="card-banner banner-<%= i % 6 %>"></div>
+                <div class="card-body-custom">
+                    <div class="card-codes">
+                        <span><%= cls.code || '-' %></span>
+                        <span class="divider">|</span>
+                        <span class="code-highlight"><%= cls.code || '-' %></span>
+                    </div>
+                    <div class="card-class-title"><%= cls.name %></div>
+                    <div class="card-lecturer">
+                        <div class="lecturer-avatar"><i class="fas fa-user-tie"></i></div>
+                        <div>
+                            <div class="lecturer-name"><%= cls.lecturer || 'Belum diisi' %></div>
+                            <div class="lecturer-role">Dosen Pengampu</div>
+                        </div>
+                    </div>
+                    <div class="card-footer-custom">
+                        <div class="semester-text">Kode: <span><%= cls.code || '-' %></span></div>
+                        <div class="student-badge <%= cls.student_count > 0 ? 'has' : 'zero' %>">
+                            <%= cls.student_count %> Mahasiswa
+                        </div>
+                    </div>
+                </div>
+            </a>
+            <% }) %>
+        </div>
+        <% } %>
     </div>
 
 </body>

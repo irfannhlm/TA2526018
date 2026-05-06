@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
         :root {
@@ -24,7 +25,7 @@
             font-family: "Poppins", sans-serif;
             color: var(--text-dark);
             overflow-x: hidden;
-            min-height: 100vh; /* Mencegah scroll berlebih */
+            min-height: 100vh;
         }
 
         .sidebar {
@@ -107,10 +108,10 @@
         <div style="position: absolute; bottom: 30px; width: 85%;">
             <div class="card border-0 bg-white shadow-sm p-3 rounded-4">
                 <div class="d-flex align-items-center gap-3">
-                    <img src="https://ui-avatars.com/api/?name=Admin&background=d81b60&color=fff" class="rounded-circle" width="40">
+                    <img src="https://ui-avatars.com/api/?name=<%= encodeURIComponent(username) %>&background=d81b60&color=fff" class="rounded-circle" width="40">
                     <div>
-                        <h6 class="mb-0 small fw-bold">Administrator</h6>
-                        <small class="text-muted" style="font-size: 10px;">Super User</small>
+                        <h6 class="mb-0 small fw-bold"><%= username %></h6>
+                        <small class="text-muted" style="font-size: 10px;">Mode Admin</small>
                     </div>
                 </div>
                 <a href="/" class="btn btn-sm btn-outline-danger w-100 mt-3 rounded-pill">Logout</a>
@@ -121,8 +122,8 @@
     <div class="main-content">
         
         <% 
-            let activeClassCode = currentClass; 
-            if (typeof classes !== 'undefined' && classes.length > 0) {
+            let activeClassCode = currentClass || '—'; 
+            if (currentClass && typeof classes !== 'undefined' && classes.length > 0) {
                 const matchedClass = classes.find(c => c.name === currentClass);
                 if (matchedClass && matchedClass.code) {
                     activeClassCode = matchedClass.code;
@@ -132,8 +133,58 @@
 
         <div class="tab-content" id="v-pills-tabContent">
             
+            <!-- ====== TAB: MONITORING LIVE ====== -->
             <div class="tab-pane fade show active" id="v-pills-dashboard">
                 
+                <% if (!currentClass) { %>
+                <!-- Belum pilih kelas: tampilkan kartu kelas untuk dipilih -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h1 class="header-title">Monitoring Live</h1>
+                        <p class="header-subtitle">Pilih kelas terlebih dahulu untuk memulai monitoring.</p>
+                    </div>
+                </div>
+
+                <% if (classes.length === 0) { %>
+                <div class="dashboard-card h-auto text-center py-5">
+                    <i class="fas fa-chalkboard fa-3x text-muted mb-3"></i>
+                    <p class="fw-bold text-muted">Belum ada kelas.</p>
+                    <button class="btn text-white rounded-pill px-4 py-2 fw-bold" style="background: var(--dark-pink);" data-bs-toggle="pill" data-bs-target="#v-pills-classes">
+                        <i class="fas fa-plus me-2"></i> Buat Kelas Baru
+                    </button>
+                </div>
+                <% } else { %>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">
+                    <% classes.forEach((c, i) => { const banners = ['linear-gradient(135deg,#fff9c4,#f5e090)','linear-gradient(135deg,#d4f5e2,#a8ddb5)','linear-gradient(135deg,#ffd6d6,#f5b8b8)','linear-gradient(135deg,#d4e8ff,#b3cfee)','linear-gradient(135deg,#ead5ff,#d0b0f0)','linear-gradient(135deg,#ffe0cc,#f5c4a0)']; %>
+                    <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>&username=<%= encodeURIComponent(username) %>" style="text-decoration:none;color:inherit;">
+                        <div style="background:white;border-radius:18px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.07);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 10px 24px rgba(0,0,0,0.12)';" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 12px rgba(0,0,0,0.07)';">
+                            <div style="height:130px;background:<%= banners[i%6] %>;position:relative;overflow:hidden;">
+                                <div style="position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,0.22);top:-45px;right:-30px;"></div>
+                                <div style="position:absolute;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,0.15);bottom:-25px;right:30px;"></div>
+                            </div>
+                            <div style="padding:14px 16px 10px;">
+                                <div style="font-size:0.7rem;font-weight:700;color:#bbb;margin-bottom:3px;"><%= c.code %> <span style="color:#e0e0e0;">|</span> <span style="color:var(--dark-pink)"><%= c.code %></span></div>
+                                <div style="font-size:0.95rem;font-weight:700;color:#1a1a1a;margin-bottom:10px;"><%= c.name %></div>
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                                    <div style="width:30px;height:30px;border-radius:50%;background:#f0f2f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:0.8rem;flex-shrink:0;"><i class="fas fa-user"></i></div>
+                                    <div>
+                                        <div style="font-size:0.78rem;font-weight:600;color:#333;"><%= c.lecturer || 'Belum diisi' %></div>
+                                        <div style="font-size:0.68rem;color:#aaa;">Dosen Pengampu</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #f2f2f2;">
+                                    <span style="font-size:0.75rem;color:#666;">Kelas <strong style="color:#22c55e"><%= c.code %></strong></span>
+                                    <span style="font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;<%= c.student_count > 0 ? 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;' : 'background:#f9fafb;color:#9ca3af;border:1px solid #e5e7eb;' %>"><%= c.student_count %> Mhs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    <% }) %>
+                </div>
+                <% } %>
+
+                <% } else { %>
+                <!-- Sudah pilih kelas: tampilkan monitoring normal -->
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h1 class="header-title">
@@ -144,14 +195,14 @@
                     </div>
                     
                     <div class="d-flex gap-2">
-                        <a href="/pilih-kelas?role=admin" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold">
-                            <i class="fas fa-exchange-alt me-2"></i> Ganti Kelas (<%= activeClassCode %>)
+                        <a href="/pilih-kelas?role=admin&username=<%= encodeURIComponent(username) %>" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold">
+                            <i class="fas fa-exchange-alt me-2"></i> Ganti Kelas
                         </a>
                         <button class="btn btn-white bg-white text-dark border rounded-pill px-3 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#listModal">
                             <i class="fas fa-list me-2"></i> List Mahasiswa
                         </button>
-                        <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold" style="background: var(--dark-pink);" onclick="openAddModal()">
-                            <i class="fas fa-plus me-2"></i> Tambah Mahasiswa
+                        <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold" style="background: var(--dark-pink);" data-bs-toggle="modal" data-bs-target="#addFromClassModal">
+                            <i class="fas fa-user-plus me-2"></i> Tambah Mahasiswa
                         </button>
                     </div>
                 </div>
@@ -165,6 +216,7 @@
                                 <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
                                 <form action="/admin" method="GET">
                                     <input type="hidden" name="kelas" value="<%= currentClass %>">
+                                    <input type="hidden" name="username" value="<%= username %>">
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
                                         <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
@@ -178,10 +230,10 @@
                                 </form>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                            <div id="device-card-bg" class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
                                 <div>
                                     <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
-                                    <div class="d-flex align-items-center gap-2">
+                                    <div id="device-status-container" class="d-flex align-items-center gap-2">
                                         <% if(currentDevice.status === 'online') { %>
                                             <span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>
                                         <% } else { %>
@@ -193,15 +245,17 @@
                             </div>
 
                             <div class="d-flex align-items-end gap-3 mb-4">
-                                <div class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? ((currentDevice.battery !== null && currentDevice.battery > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
+                                <div id="device-battery-container" class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? ((currentDevice.battery !== null && currentDevice.battery > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
                                     <i class="fas fa-battery-half"></i> 
+                                    <span id="device-battery-text">
                                     <% if (currentDevice.battery !== null && currentDevice.battery !== undefined && currentDevice.battery !== '') { %>
                                         <%= currentDevice.battery %>%
                                     <% } else { %>
                                         --
                                     <% } %>
+                                    </span>
                                 </div>
-                                <small class="text-muted mb-2">
+                                <small class="text-muted mb-2" id="device-battery-label">
                                     <% if (currentDevice.battery !== null && currentDevice.battery !== undefined && currentDevice.battery !== '') { %>
                                         Status Daya Perangkat
                                     <% } else { %>
@@ -209,6 +263,7 @@
                                     <% } %>
                                 </small>
                             </div>
+
                         </div>
                     </div>
 
@@ -224,7 +279,7 @@
 
                             <div style="max-height: 400px; overflow-y: auto;">
                                 <table class="table uid-table align-middle border-0">
-                                    <tbody>
+                                    <tbody id="tabel-antrean-body">
                                         <% if (currentList.length === 0) { %>
                                             <tr><td class="text-center text-muted py-5">Belum ada aktivitas scan.</td></tr>
                                         <% } %>
@@ -245,11 +300,7 @@
                                             <td>
                                                 <% if(item.isRegistered) { %>
                                                     <div class="fw-bold text-dark"><%= item.name %></div>
-                                                    <% if(item.isWrongClass) { %>
-                                                        <span class="badge bg-warning text-dark">Kelas <%= item.kelas %></span>
-                                                    <% } else { %>
-                                                        <small class="text-muted"><%= item.nim %></small>
-                                                    <% } %>
+                                                    <small class="text-muted"><%= item.nim %></small>
                                                 <% } else { %>
                                                     <span class="badge bg-danger rounded-pill px-3 py-2 mb-1">UNKNOWN</span>
                                                     <div style="font-size: 10px;" class="text-danger">Belum Terdaftar</div>
@@ -260,16 +311,18 @@
                                                     <button onclick="registerUnknown('<%= item.uid %>')" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" style="background: var(--dark-pink); border: none;">
                                                         <i class="fas fa-user-plus me-1"></i> Daftarkan
                                                     </button>
-                                                <% } else { %>
-                                                    <form action="/admin/manage-uid" method="POST">
-                                                        <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                                        <input type="hidden" name="action" value="delete">
-                                                        <input type="hidden" name="uid" value="<%= item.uid %>">
-                                                        <button class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi">
-                                                            <i class="fas fa-times"></i>
-                                                        </button>
-                                                    </form>
                                                 <% } %>
+                                                <!-- Tombol hapus per-entri (by entry id unik) -->
+                                                <form action="/admin/manage-uid" method="POST" class="d-inline">
+                                                    <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                                    <input type="hidden" name="username" value="<%= username %>">
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <input type="hidden" name="uid" value="<%= item.uid %>">
+                                                    <input type="hidden" name="entry_id" value="<%= item.id %>">
+                                                    <button type="submit" class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </form>
                                             </td>
                                         </tr>
                                         <% }) %>
@@ -278,15 +331,25 @@
                             </div>
                         </div>
                     </div>
-                </div> </div> <div class="tab-pane fade" id="v-pills-classes">
+                </div>
+                <% } %>
+            </div>
+
+            <!-- ====== TAB: MANAJEMEN KELAS ====== -->
+            <div class="tab-pane fade" id="v-pills-classes">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Kelas</h1>
                         <p class="header-subtitle">Tambah, edit, atau hapus data kelas.</p>
                     </div>
-                    <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold" style="background: var(--dark-pink);" data-bs-toggle="modal" data-bs-target="#addClassModal">
-                        <i class="fas fa-plus me-2"></i> Tambah Kelas Baru
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-danger rounded-pill px-4 py-2 fw-bold" onclick="confirmResetAll()">
+                            <i class="fas fa-trash-alt me-2"></i> Hapus Semua Data
+                        </button>
+                        <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold" style="background: var(--dark-pink);" data-bs-toggle="modal" data-bs-target="#addClassModal">
+                            <i class="fas fa-plus me-2"></i> Tambah Kelas Baru
+                        </button>
+                    </div>
                 </div>
 
                 <div class="dashboard-card h-auto">
@@ -295,7 +358,9 @@
                             <thead>
                                 <tr class="text-muted small text-uppercase">
                                     <th class="ps-4 border-0">Nama Kelas</th>
-                                    <th class="border-0">Kode Kelas</th>
+                                    <th class="border-0">Kode</th>
+                                    <th class="border-0">Dosen Pengampu</th>
+                                    <th class="border-0">Mahasiswa</th>
                                     <th class="text-end pe-4 border-0">Aksi</th>
                                 </tr>
                             </thead>
@@ -305,30 +370,45 @@
                                     <tr>
                                         <td class="ps-4 fw-bold text-dark"><%= c.name %></td>
                                         <td><span class="badge bg-light text-dark border"><%= c.code %></span></td>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div style="width:28px;height:28px;border-radius:50%;background:#f0f2f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:0.75rem;flex-shrink:0;">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                                <span class="small"><%= c.lecturer || '<em class="text-muted">Belum diisi</em>' %></span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge <%= (c.student_count > 0) ? 'bg-success bg-opacity-10 text-success' : 'bg-light text-muted' %> rounded-pill px-3">
+                                                <%= c.student_count %> mhs
+                                            </span>
+                                        </td>
                                         <td class="text-end pe-4">
-                                            <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" onclick="openEditClassModal('<%= c.id %>', '<%= c.name %>', '<%= c.code %>')">
+                                            <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>&username=<%= encodeURIComponent(username) %>" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1" style="font-size:0.75rem;" title="Buka Monitoring Live">
+                                                <i class="fas fa-satellite-dish me-1"></i> Monitoring
+                                            </a>
+                                            <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" onclick="openEditClassModal('<%= c.id %>', '<%= c.name %>', '<%= c.code %>', `<%= (c.lecturer || '').replace(/`/g, '') %>`, '<%= c.lecturer_user_id || "" %>')">
                                                 <i class="fas fa-pen"></i>
                                             </button>
-                                            <form action="/admin/delete-class" method="POST" class="d-inline" onsubmit="return confirm('Yakin hapus kelas ini?');">
-                                                <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                                <input type="hidden" name="id" value="<%= c.id %>">
-                                                <button type="submit" class="btn btn-sm btn-light text-danger rounded-circle">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </form>
+                                            <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" onclick="confirmDeleteClass('<%= c.id %>', '<%= c.name %>')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                     <% }) %>
                                 <% } else { %>
                                     <tr>
-                                        <td colspan="3" class="text-center text-muted py-4">Belum ada data kelas atau variabel 'classes' belum dikirim dari backend.</td>
+                                        <td colspan="5" class="text-center text-muted py-4">Belum ada data kelas.</td>
                                     </tr>
                                 <% } %>
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div> <div class="tab-pane fade" id="v-pills-accounts">
+            </div>
+
+            <!-- ====== TAB: MANAJEMEN AKUN ====== -->
+            <div class="tab-pane fade" id="v-pills-accounts">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Akun</h1>
@@ -342,6 +422,7 @@
                             <h5 class="fw-bold mb-4 text-dark">Buat Akun Baru</h5>
                             <form action="/admin/add-user" method="POST">
                                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                                 <input type="hidden" name="admin_username" value="<%= username %>">
                                 <div class="mb-3">
                                     <label class="small text-muted fw-bold mb-1">USERNAME</label>
                                     <input type="text" name="username" class="form-control bg-light border-0 rounded-3 py-2" required>
@@ -391,10 +472,11 @@
                                                 <% } %>
                                             </td>
                                             <td class="text-end pe-4">
-                                                <form action="/admin/delete-user" method="POST" onsubmit="return confirm('Hapus user ini?');">
+                                                <form action="/admin/delete-user" method="POST" class="d-inline" onsubmit="return confirmDeleteUser(event, this)">
                                                     <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                                    <input type="hidden" name="id" value="<%= u.id %>">
-                                                    <button class="btn btn-sm btn-light text-danger rounded-circle"><i class="fas fa-trash"></i></button>
+                                                    <input type="hidden" name="username" value="<%= username %>">
+                                                    <input type="hidden" name="id" value="<%= u.user_id %>">
+                                                    <button type="submit" class="btn btn-sm btn-light text-danger rounded-circle"><i class="fas fa-trash"></i></button>
                                                 </form>
                                             </td>
                                         </tr>
@@ -405,7 +487,13 @@
                         </div>
                     </div>
                 </div>
-            </div> </div> </div> <div class="modal fade" id="listModal" tabindex="-1">
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ====== MODAL: LIST MAHASISWA ====== -->
+    <div class="modal fade" id="listModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 rounded-4 p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -431,17 +519,15 @@
                             <tr>
                                 <td class="fw-bold"><%= s.name %></td>
                                 <td><%= s.nim %></td>
-                                <td class="font-monospace"><%= s.rfid %></td>
+                                <td class="font-monospace"><%= s.rfid_uid %></td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2">
-                                        <button class="btn btn-sm btn-outline-secondary" onclick="openEditModal('<%= s.id %>', '<%= s.name %>', '<%= s.nim %>', '<%= s.rfid %>')">
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="openEditModal('<%= s.student_id %>', '<%= s.name %>', '<%= s.nim %>', '<%= s.rfid_uid %>')">
                                             <i class="fas fa-pen"></i>
                                         </button>
-                                        <form action="/admin/delete" method="POST" onsubmit="return confirm('Hapus?');">
-                                            <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                            <input type="hidden" name="id" value="<%= s.id %>">
-                                            <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" onclick="confirmDeleteStudent('<%= s.student_id %>', '<%= s.name %>')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -453,16 +539,37 @@
         </div>
     </div>
 
+    <!-- Form hapus student (hidden, dipanggil via JS) -->
+    <form id="deleteStudentForm" action="/admin/delete" method="POST" style="display:none;">
+        <input type="hidden" name="current_class" value="<%= currentClass %>">
+        <input type="hidden" name="username" value="<%= username %>">
+        <input type="hidden" name="id" id="deleteStudentId">
+    </form>
+
+    <!-- Form hapus kelas (hidden, dipanggil via JS) -->
+    <form id="deleteClassForm" action="/admin/delete-class" method="POST" style="display:none;">
+        <input type="hidden" name="current_class" value="<%= currentClass %>">
+        <input type="hidden" name="username" value="<%= username %>">
+        <input type="hidden" name="id" id="deleteClassId">
+    </form>
+
+    <!-- Form reset semua data (hidden, dipanggil via JS) -->
+    <form id="resetAllForm" action="/admin/reset-all" method="POST" style="display:none;">
+        <input type="hidden" name="username" value="<%= username %>">
+    </form>
+
+    <!-- ====== MODAL: TAMBAH MAHASISWA BARU (dari scan) ====== -->
     <div class="modal fade" id="addModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-4">
           <div class="d-flex justify-content-between align-items-center mb-4">
-            <h5 class="modal-title fw-bold" id="addModalTitle">Tambah Mahasiswa</h5>
+            <h5 class="modal-title fw-bold" id="addModalTitle">Daftarkan Mahasiswa Baru</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form action="/admin/add" method="POST">
             <input type="hidden" name="kelas" value="<%= currentClass %>">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="username" value="<%= username %>">
             
             <div class="mb-3">
                 <label class="small text-muted fw-bold">NAMA LENGKAP</label>
@@ -482,6 +589,47 @@
       </div>
     </div>
 
+    <!-- ====== MODAL: TAMBAH MAHASISWA DARI KELAS LAIN ====== -->
+    <div class="modal fade" id="addFromClassModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h5 class="modal-title fw-bold">Tambah Mahasiswa ke Kelas Ini</h5>
+                <p class="text-muted small mb-0">Pilih mahasiswa dari kelas lain untuk ditambahkan ke <strong><%= currentClass %></strong></p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form action="/admin/add-to-class" method="POST">
+            <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="username" value="<%= username %>">
+            
+            <div class="mb-4">
+                <label class="small text-muted fw-bold">PILIH MAHASISWA</label>
+                <select name="student_id" class="form-select bg-light border-0 rounded-3 py-2" required>
+                    <option value="" disabled selected>Pilih mahasiswa...</option>
+                    <% if (studentsNotInClass && studentsNotInClass.length > 0) { %>
+                        <% studentsNotInClass.forEach(s => { %>
+                        <option value="<%= s.student_id %>"><%= s.name %> (<%= s.nim %>)<% if(s.kelas) { %> — <%= s.kelas %><% } %></option>
+                        <% }) %>
+                    <% } else { %>
+                        <option disabled>Tidak ada mahasiswa dari kelas lain</option>
+                    <% } %>
+                </select>
+                <small class="text-muted mt-1 d-block">Hanya menampilkan mahasiswa yang belum ada di kelas ini.</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
+                    <i class="fas fa-user-plus me-2"></i>Tambahkan
+                </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== MODAL: EDIT MAHASISWA ====== -->
     <div class="modal fade" id="editModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-4">
@@ -491,6 +639,7 @@
           </div>
           <form action="/admin/edit" method="POST">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="username" value="<%= username %>">
             <input type="hidden" name="id" id="editId" />
             <div class="mb-3">
                 <label class="small text-muted fw-bold">NAMA LENGKAP</label>
@@ -504,12 +653,16 @@
                 <label class="small text-muted fw-bold">RFID TAG</label>
                 <input type="text" name="rfid" id="editRfid" class="form-control bg-light border-0 rounded-3" required />
             </div>
-            <button type="submit" class="btn w-100 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Update Data</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Update Data</button>
+            </div>
           </form>
         </div>
       </div>
     </div>
 
+    <!-- ====== MODAL: TAMBAH KELAS BARU ====== -->
     <div class="modal fade" id="addClassModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content border-0 rounded-4 p-4">
@@ -519,20 +672,39 @@
             </div>
             <form action="/admin/add-class" method="POST">
               <input type="hidden" name="current_class" value="<%= currentClass %>">
+              <input type="hidden" name="username" value="<%= username %>">
               <div class="mb-3">
                   <label class="small text-muted fw-bold">NAMA KELAS</label>
                   <input type="text" name="name" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: Pengantar IoT" />
               </div>
-              <div class="mb-4">
+              <div class="mb-3">
                   <label class="small text-muted fw-bold">KODE KELAS</label>
                   <input type="text" name="code" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: IOT101" />
               </div>
-              <button type="submit" class="btn w-100 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Simpan Kelas</button>
+              <div class="mb-3">
+                  <label class="small text-muted fw-bold">NAMA DOSEN PENGAMPU</label>
+                  <input type="text" name="lecturer" class="form-control bg-light border-0 rounded-3" placeholder="Contoh: Dr. Budi Santoso, M.T." />
+              </div>
+              <div class="mb-4">
+                  <label class="small text-muted fw-bold">AKUN DOSEN (untuk login filter kelas)</label>
+                  <select name="lecturer_user_id" class="form-select bg-light border-0 rounded-3">
+                      <option value="">-- Belum ditautkan --</option>
+                      <% (typeof dosenUsers !== 'undefined' ? dosenUsers : []).forEach(u => { %>
+                      <option value="<%= u.user_id %>"><%= u.username %></option>
+                      <% }) %>
+                  </select>
+                  <small class="text-muted" style="font-size:11px;">Pilih akun dosen agar kelas ini muncul saat dosen login.</small>
+              </div>
+              <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                  <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Simpan Kelas</button>
+              </div>
             </form>
           </div>
         </div>
     </div>
   
+    <!-- ====== MODAL: EDIT KELAS ====== -->
     <div class="modal fade" id="editClassModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content border-0 rounded-4 p-4">
@@ -542,16 +714,34 @@
             </div>
             <form action="/admin/edit-class" method="POST">
               <input type="hidden" name="current_class" value="<%= currentClass %>">
+              <input type="hidden" name="username" value="<%= username %>">
               <input type="hidden" name="id" id="editClassId" />
               <div class="mb-3">
                   <label class="small text-muted fw-bold">NAMA KELAS</label>
                   <input type="text" name="name" id="editClassName" class="form-control bg-light border-0 rounded-3" required />
               </div>
-              <div class="mb-4">
+              <div class="mb-3">
                   <label class="small text-muted fw-bold">KODE KELAS</label>
                   <input type="text" name="code" id="editClassCode" class="form-control bg-light border-0 rounded-3" required />
               </div>
-              <button type="submit" class="btn w-100 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Update Kelas</button>
+              <div class="mb-3">
+                  <label class="small text-muted fw-bold">NAMA DOSEN PENGAMPU</label>
+                  <input type="text" name="lecturer" id="editClassLecturer" class="form-control bg-light border-0 rounded-3" placeholder="Contoh: Dr. Budi Santoso, M.T." />
+              </div>
+              <div class="mb-4">
+                  <label class="small text-muted fw-bold">AKUN DOSEN (untuk login filter kelas)</label>
+                  <select name="lecturer_user_id" id="editClassLecturerUserId" class="form-select bg-light border-0 rounded-3">
+                      <option value="">-- Belum ditautkan --</option>
+                      <% (typeof dosenUsers !== 'undefined' ? dosenUsers : []).forEach(u => { %>
+                      <option value="<%= u.user_id %>"><%= u.username %></option>
+                      <% }) %>
+                  </select>
+                  <small class="text-muted" style="font-size:11px;">Pilih akun dosen agar kelas ini muncul saat dosen login.</small>
+              </div>
+              <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                  <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Update Kelas</button>
+              </div>
             </form>
           </div>
         </div>
@@ -559,6 +749,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+      const CURRENT_CLASS = '<%= currentClass || "" %>';
+      const CURRENT_USERNAME = '<%= username %>';
+
       function openAddModal() {
           document.getElementById('rfidInputAdd').value = '';
           document.getElementById('addModalTitle').innerText = 'Tambah Mahasiswa Baru';
@@ -568,6 +761,10 @@
       function registerUnknown(uid) {
           document.getElementById('rfidInputAdd').value = uid;
           document.getElementById('addModalTitle').innerText = 'Registrasi Kartu Baru';
+          // Tutup listModal jika terbuka
+          const listModalEl = document.getElementById('listModal');
+          const listModal = bootstrap.Modal.getInstance(listModalEl);
+          if(listModal) listModal.hide();
           new bootstrap.Modal(document.getElementById('addModal')).show();
       }
 
@@ -580,26 +777,225 @@
         document.getElementById("editName").value = name;
         document.getElementById("editNim").value = nim;
         document.getElementById("editRfid").value = rfid;
-        new bootstrap.Modal(document.getElementById("editModal")).show();
+        setTimeout(() => {
+            new bootstrap.Modal(document.getElementById("editModal")).show();
+        }, 300);
       }
 
-      function openEditClassModal(id, name, code) {
+      function openEditClassModal(id, name, code, lecturer, lecturerUserId) {
           document.getElementById("editClassId").value = id;
           document.getElementById("editClassName").value = name;
           document.getElementById("editClassCode").value = code;
+          document.getElementById("editClassLecturer").value = lecturer || '';
+          const sel = document.getElementById("editClassLecturerUserId");
+          if (sel) sel.value = lecturerUserId || '';
           new bootstrap.Modal(document.getElementById("editClassModal")).show();
+      }
+
+      // Konfirmasi hapus mahasiswa via SweetAlert
+      function confirmDeleteStudent(id, name) {
+          // Tutup modal list dulu
+          const listModalEl = document.getElementById('listModal');
+          const listModal = bootstrap.Modal.getInstance(listModalEl);
+          if(listModal) listModal.hide();
+
+          setTimeout(() => {
+              Swal.fire({
+                  title: 'Hapus Mahasiswa?',
+                  html: `Mahasiswa <strong>${name}</strong> akan dihapus dari database.<br><small class="text-muted">Aksi ini tidak bisa dibatalkan.</small>`,
+                  icon: 'warning',
+                  showCancelButton: true,
+                  confirmButtonColor: '#d81b60',
+                  cancelButtonColor: '#888888',
+                  confirmButtonText: 'Ya, Hapus!',
+                  cancelButtonText: 'Batal',
+                  borderRadius: '20px'
+              }).then((result) => {
+                  if (result.isConfirmed) {
+                      document.getElementById('deleteStudentId').value = id;
+                      document.getElementById('deleteStudentForm').submit();
+                  }
+              });
+          }, 300);
+      }
+
+      // Konfirmasi hapus kelas via SweetAlert
+      function confirmDeleteClass(id, name) {
+          Swal.fire({
+              title: 'Hapus Kelas?',
+              html: `Kelas <strong>${name}</strong> beserta seluruh mahasiswanya akan dihapus permanen.<br><small class="text-muted">Aksi ini tidak bisa dibatalkan.</small>`,
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d81b60',
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Hapus Kelas!',
+              cancelButtonText: 'Batal',
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  document.getElementById('deleteClassId').value = id;
+                  document.getElementById('deleteClassForm').submit();
+              }
+          });
+      }
+
+      // Konfirmasi reset semua data (ganti semester)
+      function confirmResetAll() {
+          Swal.fire({
+              title: 'Ganti Semester?',
+              html: `<strong>Semua data kelas dan mahasiswa akan dihapus!</strong><br><br>Pastikan Anda sudah menyimpan data yang diperlukan sebelum melanjutkan.<br><br><small class="text-danger">⚠️ Aksi ini TIDAK BISA dibatalkan.</small>`,
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d32f2f',
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Hapus Semua!',
+              cancelButtonText: 'Batal',
+              input: 'text',
+              inputPlaceholder: 'Ketik "HAPUS" untuk konfirmasi',
+              inputAttributes: { autocomplete: 'off' },
+              preConfirm: (value) => {
+                  if (value !== 'HAPUS') {
+                      Swal.showValidationMessage('Ketik "HAPUS" (huruf kapital) untuk konfirmasi');
+                  }
+              }
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  document.getElementById('resetAllForm').submit();
+              }
+          });
+      }
+
+      // Konfirmasi hapus user
+      function confirmDeleteUser(event, form) {
+          event.preventDefault();
+          Swal.fire({
+              title: 'Hapus Akun?',
+              text: 'Akun ini akan dihapus dari sistem.',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d81b60',
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Hapus!',
+              cancelButtonText: 'Batal',
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  form.submit();
+              }
+          });
+          return false;
       }
     </script>
 
     <script>
-    // Hanya auto-refresh jika user sedang berada di tab "Monitoring Live"
-    setInterval(function() {
-        let dashboardTab = document.getElementById('v-pills-dashboard-tab');
-        // Jika tab aktif, refresh halaman setiap 5 detik
-        if(dashboardTab.classList.contains('active')) {
-            window.location.reload();
+        // 1. SISTEM MENGINGAT TAB
+        document.addEventListener("DOMContentLoaded", function () {
+            let activePillId = localStorage.getItem("activePill");
+            if (activePillId) {
+                let triggerEl = document.querySelector(`button[data-bs-target="${activePillId}"]`);
+                if (triggerEl) {
+                    let pillInstance = new bootstrap.Tab(triggerEl);
+                    pillInstance.show();
+                }
+            }
+            let pillElements = document.querySelectorAll('button[data-bs-toggle="pill"]');
+            pillElements.forEach(function (pill) {
+                pill.addEventListener("shown.bs.tab", function (event) {
+                    let targetId = event.target.getAttribute("data-bs-target");
+                    localStorage.setItem("activePill", targetId);
+                });
+            });
+        });
+
+        // 2. SISTEM AUTO-REFRESH
+        let isServerOffline = false;
+
+        async function updateData() {
+            try {
+                const response = await fetch(`/api/realtime-data?kelas=${encodeURIComponent(CURRENT_CLASS)}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error("Gagal ambil data API");
+
+                const data = await response.json();
+                
+                // Update Tabel Antrean
+                const listBody = document.querySelector('#tabel-antrean-body');
+                if (listBody && data.scannedList) {
+                    if(data.scannedList.length === 0) {
+                        listBody.innerHTML = '<tr><td class="text-center text-muted py-5">Belum ada aktivitas scan.</td></tr>';
+                    } else {
+                        let newHtml = '';
+                        data.scannedList.forEach(item => {
+                            let rowClass = !item.isRegistered ? 'pulse-red' : '';
+                            
+                            let userInfoHtml = item.isRegistered
+                                ? `<div class="fw-bold text-dark">${item.name}</div><small class="text-muted">${item.nim}</small>`
+                                : `<span class="badge bg-danger rounded-pill px-3 py-2 mb-1">UNKNOWN</span><div style="font-size: 10px;" class="text-danger">Belum Terdaftar</div>`;
+
+                            let registerBtn = !item.isRegistered
+                                ? `<button onclick="registerUnknown('${item.uid}')" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold me-1" style="background: var(--dark-pink); border: none;"><i class="fas fa-user-plus me-1"></i> Daftarkan</button>`
+                                : '';
+
+                            let deleteBtn = `<form action="/admin/manage-uid" method="POST" class="d-inline">
+                                <input type="hidden" name="current_class" value="${CURRENT_CLASS}">
+                                <input type="hidden" name="username" value="${CURRENT_USERNAME}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="uid" value="${item.uid}">
+                                <input type="hidden" name="entry_id" value="${item.id}">
+                                <button type="submit" class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi"><i class="fas fa-times"></i></button>
+                            </form>`;
+
+                            newHtml += `
+                                <tr class="${rowClass}">
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="bg-light rounded-circle p-2 text-secondary"><i class="fas fa-id-card"></i></div>
+                                            <div><div class="fw-bold small text-secondary">RFID UID</div><div class="font-monospace text-dark fw-bold">${item.uid}</div></div>
+                                        </div>
+                                    </td>
+                                    <td>${userInfoHtml}</td>
+                                    <td class="text-end pe-3">${registerBtn}${deleteBtn}</td>
+                                </tr>
+                            `;
+                        });
+                        listBody.innerHTML = newHtml;
+                    }
+                }
+                
+                // Update Perangkat
+                if (data.devices && data.devices.length > 0) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const currentDeviceId = urlParams.get('device') || String(data.devices[0].id);
+                    const dev = data.devices.find(d => String(d.id) === String(currentDeviceId)) || data.devices[0];
+                    const isOnline = dev.status === 'online';
+                    
+                    const bgCard = document.querySelector('#device-card-bg');
+                    if(bgCard) bgCard.style.backgroundColor = isOnline ? '#e8f5e9' : '#ffebee';
+
+                    const statusContainer = document.querySelector('#device-status-container');
+                    if(statusContainer) {
+                        let badgeHtml = isOnline 
+                            ? `<span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>` 
+                            : `<span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>`;
+                        statusContainer.innerHTML = `${badgeHtml} <small class="text-muted font-monospace">${dev.id}</small>`;
+                    }
+
+                    const batContainer = document.querySelector('#device-battery-container');
+                    const batText = document.querySelector('#device-battery-text');
+                    const batLabel = document.querySelector('#device-battery-label');
+                    
+                    if (batContainer && batText && batLabel) {
+                        let batVal = dev.battery;
+                        let hasBat = (batVal !== null && batVal !== undefined && batVal !== '');
+                        batText.innerText = hasBat ? `${batVal}%` : '--';
+                        batLabel.innerText = hasBat ? 'Status Daya Perangkat' : 'Belum ada data dari broker';
+                        batContainer.style.color = isOnline ? ((hasBat && batVal > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999';
+                    }
+                }
+            } catch (err) {
+                console.log("Menunggu koneksi data realtime...");
+            }
         }
-    }, 5000); // 5000 milidetik = 5 detik
+
+        setInterval(updateData, 2000);
     </script>
+
 </body>
 </html>

@@ -4,18 +4,10 @@
     <title>Dosen Dashboard - <%= currentClass %></title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
       :root {
@@ -45,197 +37,50 @@
         z-index: 1000;
       }
 
-      .brand-title {
-        margin-bottom: 30px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .logo-img {
-        max-width: 100%;
-        max-height: 75px;
-        object-fit: contain;
-      }
+      .brand-title { margin-bottom: 30px; display: flex; justify-content: center; align-items: center; }
+      .logo-img { max-width: 100%; max-height: 75px; object-fit: contain; }
 
       .nav-pills .nav-link {
-        color: var(--text-muted);
-        font-weight: 500;
-        border-radius: 15px;
-        padding: 12px 20px;
-        margin-bottom: 10px;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        color: var(--text-muted); font-weight: 500; border-radius: 15px; padding: 12px 20px; margin-bottom: 10px; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px;
       }
-      .nav-pills .nav-link:hover {
-        background-color: rgba(255, 128, 171, 0.1);
-        color: var(--dark-pink);
-      }
-      .nav-pills .nav-link.active {
-        background: linear-gradient(135deg, #ff80ab, #f06292);
-        color: white;
-        box-shadow: 0 8px 20px rgba(240, 98, 146, 0.4);
-      }
-      .main-content {
-        margin-left: 250px;
-        padding: 40px;
-      }
-      .header-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text-dark);
-        margin-bottom: 5px;
-      }
-      .header-subtitle {
-        color: var(--text-muted);
-        margin-bottom: 30px;
-      }
+      .nav-pills .nav-link:hover { background-color: rgba(255, 128, 171, 0.1); color: var(--dark-pink); }
+      .nav-pills .nav-link.active { background: linear-gradient(135deg, #ff80ab, #f06292); color: white; box-shadow: 0 8px 20px rgba(240, 98, 146, 0.4); }
+
+      .main-content { margin-left: 250px; padding: 40px; }
+      .header-title { font-size: 2rem; font-weight: 700; color: var(--text-dark); margin-bottom: 5px; }
+      .header-subtitle { color: var(--text-muted); margin-bottom: 30px; }
 
       .dashboard-card {
-        background: var(--card-bg);
-        border-radius: 25px;
-        border: none;
-        padding: 25px;
-        box-shadow: var(--shadow-soft);
-        height: 100%;
-        transition: transform 0.3s ease;
+        background: var(--card-bg); border-radius: 25px; border: none; padding: 25px; box-shadow: var(--shadow-soft); height: 100%; transition: transform 0.3s ease;
       }
-      .battery-indicator {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--dark-pink);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
+      .battery-indicator { font-size: 2rem; font-weight: 700; color: var(--dark-pink); display: flex; align-items: center; gap: 10px; }
 
-      .uid-table {
-        border-collapse: separate;
-        border-spacing: 0 10px;
-      }
-      .uid-table tbody tr {
-        background-color: #fff;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
-        border-radius: 10px;
-      }
-      .uid-table td:first-child {
-        border-top-left-radius: 15px;
-        border-bottom-left-radius: 15px;
-      }
-      .uid-table td:last-child {
-        border-top-right-radius: 15px;
-        border-bottom-right-radius: 15px;
-      }
-      .badge-custom {
-        padding: 8px 12px;
-        border-radius: 10px;
-        font-weight: 600;
-        font-size: 0.8rem;
-      }
+      .uid-table { border-collapse: separate; border-spacing: 0 10px; }
+      .uid-table tbody tr { background-color: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); border-radius: 10px; }
+      .uid-table td:first-child { border-top-left-radius: 15px; border-bottom-left-radius: 15px; }
+      .uid-table td:last-child { border-top-right-radius: 15px; border-bottom-right-radius: 15px; }
+      .badge-custom { padding: 8px 12px; border-radius: 10px; font-weight: 600; font-size: 0.8rem; }
 
-      .transcript-box {
-        background-color: #f8f9fa;
-        border-radius: 15px;
-        padding: 15px;
-        font-size: 0.95rem;
-        color: var(--text-dark);
-        cursor: pointer;
-        position: relative;
-        transition: all 0.3s ease;
-        margin-bottom: 10px;
-        border: 1px solid #f0f0f0;
-      }
-      .transcript-text {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        margin-bottom: 0;
-        line-height: 1.5;
-      }
-      .transcript-box.expanded .transcript-text {
-        -webkit-line-clamp: unset;
-        overflow: visible;
-      }
-      .read-more-label {
-        font-size: 0.75rem;
-        color: var(--primary-pink);
-        font-weight: 600;
-        margin-top: 8px;
-        display: none;
-      }
+      .transcript-box { background-color: #f8f9fa; border-radius: 15px; padding: 15px; font-size: 0.95rem; color: var(--text-dark); cursor: pointer; position: relative; transition: all 0.3s ease; margin-bottom: 10px; border: 1px solid #f0f0f0; }
+      .transcript-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 0; line-height: 1.5; }
+      .transcript-box.expanded .transcript-text { -webkit-line-clamp: unset; overflow: visible; }
+      .read-more-label { font-size: 0.75rem; color: var(--primary-pink); font-weight: 600; margin-top: 8px; display: none; }
 
-      .date-header-row {
-        cursor: pointer;
-        transition: transform 0.2s ease;
-      }
-      .date-header {
-        background-color: #ffc2d4;
-        color: #880e4f;
-        font-weight: 700;
-        font-size: 0.9rem;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-        border-bottom: 1px solid #f8bbd0;
-        border-top: none !important;
-        border-radius: 15px;
-        box-shadow: 0 4px 10px rgba(255, 64, 129, 0.15);
-      }
-      .question-header-row {
-        cursor: pointer;
-      }
-      .question-header {
-        background-color: #fff0f6;
-        color: var(--dark-pink);
-        font-weight: 600;
-        font-size: 0.9rem;
-        border-radius: 10px;
-        border-left: 5px solid var(--primary-pink);
-        margin-top: 10px;
-      }
-      .date-collapsed .chevron-icon {
-        transform: rotate(-90deg);
-      }
-      .chevron-icon {
-        transition: transform 0.3s ease;
-        color: #880e4f;
-      }
+      .date-header-row { cursor: pointer; transition: transform 0.2s ease; }
+      .date-header { background-color: #ffc2d4; color: #880e4f; font-weight: 700; font-size: 0.9rem; letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 1px solid #f8bbd0; border-top: none !important; border-radius: 15px; box-shadow: 0 4px 10px rgba(255, 64, 129, 0.15); }
+      .question-header-row { cursor: pointer; }
+      .question-header { background-color: #fff0f6; color: var(--dark-pink); font-weight: 600; font-size: 0.9rem; border-radius: 10px; border-left: 5px solid var(--primary-pink); margin-top: 10px; }
+      .date-collapsed .chevron-icon { transform: rotate(-90deg); }
+      .chevron-icon { transition: transform 0.3s ease; color: #880e4f; }
 
-      .nav-pills-custom .nav-link {
-        color: var(--primary-pink);
-        background-color: white;
-        border: 1px solid var(--primary-pink);
-        font-weight: 600;
-        margin: 0 5px;
-      }
-      .nav-pills-custom .nav-link.active {
-        color: white;
-        background-color: var(--primary-pink);
-        border: 1px solid var(--primary-pink);
-      }
+      .nav-pills-custom .nav-link { color: var(--primary-pink); background-color: white; border: 1px solid var(--primary-pink); font-weight: 600; margin: 0 5px; }
+      .nav-pills-custom .nav-link.active { color: white; background-color: var(--primary-pink); border: 1px solid var(--primary-pink); }
 
-      .btn-request {
-        background-color: #fff3e0;
-        color: #e65100;
-        border: 1px solid #ffe0b2;
-        font-weight: 600;
-        transition: 0.3s;
-      }
-      .btn-request:hover {
-        background-color: #ffe0b2;
-      }
+      .btn-request { background-color: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; font-weight: 600; transition: 0.3s; }
+      .btn-request:hover { background-color: #ffe0b2; }
       
-      .class-badge {
-          background-color: var(--dark-pink);
-          color: white;
-          padding: 5px 15px;
-          border-radius: 20px;
-          font-size: 0.5em;
-          vertical-align: middle;
-      }
+      .class-badge { background-color: var(--dark-pink); color: white; padding: 5px 15px; border-radius: 20px; font-size: 0.5em; vertical-align: middle; }
 
-      /* Animasi Pulse untuk Unknown Device */
       .pulse-red { animation: pulse-animation 2s infinite; }
       @keyframes pulse-animation {
         0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
@@ -243,16 +88,17 @@
         100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
       }
 
-      ::-webkit-scrollbar {
-        width: 8px;
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #fff0f5; }
+      ::-webkit-scrollbar-thumb { background: #ffb6c1; border-radius: 10px; }
+
+      /* Tombol disabled — tetap terlihat, tidak bisa diklik */
+      button:disabled, input:disabled {
+        opacity: 0.45 !important;
+        cursor: not-allowed !important;
+        pointer-events: auto !important;
       }
-      ::-webkit-scrollbar-track {
-        background: #fff0f5;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #ffb6c1;
-        border-radius: 10px;
-      }
+      button:disabled:hover { box-shadow: none !important; }
     </style>
   </head>
   <body>
@@ -261,57 +107,29 @@
         <img src="/images/logo.png" alt="Logo Aplikasi" class="logo-img" />
       </div>
 
-      <div
-        class="nav flex-column nav-pills"
-        id="v-pills-tab"
-        role="tablist"
-        aria-orientation="vertical"
-      >
-        <button
-          class="nav-link active"
-          id="v-pills-control-tab"
-          data-bs-toggle="pill"
-          data-bs-target="#v-pills-control"
-        >
+      <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+        <button class="nav-link active" id="v-pills-control-tab" data-bs-toggle="pill" data-bs-target="#v-pills-control">
           <i class="fas fa-gamepad"></i> Dashboard
         </button>
-        <button
-          class="nav-link"
-          id="v-pills-logs-tab"
-          data-bs-toggle="pill"
-          data-bs-target="#v-pills-logs"
-        >
+        <button class="nav-link" id="v-pills-logs-tab" data-bs-toggle="pill" data-bs-target="#v-pills-logs">
           <i class="fas fa-history"></i> Riwayat
         </button>
-        <button
-          class="nav-link"
-          id="v-pills-stats-tab"
-          data-bs-toggle="pill"
-          data-bs-target="#v-pills-stats"
-        >
+        <button class="nav-link" id="v-pills-stats-tab" data-bs-toggle="pill" data-bs-target="#v-pills-stats">
           <i class="fas fa-chart-pie"></i> Statistik
         </button>
       </div>
+
+      <!-- Sidebar bawah: tampilkan username yang login -->
       <div style="position: absolute; bottom: 30px; width: 85%">
         <div class="card border-0 bg-white shadow-sm p-3 rounded-4">
           <div class="d-flex align-items-center gap-3">
-            <img
-              src="https://ui-avatars.com/api/?name=Dosen&background=ff80ab&color=fff"
-              class="rounded-circle"
-              width="40"
-            />
+            <img src="https://ui-avatars.com/api/?name=<%= encodeURIComponent(username) %>&background=ff80ab&color=fff" class="rounded-circle" width="40" />
             <div>
-              <h6 class="mb-0 small fw-bold">Dosen</h6>
-              <small class="text-muted" style="font-size: 10px"
-                >Teacher Mode</small
-              >
+              <h6 class="mb-0 small fw-bold"><%= username %></h6>
+              <small class="text-muted" style="font-size: 10px">Mode Dosen</small>
             </div>
           </div>
-          <a
-            href="/"
-            class="btn btn-sm btn-outline-danger w-100 mt-3 rounded-pill"
-            >Logout</a
-          >
+          <a href="/" class="btn btn-sm btn-outline-danger w-100 mt-3 rounded-pill">Logout</a>
         </div>
       </div>
     </div>
@@ -323,18 +141,18 @@
             Monitoring Sesi 
             <span class="class-badge"><%= currentClass %></span>
           </h1>
-          <p class="header-subtitle">
-            Kelola perangkat dan pantau diskusi mahasiswa.
-          </p>
+          <p class="header-subtitle">Kelola perangkat dan pantau diskusi mahasiswa.</p>
         </div>
         <div>
-            <a href="/pilih-kelas?role=dosen" class="btn btn-outline-secondary rounded-pill">
-                <i class="fas fa-exchange-alt me-2"></i>Ganti Kelas
-            </a>
+          <a href="/pilih-kelas?role=dosen&username=<%= encodeURIComponent(username) %>" class="btn btn-outline-secondary rounded-pill">
+            <i class="fas fa-exchange-alt me-2"></i>Ganti Kelas
+          </a>
         </div>
       </div>
 
       <div class="tab-content" id="v-pills-tabContent">
+
+        <!-- ====== TAB: DASHBOARD ====== -->
         <div class="tab-pane fade show active" id="v-pills-control">
           <div class="row g-4">
             <div class="col-lg-5">
@@ -345,11 +163,12 @@
                   <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
                   <form action="/dosen" method="GET">
                     <input type="hidden" name="kelas" value="<%= currentClass %>">
+                    <input type="hidden" name="username" value="<%= username %>">
                     <div class="input-group">
                       <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
                       <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
                         <% devices.forEach(dev => { %>
-                          <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %>>
+                          <option value="<%= dev.id %>" <%= String(currentDevice.id) === String(dev.id) ? 'selected' : '' %>>
                             <%= dev.name %> (<%= dev.status.toUpperCase() %>)
                           </option>
                         <% }) %>
@@ -358,10 +177,10 @@
                   </form>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                <div id="device-card-bg" class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
                   <div>
                     <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
-                    <div class="d-flex align-items-center gap-2">
+                    <div id="device-status-container" class="d-flex align-items-center gap-2">
                       <% if(currentDevice.status === 'online') { %>
                         <span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>
                       <% } else { %>
@@ -370,38 +189,37 @@
                       <small class="text-muted font-monospace"><%= currentDevice.id %></small>
                     </div>
                   </div>
-                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>" class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary" data-bs-toggle="tooltip" title="Refresh Status">
+                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>&username=<%= encodeURIComponent(username) %>" class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary" title="Refresh Status">
                     <i class="fas fa-sync-alt"></i>
                   </a>
                 </div>
 
                 <div class="d-flex align-items-end gap-3 mb-4">
-                  <div class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? (currentDevice.battery > 20 ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
-                    <% if(currentDevice.battery > 80) { %> <i class="fas fa-battery-full"></i>
-                    <% } else if (currentDevice.battery > 50) { %> <i class="fas fa-battery-three-quarters"></i>
-                    <% } else if (currentDevice.battery > 20) { %> <i class="fas fa-battery-half"></i>
+                  <div id="device-battery-container" class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? (currentDevice.battery !== null && currentDevice.battery > 20 ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
+                    <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %> <i class="fas fa-battery-full"></i>
+                    <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %> <i class="fas fa-battery-three-quarters"></i>
+                    <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %> <i class="fas fa-battery-half"></i>
                     <% } else { %> <i class="fas fa-battery-quarter"></i> <% } %>
-                    <%= currentDevice.status === 'online' ? currentDevice.battery + '%' : '--' %>
+                    <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
                   </div>
-                  <small class="text-muted mb-2">
+                  <small id="device-battery-label" class="text-muted mb-2">
                     <%= currentDevice.status === 'online' ? 'Status Daya Perangkat' : 'Belum ada data dari broker' %>
                   </small>
                 </div>
 
                 <form action="/dosen/update-settings" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
                   
                   <div class="mb-4">
-                    <label class="small text-muted fw-bold mb-2">MAX DURASI BICARA (DETIK)</label>
-                    <div class="input-group bg-light rounded-pill overflow-hidden border">
+                    <label class="small text-muted fw-bold mb-2">MAX DURASI BICARA (MENIT)</label>
+                    <div class="input-group bg-light rounded-pill overflow-hidden border" id="timer-input-group">
                       <span class="input-group-text border-0 bg-transparent ps-3"><i class="fas fa-clock text-secondary"></i></span>
-                      <input type="number" name="timer" class="form-control border-0 bg-transparent" value="<%= session.maxTime %>" <%= currentDevice.status === 'offline' ? 'disabled' : '' %> />
-                      <button class="btn btn-link text-decoration-none text-dark fw-bold pe-3" <%= currentDevice.status === 'offline' ? 'disabled' : '' %>>
-                        SET KE ALAT
-                      </button>
+                      <input type="number" id="timer-input" name="timer" class="form-control border-0 bg-transparent" value="<%= session.maxTime %>" <%= currentDevice.status !== 'online' ? 'disabled' : '' %> />
+                      <button id="btn-set-alat" class="btn btn-link text-decoration-none text-dark fw-bold pe-3" <%= currentDevice.status !== 'online' ? 'disabled' : '' %>>SET KE ALAT</button>
                     </div>
-                    <small class="text-muted" style="font-size: 11px;">*Meneban SET akan mengirimkan pengaturan ini ke mikrokontroler via MQTT.</small>
+                    <small class="text-muted" style="font-size: 11px;">*Menekan SET akan mengirimkan pengaturan ini ke mikrokontroler.</small>
                   </div>
                 </form>
               </div>
@@ -409,30 +227,31 @@
 
             <div class="col-lg-7">
               <div class="dashboard-card">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                   <div>
                     <h5 class="fw-bold mb-0">Peserta Aktif</h5>
-                    <small class="text-muted">Kartu yang didaftarkan pada sesi ini.</small>
+                    <small class="text-muted">Kartu yang didaftarkan sesi ini.</small>
                   </div>
-                  
                   <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-light text-dark border me-2"><%= currentList.length %> Peserta</span>
-                    
-                    <form id="formSyncUid" action="/dosen/sync-uid" method="POST" class="m-0">
-                      <input type="hidden" name="current_class" value="<%= currentClass %>">
-                      <button type="button" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2">
+                    <span class="badge bg-light text-dark border" id="badge-peserta-count"><%= currentList.length %> Peserta</span>
+                    <button class="btn btn-outline-secondary rounded-pill px-3 fw-bold" style="font-size:0.82rem;" data-bs-toggle="modal" data-bs-target="#listMahasiswaModal">
+                      <i class="fas fa-users me-1"></i> List Kelas
+                    </button>
+                    <div id="wrapper-sync-uid">
+                      <button type="button" id="btn-sync-uid" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
                         <i class="fas fa-satellite-dish me-1"></i> Sinkron ke Alat
                       </button>
-                    </form>
+                    </div>
                     <button class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background: var(--dark-pink); border: none" data-bs-toggle="modal" data-bs-target="#addUidModal">
                       <i class="fas fa-plus me-1"></i> Tambah
                     </button>
                   </div>
                 </div>
 
+
                 <div style="max-height: 400px; overflow-y: auto;">
                   <table class="table uid-table align-middle border-0">
-                    <tbody>
+                    <tbody id="tabel-antrean-body">
                       <% if (currentList.length === 0) { %>
                         <tr><td class="text-center text-muted py-5">Belum ada peserta di sesi ini.</td></tr>
                       <% } %>
@@ -461,27 +280,21 @@
                           </td>
                           <td class="text-end pe-3">
                             <% if(!item.isRegistered) { %>
-                              <button onclick="registerUnknown('<%= item.uid %>')" class="btn btn-sm text-white rounded-pill px-3 fw-bold" style="background: var(--dark-pink); border: none;">
+                              <button onclick="registerUnknown('<%= item.uid %>')" class="btn btn-sm text-white rounded-pill px-3 fw-bold me-1" style="background: var(--dark-pink); border: none;">
                                 <i class="fas fa-user-plus me-1"></i> Daftarkan
                               </button>
-                              <form action="/dosen/manage-uid" method="POST" class="d-inline">
-                                <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="uid" value="<%= item.uid %>">
-                                <button class="btn btn-sm btn-light text-secondary rounded-circle ms-1" title="Hapus dari sesi">
-                                  <i class="fas fa-times"></i>
-                                </button>
-                              </form>
-                            <% } else { %>
-                              <form action="/dosen/manage-uid" method="POST">
-                                <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="uid" value="<%= item.uid %>">
-                                <button class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi">
-                                  <i class="fas fa-times"></i>
-                                </button>
-                              </form>
                             <% } %>
+                            <!-- Tombol hapus per-entri by unique id -->
+                            <form action="/dosen/manage-uid" method="POST" class="d-inline">
+                              <input type="hidden" name="current_class" value="<%= currentClass %>">
+                              <input type="hidden" name="username" value="<%= username %>">
+                              <input type="hidden" name="action" value="delete">
+                              <input type="hidden" name="uid" value="<%= item.uid %>">
+                              <input type="hidden" name="entry_id" value="<%= item.id %>">
+                              <button type="submit" class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi">
+                                <i class="fas fa-times"></i>
+                              </button>
+                            </form>
                           </td>
                         </tr>
                       <% }) %>
@@ -493,190 +306,98 @@
           </div>
         </div>
 
+        <!-- ====== TAB: RIWAYAT ====== -->
         <div class="tab-pane fade" id="v-pills-logs">
           <div class="dashboard-card">
             <div class="d-flex justify-content-between align-items-center mb-4">
               <h5 class="fw-bold mb-0">Riwayat Diskusi</h5>
               <div class="d-flex gap-3">
-                <form id="formSyncAudio" action="/dosen/request-audio-sync" method="POST">
-                    <input type="hidden" name="current_class" value="<%= currentClass %>">
-                    <button type="button" onclick="confirmAudioSync()" class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background-color: var(--dark-pink)">
-                        <i class="fas fa-cloud-download-alt me-2"></i> Minta File Perangkat
-                    </button>
-                </form>
-                <div
-                  class="bg-light rounded-pill px-3 py-2 d-flex align-items-center gap-2"
-                  style="width: 250px"
-                >
+                <div id="wrapper-sync-audio">
+                  <button type="button" id="btn-sync-audio" onclick="confirmAudioSync()" class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background-color: var(--dark-pink)" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
+                    <i class="fas fa-cloud-download-alt me-2"></i> Minta File Perangkat
+                  </button>
+                </div>
+                <div class="bg-light rounded-pill px-3 py-2 d-flex align-items-center gap-2" style="width: 250px">
                   <i class="fas fa-search text-muted"></i>
-                  <input
-                    type="text"
-                    id="searchLog"
-                    class="form-control border-0 bg-transparent p-0 shadow-none"
-                    placeholder="Cari transkrip..."
-                  />
+                  <input type="text" id="searchLog" class="form-control border-0 bg-transparent p-0 shadow-none" placeholder="Cari transkrip..." />
                 </div>
               </div>
             </div>
             <div class="table-responsive">
-              <table
-                class="table align-middle"
-                id="logTable"
-                style="border-collapse: separate; border-spacing: 0 5px"
-              >
+              <table class="table align-middle" id="logTable" style="border-collapse: separate; border-spacing: 0 5px">
                 <tbody>
-                  <% let lastDate = ''; let lastQuestion = ''; const options = {
-                  weekday: 'long', year: 'numeric', month: 'long', day:
-                  'numeric' }; %> <% if (logs.length === 0) { %>
+                  <% let lastDate = ''; let lastQuestion = ''; const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }; %>
+                  <% if (logs.length === 0) { %>
                   <tr>
-                    <td class="text-center py-5 text-muted">
-                      Belum ada data data.
-                    </td>
+                    <td class="text-center py-5 text-muted">Belum ada data.</td>
                   </tr>
-                  <% } %> <% logs.forEach(log => { %> <% let logDate = new
-                  Date(log.dateObj); let currentDate =
-                  logDate.toLocaleDateString('id-ID', options); let isoDate =
-                  logDate.getFullYear() + '-' + String(logDate.getMonth() +
-                  1).padStart(2, '0') + '-' +
-                  String(logDate.getDate()).padStart(2, '0'); let isoTime =
-                  String(logDate.getHours()).padStart(2, '0') + ':' +
-                  String(logDate.getMinutes()).padStart(2, '0'); let studentObj
-                  = students.find(s => s.nim === log.nim); let studentId =
-                  studentObj ? studentObj.id : ''; let dateClass = 'date-group-'
-                  + currentDate.replace(/[^a-zA-Z0-9]/g, ''); let
-                  currentQuestion = log.question || "Sesi Tanpa Pertanyaan"; let
-                  questionClass = dateClass + '-q-' +
-                  currentQuestion.substring(0, 5).replace(/[^a-zA-Z0-9]/g, '');
-                  %> <% if (currentDate !== lastDate) { %>
-                  <tr
-                    class="date-header-row"
-                    onclick="toggleGroup(this, '<%= dateClass %>')"
-                  >
+                  <% } %>
+                  <% logs.forEach(log => { %>
+                  <% let logDate = new Date(log.dateObj); let currentDate = logDate.toLocaleDateString('id-ID', options); let isoDate = logDate.getFullYear() + '-' + String(logDate.getMonth() + 1).padStart(2, '0') + '-' + String(logDate.getDate()).padStart(2, '0'); let isoTime = String(logDate.getHours()).padStart(2, '0') + ':' + String(logDate.getMinutes()).padStart(2, '0'); let studentObj = students.find(s => s.nim === log.nim); let studentId = studentObj ? studentObj.student_id : ''; let dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, ''); let currentQuestion = log.question || "Sesi Tanpa Pertanyaan"; let questionClass = dateClass + '-q-' + currentQuestion.substring(0, 5).replace(/[^a-zA-Z0-9]/g, ''); %>
+                  <% if (currentDate !== lastDate) { %>
+                  <tr class="date-header-row" onclick="toggleGroup(this, '<%= dateClass %>')">
                     <td colspan="4" class="date-header px-4 py-3">
-                      <div
-                        class="d-flex justify-content-between align-items-center"
-                      >
-                        <span
-                          ><i class="far fa-calendar-alt me-2"></i> <%=
-                          currentDate %></span
-                        >
+                      <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="far fa-calendar-alt me-2"></i> <%= currentDate %></span>
                         <i class="fas fa-chevron-down chevron-icon"></i>
                       </div>
                     </td>
                   </tr>
-                  <% lastDate = currentDate; lastQuestion = ''; %> <% } %> <% if
-                  (currentQuestion !== lastQuestion) { %>
-                  <tr
-                    class="question-header-row <%= dateClass %>"
-                    onclick="toggleGroup(this, '<%= questionClass %>')"
-                  >
+                  <% lastDate = currentDate; lastQuestion = ''; %> <% } %>
+                  <% if (currentQuestion !== lastQuestion) { %>
+                  <tr class="question-header-row <%= dateClass %>" onclick="toggleGroup(this, '<%= questionClass %>')">
                     <td colspan="4" class="px-4 py-2">
-                      <div
-                        class="question-header p-3 d-flex justify-content-between align-items-center"
-                      >
-                        <span
-                          ><i class="fas fa-question-circle me-2"></i> <%=
-                          currentQuestion %></span
-                        >
-                        <small class="text-muted"
-                          ><i class="fas fa-chevron-down"></i
-                        ></small>
+                      <div class="question-header p-3 d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-question-circle me-2"></i> <%= currentQuestion %></span>
+                        <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
                       </div>
                     </td>
                   </tr>
                   <% lastQuestion = currentQuestion; %> <% } %>
 
-                  <tr
-                    class="bg-white border-bottom <%= dateClass %> <%= questionClass %>"
-                  >
+                  <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
                     <td style="width: 1%; white-space: nowrap">
-                      <div class="fw-bold text-dark">
-                        <%= logDate.toLocaleTimeString('id-ID', {hour:
-                        '2-digit', minute:'2-digit'}) %>
-                      </div>
+                      <div class="fw-bold text-dark"><%= logDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) %></div>
                     </td>
-                    <td
-                      style="
-                        width: 1%;
-                        white-space: nowrap;
-                        padding-left: 20px;
-                        padding-right: 30px;
-                      "
-                    >
+                    <td style="width: 1%; white-space: nowrap; padding-left: 20px; padding-right: 30px;">
                       <div class="d-flex align-items-center gap-2">
-                        <div
-                          class="bg-light rounded-circle text-center d-flex align-items-center justify-content-center"
-                          style="
-                            width: 35px;
-                            height: 35px;
-                            color: var(--primary-pink);
-                          "
-                        >
+                        <div class="bg-light rounded-circle text-center d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; color: var(--primary-pink);">
                           <i class="fas fa-user"></i>
                         </div>
                         <div>
                           <div class="fw-bold small"><%= log.name %></div>
-                          <div class="text-muted" style="font-size: 11px">
-                            <%= log.nim %>
-                          </div>
+                          <div class="text-muted" style="font-size: 11px"><%= log.nim %></div>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div
-                        class="transcript-box"
-                        onclick="toggleTranscript(this)"
-                      >
+                      <div class="transcript-box" onclick="toggleTranscript(this)">
                         <p class="transcript-text"><%= log.transcript %></p>
-                        <small class="read-more-label"
-                          >Lihat Selengkapnya</small
-                        >
+                        <small class="read-more-label">Lihat Selengkapnya</small>
                       </div>
 
                       <% if (log.audio_url) { %>
-                      <audio
-                        controls
-                        src="<%= log.audio_url %>"
-                        style="
-                          width: 100%;
-                          height: 35px;
-                          border-radius: 20px;
-                          opacity: 0.8;
-                          margin-top: 5px;
-                          background-color: #fce4ec;
-                        "
-                      ></audio>
+                      <audio controls src="<%= log.audio_url %>" style="width: 100%; height: 35px; border-radius: 20px; opacity: 0.8; margin-top: 5px; background-color: #fce4ec;"></audio>
                       <% } else { %>
-                      <form
-                        action="/dosen/request-audio"
-                        method="POST"
-                        class="mt-2"
-                      >
+                      <form action="/dosen/request-audio" method="POST" class="mt-2">
                         <input type="hidden" name="current_class" value="<%= currentClass %>">
+                        <input type="hidden" name="username" value="<%= username %>">
                         <input type="hidden" name="id" value="<%= log.id %>" />
-                        <button
-                          class="btn btn-request btn-sm w-100 rounded-pill py-2"
-                        >
-                          <i class="fas fa-cloud-download-alt me-2"></i> Unduh
-                          File Audio (Server)
+                        <button class="btn btn-request btn-sm w-100 rounded-pill py-2">
+                          <i class="fas fa-cloud-download-alt me-2"></i> Unduh File Audio (Server)
                         </button>
                       </form>
                       <% } %>
                     </td>
-                    <td
-                      class="text-end"
-                      style="width: 1%; white-space: nowrap; padding-left: 20px"
-                    >
-                      <button
-                        class="btn btn-sm btn-light text-secondary rounded-circle"
+                    <td class="text-end" style="width: 1%; white-space: nowrap; padding-left: 20px">
+                      <button class="btn btn-sm btn-light text-secondary rounded-circle"
                         data-id="<%= log.id %>"
                         data-student="<%= studentId %>"
                         data-date="<%= isoDate %>"
                         data-time="<%= isoTime %>"
                         data-question="<%= currentQuestion %>"
                         data-transcript="<%= log.transcript %>"
-                        onclick="openEditLogModal(this)"
-                      >
+                        onclick="openEditLogModal(this)">
                         <i class="fas fa-pen"></i>
                       </button>
                     </td>
@@ -688,148 +409,291 @@
           </div>
         </div>
 
+        <!-- ====== TAB: STATISTIK ====== -->
         <div class="tab-pane fade" id="v-pills-stats">
-          <div class="dashboard-card">
-            <h5 class="fw-bold mb-4">Statistik Keaktifan</h5>
-            <% if (stats.length === 0) { %>
-            <p class="text-muted">Belum ada data.</p>
-            <% } else { %>
-            <div class="row">
-              <% stats.forEach((s, i) => { %>
-              <div class="col-md-6 mb-4">
-                <div
-                  class="d-flex align-items-center justify-content-between mb-2"
-                >
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-light text-dark rounded-circle"
-                      ><%= i+1 %></span
-                    >
-                    <span class="fw-bold text-dark"><%= s.name %></span>
+          <% if (stats.length === 0) { %>
+          <div class="dashboard-card text-center py-5">
+            <i class="fas fa-chart-bar fa-3x mb-3" style="color:#ffb6c1;"></i>
+            <p class="text-muted">Belum ada data statistik.</p>
+          </div>
+          <% } else { %>
+
+          <%
+            // Hitung ringkasan global dari logs
+            const totalBicara = logs.length;
+            const totalMahasiswa = stats.length;
+            const aktif = stats.filter(s => s.count > 0).length;
+            const tidakAktif = totalMahasiswa - aktif;
+            const rataRata = totalMahasiswa > 0 ? (totalBicara / aktif).toFixed(1) : 0;
+            const topStudent = stats[0];
+          %>
+
+          <!-- Kartu Ringkasan Atas -->
+          <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+              <div class="dashboard-card text-center py-3 px-2">
+                <div style="font-size:2rem;font-weight:700;color:var(--dark-pink)"><%= totalBicara %></div>
+                <div class="text-muted small fw-semibold">Total Bicara</div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="dashboard-card text-center py-3 px-2">
+                <div style="font-size:2rem;font-weight:700;color:#43a047"><%= aktif %></div>
+                <div class="text-muted small fw-semibold">Mahasiswa Aktif</div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="dashboard-card text-center py-3 px-2">
+                <div style="font-size:2rem;font-weight:700;color:#e65100"><%= tidakAktif %></div>
+                <div class="text-muted small fw-semibold">Belum Bicara</div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="dashboard-card text-center py-3 px-2">
+                <div style="font-size:2rem;font-weight:700;color:#8e24aa"><%= rataRata %>x</div>
+                <div class="text-muted small fw-semibold">Rata‑rata / Orang</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-4">
+            <!-- Kolom kiri: Ranking -->
+            <div class="col-lg-6">
+              <div class="dashboard-card h-100">
+                <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-trophy me-2"></i>Ranking Keaktifan</h6>
+                <small class="text-muted d-block mb-4">Jumlah giliran bicara per mahasiswa.</small>
+
+                <% stats.forEach((s, i) => { %>
+                <%
+                  let pct = (stats[0].count > 0) ? (s.count / stats[0].count) * 100 : 0;
+                  let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
+                  let barColor = i === 0
+                    ? 'linear-gradient(90deg,#ff80ab,#f06292)'
+                    : i === 1
+                    ? 'linear-gradient(90deg,#ce93d8,#ab47bc)'
+                    : i === 2
+                    ? 'linear-gradient(90deg,#ffcc80,#ffa726)'
+                    : 'linear-gradient(90deg,#b0bec5,#90a4ae)';
+                %>
+                <div class="mb-3">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <% if (medal) { %>
+                        <span style="font-size:1.1rem;"><%= medal %></span>
+                      <% } else { %>
+                        <span class="badge bg-light text-muted rounded-circle fw-bold" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;"><%= i+1 %></span>
+                      <% } %>
+                      <span class="fw-semibold text-dark" style="font-size:0.88rem;"><%= s.name %></span>
+                    </div>
+                    <span class="fw-bold" style="color:var(--dark-pink);font-size:0.9rem;"><%= s.count %>x</span>
                   </div>
-                  <span class="fw-bold" style="color: var(--dark-pink)"
-                    ><%= s.count %>x</span
-                  >
+                  <div class="progress rounded-pill" style="height:7px;background:#fce4ec;">
+                    <div class="progress-bar rounded-pill" style="width:<%= pct %>%;background:<%= barColor %>;transition:width 0.8s ease;"></div>
+                  </div>
                 </div>
-                <div
-                  class="progress rounded-pill"
-                  style="height: 8px; background: #fce4ec"
-                >
-                  <% let pct = (stats[0].count > 0) ? (s.count / stats[0].count)
-                  * 100 : 0; %>
-                  <div
-                    class="progress-bar rounded-pill"
-                    style="
-                      width: <%= pct %>%;
-                      background: linear-gradient(90deg, #ff80ab, #f06292);
-                    "
-                  ></div>
+                <% }) %>
+              </div>
+            </div>
+
+            <!-- Kolom kanan: Chart pie + Top speaker -->
+            <div class="col-lg-6 d-flex flex-column gap-4">
+
+              <!-- Top Speaker Card -->
+              <div class="dashboard-card" style="background:linear-gradient(135deg,#fce4ec,#f8bbd0);border:none;">
+                <div class="d-flex align-items-center gap-3">
+                  <div style="width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#ff80ab,#d81b60);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;flex-shrink:0;">
+                    <i class="fas fa-star"></i>
+                  </div>
+                  <div>
+                    <div class="text-muted small fw-bold mb-1">PALING AKTIF</div>
+                    <div class="fw-bold" style="font-size:1.1rem;color:var(--dark-pink);"><%= topStudent.name %></div>
+                    <div class="text-muted small"><%= topStudent.nim %> &bull; <%= topStudent.count %> kali bicara</div>
+                  </div>
                 </div>
               </div>
-              <% }) %>
+
+              <!-- Distribusi chart (canvas) -->
+              <div class="dashboard-card flex-grow-1">
+                <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-chart-pie me-2"></i>Distribusi Kontribusi</h6>
+                <small class="text-muted d-block mb-3">Proporsi giliran bicara setiap mahasiswa.</small>
+                <div style="position:relative;height:200px;">
+                  <canvas id="statsDonutChart"></canvas>
+                </div>
+              </div>
+
             </div>
-            <% } %>
+          </div>
+
+          <!-- Tabel detail bawah -->
+          <div class="dashboard-card mt-4">
+            <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-table me-2"></i>Detail Per Mahasiswa</h6>
+            <small class="text-muted d-block mb-3">Persentase kontribusi masing-masing mahasiswa dari total bicara.</small>
+            <div class="table-responsive">
+              <table class="table align-middle" style="font-size:0.87rem;">
+                <thead>
+                  <tr style="background:#fce4ec;border-radius:10px;">
+                    <th class="border-0 ps-3 rounded-start" style="color:var(--dark-pink)">#</th>
+                    <th class="border-0" style="color:var(--dark-pink)">Mahasiswa</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">Bicara</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">Porsi</th>
+                    <th class="border-0 rounded-end" style="color:var(--dark-pink)">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% stats.forEach((s, i) => { %>
+                  <%
+                    let porsi = totalBicara > 0 ? ((s.count / totalBicara) * 100).toFixed(1) : 0;
+                    let statusBadge = s.count === 0
+                      ? '<span class="badge rounded-pill px-3" style="background:#ffebee;color:#c62828;font-size:0.75rem;">Belum Bicara</span>'
+                      : s.count >= 3
+                      ? '<span class="badge rounded-pill px-3" style="background:#e8f5e9;color:#2e7d32;font-size:0.75rem;">Aktif</span>'
+                      : '<span class="badge rounded-pill px-3" style="background:#fff8e1;color:#f57f17;font-size:0.75rem;">Cukup</span>';
+                  %>
+                  <tr style="border-bottom:1px solid #fce4ec;">
+                    <td class="ps-3 text-muted"><%= i+1 %></td>
+                    <td>
+                      <div class="fw-semibold text-dark"><%= s.name %></div>
+                      <div class="text-muted" style="font-size:0.75rem;"><%= s.nim %></div>
+                    </td>
+                    <td class="text-center fw-bold" style="color:var(--dark-pink)"><%= s.count %></td>
+                    <td class="text-center">
+                      <span class="fw-semibold text-dark"><%= porsi %>%</span>
+                    </td>
+                    <td><%- statusBadge %></td>
+                  </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <% } %>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====== MODAL: LIST MAHASISWA KELAS ====== -->
+    <div class="modal fade" id="listMahasiswaModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 rounded-4 p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+              <h5 class="modal-title fw-bold">Database Kelas <%= currentClass %></h5>
+              <p class="text-muted small mb-0">Total <%= students.length %> Mahasiswa terdaftar</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+            <table class="table align-middle" style="font-size:0.88rem;">
+              <thead class="table-light" style="position:sticky;top:0;">
+                <tr>
+                  <th>Nama</th>
+                  <th>NIM</th>
+                  <th>RFID</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% students.forEach(s => { %>
+                <tr>
+                  <td class="fw-bold"><%= s.name %></td>
+                  <td class="text-muted"><%= s.nim %></td>
+                  <td class="font-monospace" style="font-size:0.8rem;"><%= s.rfid_uid %></td>
+                </tr>
+                <% }) %>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- ====== MODAL: DAFTARKAN MAHASISWA BARU (dari scan) ====== -->
+    <div class="modal fade" id="registerModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="modal-title fw-bold" id="registerModalTitle">Daftarkan Mahasiswa Baru</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form action="/dosen/add-student" method="POST">
+            <input type="hidden" name="kelas" value="<%= currentClass %>">
+            <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="username" value="<%= username %>">
+            <div class="mb-3">
+              <label class="small text-muted fw-bold">NAMA LENGKAP</label>
+              <input type="text" name="name" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: Budi Santoso" />
+            </div>
+            <div class="mb-3">
+              <label class="small text-muted fw-bold">NIM</label>
+              <input type="text" name="nim" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: 13220001" />
+            </div>
+            <div class="mb-4">
+              <label class="small text-muted fw-bold">RFID TAG</label>
+              <input type="text" name="rfid" id="rfidInputRegister" class="form-control bg-light border-0 rounded-3" placeholder="Menunggu tap dari alat..." required />
+            </div>
+            <button type="submit" class="btn w-100 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Simpan ke Database</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== MODAL: TAMBAH PESERTA ====== -->
     <div class="modal fade" id="addUidModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-3">
           <div class="modal-header border-0">
             <h5 class="modal-title fw-bold">Tambah Peserta</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-            ></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body pt-0">
-            <ul
-              class="nav nav-pills nav-pills-custom mb-3 w-100 bg-light p-1 rounded-pill"
-              id="pills-tab"
-              role="tablist"
-            >
+            <ul class="nav nav-pills nav-pills-custom mb-3 w-100 bg-light p-1 rounded-pill" id="pills-tab" role="tablist">
               <li class="nav-item w-50">
-                <button
-                  class="nav-link active w-100 rounded-pill text-center"
-                  data-bs-toggle="pill"
-                  data-bs-target="#pills-single"
-                >
-                  Perorangan
-                </button>
+                <button class="nav-link active w-100 rounded-pill text-center" data-bs-toggle="pill" data-bs-target="#pills-single">Perorangan</button>
               </li>
               <li class="nav-item w-50">
-                <button
-                  class="nav-link w-100 rounded-pill text-center"
-                  data-bs-toggle="pill"
-                  data-bs-target="#pills-date"
-                >
-                  Group (Tanggal)
-                </button>
+                <button class="nav-link w-100 rounded-pill text-center" data-bs-toggle="pill" data-bs-target="#pills-date">Group (Tanggal)</button>
               </li>
             </ul>
             <div class="tab-content">
               <div class="tab-pane fade show active" id="pills-single">
                 <form action="/dosen/manage-uid" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="action" value="add_single" />
                   <div class="mb-3">
-                    <label class="small text-muted fw-bold"
-                      >NAMA MAHASISWA</label
-                    ><select
-                      name="student_id"
-                      class="form-select bg-light border-0 py-2 rounded-3"
-                      required
-                    >
+                    <label class="small text-muted fw-bold">NAMA MAHASISWA</label>
+                    <select name="student_id" class="form-select bg-light border-0 py-2 rounded-3" required>
                       <option value="" disabled selected>Pilih...</option>
                       <% students.forEach(s => { %>
-                      <option value="<%= s.id %>">
-                        <%= s.name %> (<%= s.nim %>)
-                      </option>
+                      <option value="<%= s.student_id %>"><%= s.name %> (<%= s.nim %>)</option>
                       <% }) %>
                     </select>
                   </div>
-                  <button
-                    type="submit"
-                    class="btn btn-primary w-100 rounded-pill py-2 border-0"
-                    style="background: var(--dark-pink)"
-                  >
-                    Simpan
-                  </button>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-grow-1 rounded-pill py-2 border-0" style="background: var(--dark-pink)">Simpan</button>
+                  </div>
                 </form>
               </div>
               <div class="tab-pane fade" id="pills-date">
                 <form action="/dosen/manage-uid" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="action" value="add_date" />
                   <div class="mb-3">
-                    <label class="small text-muted fw-bold"
-                      >TANGGAL SESI LALU</label
-                    ><select
-                      name="target_date"
-                      class="form-select bg-light border-0 py-2 rounded-3"
-                      required
-                    >
-                      <option value="" disabled selected>
-                        Pilih Tanggal...
-                      </option>
+                    <label class="small text-muted fw-bold">TANGGAL SESI LALU</label>
+                    <select name="target_date" class="form-select bg-light border-0 py-2 rounded-3" required>
+                      <option value="" disabled selected>Pilih Tanggal...</option>
                       <% availableDates.forEach(dateStr => { %>
-                      <option value="<%= dateStr %>">
-                        <%= new Date(dateStr).toLocaleDateString('id-ID', {
-                        weekday: 'long', year: 'numeric', month: 'long', day:
-                        'numeric' }) %>
-                      </option>
+                      <option value="<%= dateStr %>"><%= new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></option>
                       <% }) %>
                     </select>
                   </div>
-                  <button
-                    type="submit"
-                    class="btn btn-primary w-100 rounded-pill py-2 border-0"
-                    style="background: var(--dark-pink)"
-                  >
-                    Import Data
-                  </button>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-grow-1 rounded-pill py-2 border-0" style="background: var(--dark-pink)">Import Data</button>
+                  </div>
                 </form>
               </div>
             </div>
@@ -838,126 +702,49 @@
       </div>
     </div>
 
-    <div class="modal fade" id="uploadUidModal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 p-4 text-center">
-          <div class="mb-3">
-            <i
-              class="fas fa-cloud-upload-alt fa-3x"
-              style="color: var(--primary-pink)"
-            ></i>
-          </div>
-          <h5 class="modal-title fw-bold mb-2">Upload File UID</h5>
-          <p class="text-muted small mb-4">
-            Unggah file .csv atau .xlsx berisi daftar UID peserta.
-          </p>
-
-          <form
-            action="/dosen/upload-uid"
-            method="POST"
-            enctype="multipart/form-data"
-          >
-           <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <div class="mb-4">
-              <input class="form-control" type="file" id="formFile" required />
-            </div>
-            <div class="d-flex gap-2">
-              <button
-                type="button"
-                class="btn btn-light flex-grow-1 rounded-pill"
-                data-bs-dismiss="modal"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                class="btn text-white flex-grow-1 rounded-pill"
-                style="background: var(--dark-pink)"
-              >
-                Upload
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
+    <!-- ====== MODAL: EDIT LOG ====== -->
     <div class="modal fade" id="editLogModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-3">
           <div class="modal-header border-0">
             <h5 class="modal-title fw-bold">Edit Data</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-            ></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form action="/dosen/edit-log" method="POST">
-             <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="current_class" value="<%= currentClass %>">
+            <input type="hidden" name="username" value="<%= username %>">
             <div class="modal-body pt-0">
               <input type="hidden" name="id" id="editLogId" />
               <div class="mb-3">
-                <label class="small text-muted fw-bold">MAHASISWA</label
-                ><select
-                  name="student_id"
-                  id="editLogStudent"
-                  class="form-select bg-light border-0"
-                  required
-                >
+                <label class="small text-muted fw-bold">MAHASISWA</label>
+                <select name="student_id" id="editLogStudent" class="form-select bg-light border-0" required>
                   <% students.forEach(s => { %>
-                  <option value="<%= s.id %>"><%= s.name %></option>
+                  <option value="<%= s.student_id %>"><%= s.name %></option>
                   <% }) %>
                 </select>
               </div>
               <div class="row g-2 mb-3">
                 <div class="col-6">
-                  <label class="small text-muted fw-bold">TANGGAL</label
-                  ><input
-                    type="date"
-                    name="edit_date"
-                    id="editLogDate"
-                    class="form-control bg-light border-0"
-                    required
-                  />
+                  <label class="small text-muted fw-bold">TANGGAL</label>
+                  <input type="date" name="edit_date" id="editLogDate" class="form-control bg-light border-0" required />
                 </div>
                 <div class="col-6">
-                  <label class="small text-muted fw-bold">JAM</label
-                  ><input
-                    type="time"
-                    name="edit_time"
-                    id="editLogTime"
-                    class="form-control bg-light border-0"
-                    required
-                  />
+                  <label class="small text-muted fw-bold">JAM</label>
+                  <input type="time" name="edit_time" id="editLogTime" class="form-control bg-light border-0" required />
                 </div>
               </div>
               <div class="mb-3">
-                <label class="small text-muted fw-bold">PERTANYAAN</label
-                ><input
-                  type="text"
-                  name="question"
-                  id="editLogQuestion"
-                  class="form-control bg-light border-0"
-                />
+                <label class="small text-muted fw-bold">PERTANYAAN</label>
+                <input type="text" name="question" id="editLogQuestion" class="form-control bg-light border-0" />
               </div>
               <div class="mb-3">
-                <label class="small text-muted fw-bold"
-                  >JAWABAN (TRANSKRIP)</label
-                ><textarea
-                  name="transcript"
-                  id="editLogTranscript"
-                  class="form-control bg-light border-0"
-                  rows="4"
-                ></textarea>
+                <label class="small text-muted fw-bold">JAWABAN (TRANSKRIP)</label>
+                <textarea name="transcript" id="editLogTranscript" class="form-control bg-light border-0" rows="4"></textarea>
               </div>
-              <button
-                type="submit"
-                class="btn btn-primary w-100 rounded-pill py-2 border-0"
-                style="background: var(--dark-pink)"
-              >
-                Simpan Perubahan
-              </button>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary flex-grow-1 rounded-pill py-2 border-0" style="background: var(--dark-pink)">Simpan Perubahan</button>
+              </div>
             </div>
           </form>
         </div>
@@ -965,20 +752,18 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-      document
-        .getElementById("searchLog")
-        .addEventListener("keyup", function () {
-          let val = this.value.toLowerCase();
-          let rows = document.querySelectorAll(
-            "#logTable tbody tr:not(.date-header-row):not(.question-header-row)"
-          );
-          rows.forEach((r) => {
-            let text = r.innerText.toLowerCase();
-            r.style.display = text.includes(val) ? "" : "none";
-          });
+      const CURRENT_CLASS = '<%= currentClass %>';
+      const CURRENT_USERNAME = '<%= username %>';
+
+      document.getElementById("searchLog").addEventListener("keyup", function () {
+        let val = this.value.toLowerCase();
+        let rows = document.querySelectorAll("#logTable tbody tr:not(.date-header-row):not(.question-header-row)");
+        rows.forEach((r) => {
+          let text = r.innerText.toLowerCase();
+          r.style.display = text.includes(val) ? "" : "none";
         });
+      });
 
       function toggleTranscript(element) {
         element.classList.toggle("expanded");
@@ -990,100 +775,454 @@
       document.addEventListener("DOMContentLoaded", function () {
         const transcripts = document.querySelectorAll(".transcript-text");
         transcripts.forEach((t) => {
-          if (t.scrollHeight > t.clientHeight)
-            t.nextElementSibling.style.display = "block";
+          if (t.scrollHeight > t.clientHeight) t.nextElementSibling.style.display = "block";
           else t.nextElementSibling.style.display = "none";
         });
       });
+
 
       function toggleGroup(headerRow, className) {
         headerRow.classList.toggle("date-collapsed");
         let rows = document.querySelectorAll("." + className);
         rows.forEach((row) => {
-          row.style.display =
-            row.style.display === "none" ? "table-row" : "none";
+          row.style.display = row.style.display === "none" ? "table-row" : "none";
         });
       }
 
       function openEditLogModal(button) {
         document.getElementById("editLogId").value = button.dataset.id;
-        document.getElementById("editLogStudent").value =
-          button.dataset.student;
+        document.getElementById("editLogStudent").value = button.dataset.student;
         document.getElementById("editLogDate").value = button.dataset.date;
         document.getElementById("editLogTime").value = button.dataset.time;
-        document.getElementById("editLogQuestion").value =
-          button.dataset.question;
-        document.getElementById("editLogTranscript").value =
-          button.dataset.transcript;
+        document.getElementById("editLogQuestion").value = button.dataset.question;
+        document.getElementById("editLogTranscript").value = button.dataset.transcript;
         new bootstrap.Modal(document.getElementById("editLogModal")).show();
       }
 
-      // 4. Tambahkan script untuk handle Add Unknown
       function registerUnknown(uid) {
-          const triggerEl = document.querySelector('#pills-tab button[data-bs-target="#pills-single"]');
-          const tabInstance = new bootstrap.Tab(triggerEl);
-          tabInstance.show();
-          new bootstrap.Modal(document.getElementById('addUidModal')).show();
-          alert(`Silakan pilih mahasiswa untuk UID: ${uid} dari dropdown.`);
+        document.getElementById('rfidInputRegister').value = uid;
+        document.getElementById('registerModalTitle').innerText = 'Registrasi Kartu: ' + uid;
+        new bootstrap.Modal(document.getElementById('registerModal')).show();
       }
 
-      // --- 1. SCRIPT UNTUK SWEETALERT CUSTOM ---
+      async function doSync(modes) {
+        // modes: array berisi 'semua_kelas' dan/atau 'peserta_aktif'
+        Swal.fire({ title: 'Mengirim...', text: 'Mengirimkan data ke alat.', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        try {
+          const results = [];
+          for (const mode of modes) {
+            const res = await fetch('/dosen/sync-uid', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              body: JSON.stringify({ current_class: CURRENT_CLASS, username: CURRENT_USERNAME, mode })
+            });
+            const data = await res.json();
+            results.push(data);
+          }
+          const allOk = results.every(r => r.success);
+          const messages = results.map(r => r.message).join('<br>');
+          if (allOk) {
+            Swal.fire({ icon: 'success', title: 'Berhasil!', html: messages, confirmButtonColor: '#d81b60' });
+          } else {
+            Swal.fire({ icon: 'warning', title: 'Sebagian Berhasil', html: messages, confirmButtonColor: '#d81b60' });
+          }
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Error!', text: 'Tidak dapat terhubung ke server.', confirmButtonColor: '#d81b60' });
+        }
+      }
+
       function confirmSyncUid() {
-          Swal.fire({
-              title: 'Sinkronisasi UID',
-              text: "Kirim seluruh daftar UID ini ke alat (ESP32)?",
-              icon: 'question',
-              showCancelButton: true,
-              confirmButtonColor: '#d81b60', // Sesuai warna var(--dark-pink)
-              cancelButtonColor: '#888888',
-              confirmButtonText: 'Ya, Sinkronkan!',
-              cancelButtonText: 'Batal',
-              borderRadius: '15px'
-          }).then((result) => {
-              if (result.isConfirmed) {
-                  document.getElementById('formSyncUid').submit();
-              }
-          });
+        Swal.fire({
+          title: 'Sinkronisasi UID ke Alat',
+          icon: 'question',
+          html: `
+            <p class="text-muted mb-3" style="font-size:0.88rem;">Centang data yang ingin dikirim ke ESP32:</p>
+            <div class="d-flex flex-column gap-3 text-start">
+
+              <label class="d-flex align-items-start gap-3 p-3 rounded-3" style="cursor:pointer;border:2px solid #f8bbd0;background:#fff9fb;" id="swal-label-kelas">
+                <input type="checkbox" id="chk-kelas" style="width:18px;height:18px;margin-top:2px;accent-color:#d81b60;" />
+                <div>
+                  <div class="fw-bold" style="color:#d81b60;"><i class="fas fa-users me-2"></i>Semua Mahasiswa Kelas</div>
+                  <div class="text-muted" style="font-size:0.78rem;">Seluruh mahasiswa yang terdaftar di kelas ini.<br>Dikirim sebagai: <code style="color:#d81b60;">sync_uid_kelas</code></div>
+                </div>
+              </label>
+
+              <label class="d-flex align-items-start gap-3 p-3 rounded-3" style="cursor:pointer;border:2px solid #c8e6c9;background:#f9fff9;" id="swal-label-aktif">
+                <input type="checkbox" id="chk-aktif" style="width:18px;height:18px;margin-top:2px;accent-color:#2e7d32;" />
+                <div>
+                  <div class="fw-bold" style="color:#2e7d32;"><i class="fas fa-satellite-dish me-2"></i>Peserta Aktif Sesi Ini</div>
+                  <div class="text-muted" style="font-size:0.78rem;">UID yang ada di daftar peserta aktif saat ini.<br>Dikirim sebagai: <code style="color:#2e7d32;">sync_uid_aktif</code></div>
+                </div>
+              </label>
+
+            </div>`,
+          showCancelButton: true,
+          confirmButtonText: '<i class="fas fa-satellite-dish me-1"></i> Kirim yang Dicentang',
+          confirmButtonColor: '#d81b60',
+          cancelButtonText: 'Batal',
+          cancelButtonColor: '#888888',
+          didOpen: () => {
+            // Highlight border saat checkbox dicentang
+            ['kelas','aktif'].forEach(id => {
+              const chk = document.getElementById('chk-' + id);
+              const lbl = document.getElementById('swal-label-' + id);
+              chk.addEventListener('change', () => {
+                lbl.style.borderWidth = chk.checked ? '2.5px' : '2px';
+                lbl.style.opacity = chk.checked ? '1' : '0.85';
+                lbl.style.boxShadow = chk.checked
+                  ? (id === 'kelas' ? '0 0 0 3px rgba(216,27,96,0.15)' : '0 0 0 3px rgba(46,125,50,0.15)')
+                  : 'none';
+              });
+            });
+          },
+          preConfirm: () => {
+            const chkKelas = document.getElementById('chk-kelas').checked;
+            const chkAktif = document.getElementById('chk-aktif').checked;
+            if (!chkKelas && !chkAktif) {
+              Swal.showValidationMessage('Pilih minimal satu data yang akan dikirim.');
+              return false;
+            }
+            const modes = [];
+            if (chkKelas) modes.push('semua_kelas');
+            if (chkAktif) modes.push('peserta_aktif');
+            return modes;
+          }
+        }).then(result => {
+          if (result.isConfirmed && result.value) {
+            doSync(result.value);
+          }
+        });
       }
 
       function confirmAudioSync() {
-          Swal.fire({
-              title: 'Minta File Rekaman',
-              text: "Minta perangkat (ESP32) untuk mengunggah semua file rekaman yang tersisa?",
-              icon: 'info',
-              showCancelButton: true,
-              confirmButtonColor: '#d81b60',
-              cancelButtonColor: '#888888',
-              confirmButtonText: 'Ya, Minta File!',
-              cancelButtonText: 'Batal',
-              borderRadius: '15px'
-          }).then((result) => {
-              if (result.isConfirmed) {
-                  document.getElementById('formSyncAudio').submit();
+        Swal.fire({
+          title: 'Minta File Rekaman',
+          text: "Minta perangkat (ESP32) untuk mengunggah semua file rekaman yang tersisa?",
+          icon: 'info',
+          showCancelButton: true,
+          confirmButtonColor: '#d81b60',
+          cancelButtonColor: '#888888',
+          confirmButtonText: 'Ya, Minta File!',
+          cancelButtonText: 'Batal',
+        }).then(async (result) => {
+          if (result.isConfirmed) {
+            Swal.fire({ title: 'Mengirim...', text: 'Mengirimkan permintaan ke alat.', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            try {
+              const res = await fetch('/dosen/request-audio-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ current_class: CURRENT_CLASS, username: CURRENT_USERNAME })
+              });
+              const data = await res.json();
+              if (data.success) {
+                Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message, confirmButtonColor: '#d81b60' });
+              } else {
+                Swal.fire({ icon: 'error', title: 'Gagal!', text: data.message, confirmButtonColor: '#d81b60' });
               }
-          });
+            } catch (e) {
+              Swal.fire({ icon: 'error', title: 'Error!', text: 'Tidak dapat terhubung ke server.', confirmButtonColor: '#d81b60' });
+            }
+          }
+        });
       }
 
-      // --- 2. SCRIPT UNTUK MENYIMPAN STATUS TAB (AGAR TIDAK KEMBALI KE DASHBOARD) ---
+      // =========================================================
+      // SISTEM MENGINGAT TAB
+      // =========================================================
       document.addEventListener("DOMContentLoaded", function () {
-          // A. Saat halaman dimuat, cek apakah ada tab terakhir yang disimpan
-          let activeTabId = localStorage.getItem('activeDosenTab');
-          if (activeTabId) {
-              let triggerEl = document.querySelector(`button[data-bs-target="${activeTabId}"]`);
-              if (triggerEl) {
-                  let tabInstance = new bootstrap.Tab(triggerEl);
-                  tabInstance.show();
-              }
+        let activePillId = localStorage.getItem("activeDosenTab");
+        if (activePillId) {
+          let triggerEl = document.querySelector(`button[data-bs-target="${activePillId}"]`);
+          if (triggerEl) {
+            let pillInstance = new bootstrap.Tab(triggerEl);
+            pillInstance.show();
+          }
+        }
+        let pillElements = document.querySelectorAll('button[data-bs-toggle="pill"]');
+        pillElements.forEach(function (pill) {
+          pill.addEventListener("shown.bs.tab", function (event) {
+            let targetId = event.target.getAttribute("data-bs-target");
+            localStorage.setItem("activeDosenTab", targetId);
+          });
+        });
+      });
+
+      // =========================================================
+      // AUTO-REFRESH DATA PESERTA AKTIF
+      // =========================================================
+      let isPaused = false;
+
+      const areaAntrean = document.querySelector('#tabel-antrean-body');
+      if (areaAntrean) {
+        areaAntrean.addEventListener('mouseenter', () => isPaused = true);
+        areaAntrean.addEventListener('mouseleave', () => isPaused = false);
+      }
+
+      async function updateData() {
+        if (isPaused) return;
+
+        try {
+          const response = await fetch(`/api/realtime-data?kelas=${encodeURIComponent(CURRENT_CLASS)}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error("Gagal ambil data");
+
+          const data = await response.json();
+
+          // Update Tabel Peserta Aktif
+          const listBody = document.querySelector('#tabel-antrean-body');
+          if (listBody && data.scannedList) {
+            if (data.scannedList.length === 0) {
+              listBody.innerHTML = '<tr><td class="text-center text-muted py-5">Belum ada peserta di sesi ini.</td></tr>';
+            } else {
+              let newHtml = '';
+              data.scannedList.forEach(item => {
+                let rowClass = !item.isRegistered ? 'pulse-red' : '';
+                let userInfo = item.isRegistered
+                  ? `<div class="fw-bold text-dark">${item.name}</div><small class="text-muted">${item.nim}</small>`
+                  : `<span class="badge bg-danger rounded-pill px-3 py-2 mb-1">UNKNOWN</span><div style="font-size: 10px;" class="text-danger">Belum Terdaftar</div>`;
+
+                let registerBtn = !item.isRegistered
+                  ? `<button onclick="registerUnknown('${item.uid}')" class="btn btn-sm text-white rounded-pill px-3 fw-bold me-1" style="background: var(--dark-pink); border: none;"><i class="fas fa-user-plus me-1"></i> Daftarkan</button>`
+                  : '';
+
+                let deleteBtn = `
+                  <form action="/dosen/manage-uid" method="POST" class="d-inline">
+                    <input type="hidden" name="current_class" value="${CURRENT_CLASS}">
+                    <input type="hidden" name="username" value="${CURRENT_USERNAME}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="uid" value="${item.uid}">
+                    <input type="hidden" name="entry_id" value="${item.id}">
+                    <button type="submit" class="btn btn-sm btn-light text-secondary rounded-circle" title="Hapus dari sesi"><i class="fas fa-times"></i></button>
+                  </form>`;
+
+                newHtml += `
+                  <tr class="${rowClass}">
+                    <td class="ps-4">
+                      <div class="d-flex align-items-center gap-3">
+                        <div class="bg-light rounded-circle p-2 text-secondary"><i class="fas fa-id-card"></i></div>
+                        <div>
+                          <div class="fw-bold small text-secondary">RFID UID</div>
+                          <div class="font-monospace text-dark fw-bold">${item.uid}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>${userInfo}</td>
+                    <td class="text-end pe-3">${registerBtn}${deleteBtn}</td>
+                  </tr>`;
+              });
+              listBody.innerHTML = newHtml;
+            }
+          }
+          // Update Device
+          if (data.devices && data.devices.length > 0) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentDeviceId = urlParams.get('device') || String(data.devices[0].id);
+            const dev = data.devices.find(d => String(d.id) === String(currentDeviceId)) || data.devices[0];
+            const isOnline = dev.status === 'online';
+
+            // Enable/disable tombol berdasarkan status online (tidak disembunyikan)
+            const btnSyncUid = document.getElementById('btn-sync-uid');
+            const btnSyncAudio = document.getElementById('btn-sync-audio');
+            const btnSetAlat = document.getElementById('btn-set-alat');
+            const timerInput = document.getElementById('timer-input');
+
+            if (btnSyncUid) { btnSyncUid.disabled = !isOnline; btnSyncUid.title = isOnline ? '' : 'Perangkat offline'; }
+            if (btnSyncAudio) { btnSyncAudio.disabled = !isOnline; btnSyncAudio.title = isOnline ? '' : 'Perangkat offline'; }
+            if (btnSetAlat) { btnSetAlat.disabled = !isOnline; }
+            if (timerInput) { timerInput.disabled = !isOnline; }
+
+            const bgCard = document.querySelector('#device-card-bg');
+            if (bgCard) bgCard.style.backgroundColor = isOnline ? '#e8f5e9' : '#ffebee';
+
+            const statusContainer = document.querySelector('#device-status-container');
+            if (statusContainer) {
+              let badgeHtml = isOnline
+                ? `<span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>`
+                : `<span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>`;
+              statusContainer.innerHTML = `${badgeHtml} <small class="text-muted font-monospace">${dev.id}</small>`;
+            }
+
+            const batContainer = document.querySelector('#device-battery-container');
+            const batText = document.querySelector('#device-battery-text');
+            const batLabel = document.querySelector('#device-battery-label');
+            if (batContainer && batText && batLabel) {
+              let batVal = dev.battery;
+              let hasBat = (batVal !== null && batVal !== undefined && batVal !== '');
+              batText.innerText = hasBat ? `${batVal}%` : '--';
+              batLabel.innerText = hasBat ? 'Status Daya Perangkat' : 'Belum ada data dari broker';
+              batContainer.style.color = isOnline ? ((hasBat && batVal > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999';
+            }
           }
 
-          // B. Simpan nama tab ke localStorage setiap kali dosen mengklik tab di sidebar
-          let tabEls = document.querySelectorAll('button[data-bs-toggle="pill"]');
-          tabEls.forEach(function(tab) {
-              tab.addEventListener('shown.bs.tab', function (event) {
-                  localStorage.setItem('activeDosenTab', event.target.getAttribute('data-bs-target'));
+        } catch (err) {
+          console.log("Menunggu koneksi data realtime...");
+        }
+      }
+
+      setInterval(updateData, 2000);
+
+      // =========================================================
+      // POLLING REALTIME LOGS (setiap 5 detik, tanpa full reload)
+      // =========================================================
+      let lastLogCount = -1;
+
+      function formatDurasi(detik) {
+        if (detik === null || detik === undefined) return null;
+        return detik + 's';
+      }
+
+      function buildLogHTML(logs) {
+        if (logs.length === 0) {
+          return `<div class="text-center py-5 text-muted">
+            <i class="fas fa-inbox fa-3x mb-3 d-block" style="color:#ffb6c1;"></i>
+            Belum ada data riwayat diskusi.
+          </div>`;
+        }
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        let html = '';
+        let lastDate = '';
+        let lastQuestion = '';
+        logs.forEach(log => {
+          const logDate = new Date(log.date_obj);
+          const currentDate = logDate.toLocaleDateString('id-ID', options);
+          const currentQuestion = log.question || 'Sesi Tanpa Pertanyaan';
+          const dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, '');
+          const questionClass = dateClass + '-q-' + currentQuestion.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+          const silenceLabel = formatDurasi(log.duration_answer);
+          if (currentDate !== lastDate) {
+            html += `
+            <div class="date-header-row mb-2 mt-3" onclick="toggleGroup(this, '${dateClass}')" style="cursor:pointer;">
+              <div class="date-header px-4 py-3 rounded-3 d-flex justify-content-between align-items-center">
+                <span><i class="far fa-calendar-alt me-2"></i> ${currentDate}</span>
+                <i class="fas fa-chevron-down chevron-icon"></i>
+              </div>
+            </div>`;
+            lastDate = currentDate; lastQuestion = '';
+          }
+          if (currentQuestion !== lastQuestion) {
+            html += `
+            <div class="question-header-row ${dateClass} mb-1 ms-3" onclick="toggleGroup(this, '${questionClass}')" style="cursor:pointer;">
+              <div class="question-header px-3 py-2 d-flex justify-content-between align-items-center rounded-3">
+                <span><i class="fas fa-question-circle me-2"></i> ${currentQuestion}</span>
+                <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
+              </div>
+            </div>`;
+            lastQuestion = currentQuestion;
+          }
+          html += `
+          <div class="${dateClass} ${questionClass} log-entry ms-5 mb-2" style="position:relative;">
+            <div style="position:absolute;left:-20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#ffb6c1,#fce4ec);border-radius:2px;"></div>
+            <div style="position:absolute;left:-25px;top:20px;width:12px;height:12px;background:var(--primary-pink);border-radius:50%;border:2px solid white;box-shadow:0 0 0 2px var(--primary-pink);"></div>
+            <div class="bg-white rounded-4 p-3 shadow-sm" style="border:1px solid #f5e0ea;">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="d-flex align-items-center gap-2">
+                  <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:linear-gradient(135deg,#ff80ab,#f06292);color:white;font-size:0.8rem;">
+                    <i class="fas fa-user"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold small text-dark">${log.name}</div>
+                    <div class="text-muted" style="font-size:11px;">${log.nim}</div>
+                  </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                  ${silenceLabel ? `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Waktu diam sebelum menjawab"><i class="fas fa-hourglass-start me-1"></i>${silenceLabel} diam</span>` : ''}
+                </div>
+              </div>
+              <div class="transcript-box mb-2" onclick="toggleTranscript(this)" style="background:#fafafa;border:1px solid #f0e0e8;">
+                <p class="transcript-text mb-0" style="font-size:0.88rem;line-height:1.6;color:#4a4a4a;">${log.transcript || '-'}</p>
+                <small class="read-more-label" style="display:none;">Lihat Selengkapnya</small>
+              </div>
+              ${log.audio_url && log.audio_url !== '#'
+                ? `<audio controls src="${log.audio_url}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;"></audio>`
+                : `<button class="btn btn-sm w-100 rounded-pill py-1" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;" disabled>
+                    <i class="fas fa-cloud-download-alt me-2"></i> Audio belum tersedia
+                   </button>`}
+            </div>
+          </div>`;
+        });
+        return html;
+      }
+
+      async function updateLogs() {
+        try {
+          const res = await fetch(`/api/realtime-logs?kelas=${encodeURIComponent(CURRENT_CLASS)}`, { cache: 'no-store' });
+          if (!res.ok) return;
+          const data = await res.json();
+          const logs = data.logs || [];
+          if (logs.length !== lastLogCount) {
+            lastLogCount = logs.length;
+            const container = document.getElementById('logTable');
+            if (container) {
+              container.innerHTML = buildLogHTML(logs);
+              container.querySelectorAll('.transcript-text').forEach(t => {
+                const label = t.nextElementSibling;
+                if (label) label.style.display = t.scrollHeight > 72 ? 'block' : 'none';
               });
-          });
-      });
+            }
+          }
+        } catch (e) { /* silent */ }
+      }
+
+      setInterval(updateLogs, 5000);
+      updateLogs();
     </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+      // =========================================================
+      // DONUT CHART STATISTIK
+      // =========================================================
+      (function initDonutChart() {
+        const canvas = document.getElementById('statsDonutChart');
+        if (!canvas) return;
+
+        const statsData = <%- JSON.stringify(stats) %>;
+        const totalBicara = statsData.reduce((sum, s) => sum + s.count, 0);
+        if (totalBicara === 0) {
+          canvas.parentElement.innerHTML = '<p class="text-center text-muted py-4">Belum ada data bicara.</p>';
+          return;
+        }
+
+        const palette = [
+          '#ff80ab','#f06292','#ce93d8','#ab47bc',
+          '#ffa726','#ffcc80','#80cbc4','#4db6ac',
+          '#90a4ae','#b0bec5','#ef9a9a','#a5d6a7'
+        ];
+
+        const labels = statsData.map(s => s.name);
+        const values = statsData.map(s => s.count);
+        const colors = statsData.map((_, i) => palette[i % palette.length]);
+
+        new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colors,
+              borderWidth: 2,
+              borderColor: '#fff',
+              hoverOffset: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    const pct = totalBicara > 0 ? ((ctx.parsed / totalBicara) * 100).toFixed(1) : 0;
+                    return ` ${ctx.label}: ${ctx.parsed}x (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      })();
+    </script>
+
   </body>
 </html>
