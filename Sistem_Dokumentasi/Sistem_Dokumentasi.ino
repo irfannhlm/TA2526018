@@ -112,9 +112,6 @@ void prepareDeepSleep() {
 
   // Membangunkan saat pin kembali ke LOW (ditekan)
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0); 
-  
-  // Matikan PN532
-  powerDownPN532();
 
   Serial.println("Entering Deep Sleep");
   esp_deep_sleep_start();

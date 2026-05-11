@@ -183,7 +183,6 @@ void rekamSuara() {
           } else { 
             if (now - lastSoundTime > SILENCE_LIMIT_MS) {
               isRecording = false; 
-              lcd.clear(); lcd.print("SUARA HENING!"); 
             }
           }
 
@@ -209,9 +208,8 @@ void rekamSuara() {
 
   if (timeOutTriggered) { 
       lcd.clear(); lcd.print("WAKTU HABIS!"); 
-    }
-
-  beep(1, 1000);
+      beep(1, 1000);
+  }
   
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("SAVED!");
   delay(1000); 
