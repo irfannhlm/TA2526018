@@ -6,6 +6,7 @@
 #include "Config.h"
 
 void initPN532();
+void powerDownPN532();
 String scanUID(); // Fungsi untuk mendapatkan ID kartu sebagai String
 
 #endif
