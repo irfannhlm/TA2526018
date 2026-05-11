@@ -6,6 +6,8 @@ const multer = require("multer");
 const fs = require("fs");
 const { createClient } = require("@supabase/supabase-js");
 require("dotenv").config();
+const bcrypt = require("bcrypt");
+const SALT_ROUNDS = 10;
 
 // ================= KONFIGURASI SUPABASE =================
 // Hapus trailing slash & /rest/v1 dari URL agar supabase-js bisa pakai sendiri
@@ -709,8 +711,9 @@ app.post("/login", async (req, res) => {
     const user = rows[0];
     if (!user)
       return res.render("login", { error: "Username tidak ditemukan." });
-    if (user.password !== password)
-      return res.render("login", { error: "Password salah." });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.render("login", { error: "Password salah." });
 
     if (user.role === "admin") {
       return res.redirect(
@@ -1169,7 +1172,8 @@ app.post("/admin/edit", async (req, res) => {
 app.post("/admin/add-user", async (req, res) => {
   const { username, password, role, current_class } = req.body;
   try {
-    await sbInsert("users", { username, password, role });
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    await sbInsert("users", { username, password: hashedPassword, role });
     res.redirect(`/admin?kelas=${current_class}`);
   } catch (err) {
     console.error(err);
