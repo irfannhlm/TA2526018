@@ -156,7 +156,7 @@
                 <% } else { %>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">
                     <% classes.forEach((c, i) => { const banners = ['linear-gradient(135deg,#fff9c4,#f5e090)','linear-gradient(135deg,#d4f5e2,#a8ddb5)','linear-gradient(135deg,#ffd6d6,#f5b8b8)','linear-gradient(135deg,#d4e8ff,#b3cfee)','linear-gradient(135deg,#ead5ff,#d0b0f0)','linear-gradient(135deg,#ffe0cc,#f5c4a0)']; %>
-                    <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>&username=<%= encodeURIComponent(username) %>" style="text-decoration:none;color:inherit;">
+                    <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>" style="text-decoration:none;color:inherit;">
                         <div style="background:white;border-radius:18px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.07);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 10px 24px rgba(0,0,0,0.12)';" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 12px rgba(0,0,0,0.07)';">
                             <div style="height:130px;background:<%= banners[i%6] %>;position:relative;overflow:hidden;">
                                 <div style="position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,0.22);top:-45px;right:-30px;"></div>
@@ -195,7 +195,7 @@
                     </div>
                     
                     <div class="d-flex gap-2">
-                        <a href="/pilih-kelas?role=admin&username=<%= encodeURIComponent(username) %>" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold">
+                        <a href="/pilih-kelas?role=admin" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold">
                             <i class="fas fa-exchange-alt me-2"></i> Ganti Kelas
                         </a>
                         <button class="btn btn-white bg-white text-dark border rounded-pill px-3 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#listModal">
@@ -216,7 +216,6 @@
                                 <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
                                 <form action="/admin" method="GET">
                                     <input type="hidden" name="kelas" value="<%= currentClass %>">
-                                    <input type="hidden" name="username" value="<%= username %>">
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
                                         <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
@@ -315,7 +314,6 @@
                                                 <!-- Tombol hapus per-entri (by entry id unik) -->
                                                 <form action="/admin/manage-uid" method="POST" class="d-inline">
                                                     <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                                    <input type="hidden" name="username" value="<%= username %>">
                                                     <input type="hidden" name="action" value="delete">
                                                     <input type="hidden" name="uid" value="<%= item.uid %>">
                                                     <input type="hidden" name="entry_id" value="<%= item.id %>">
@@ -384,7 +382,7 @@
                                             </span>
                                         </td>
                                         <td class="text-end pe-4">
-                                            <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>&username=<%= encodeURIComponent(username) %>" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1" style="font-size:0.75rem;" title="Buka Monitoring Live">
+                                            <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1" style="font-size:0.75rem;" title="Buka Monitoring Live">
                                                 <i class="fas fa-satellite-dish me-1"></i> Monitoring
                                             </a>
                                             <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" onclick="openEditClassModal('<%= c.id %>', '<%= c.name %>', '<%= c.code %>', `<%= (c.lecturer || '').replace(/`/g, '') %>`, '<%= c.lecturer_user_id || "" %>')">
@@ -422,7 +420,6 @@
                             <h5 class="fw-bold mb-4 text-dark">Buat Akun Baru</h5>
                             <form action="/admin/add-user" method="POST">
                                  <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                 <input type="hidden" name="admin_username" value="<%= username %>">
                                 <div class="mb-3">
                                     <label class="small text-muted fw-bold mb-1">USERNAME</label>
                                     <input type="text" name="username" class="form-control bg-light border-0 rounded-3 py-2" required>
@@ -474,7 +471,6 @@
                                             <td class="text-end pe-4">
                                                 <form action="/admin/delete-user" method="POST" class="d-inline" onsubmit="return confirmDeleteUser(event, this)">
                                                     <input type="hidden" name="current_class" value="<%= currentClass %>">
-                                                    <input type="hidden" name="username" value="<%= username %>">
                                                     <input type="hidden" name="id" value="<%= u.user_id %>">
                                                     <button type="submit" class="btn btn-sm btn-light text-danger rounded-circle"><i class="fas fa-trash"></i></button>
                                                 </form>
@@ -542,20 +538,17 @@
     <!-- Form hapus student (hidden, dipanggil via JS) -->
     <form id="deleteStudentForm" action="/admin/delete" method="POST" style="display:none;">
         <input type="hidden" name="current_class" value="<%= currentClass %>">
-        <input type="hidden" name="username" value="<%= username %>">
         <input type="hidden" name="id" id="deleteStudentId">
     </form>
 
     <!-- Form hapus kelas (hidden, dipanggil via JS) -->
     <form id="deleteClassForm" action="/admin/delete-class" method="POST" style="display:none;">
         <input type="hidden" name="current_class" value="<%= currentClass %>">
-        <input type="hidden" name="username" value="<%= username %>">
         <input type="hidden" name="id" id="deleteClassId">
     </form>
 
     <!-- Form reset semua data (hidden, dipanggil via JS) -->
     <form id="resetAllForm" action="/admin/reset-all" method="POST" style="display:none;">
-        <input type="hidden" name="username" value="<%= username %>">
     </form>
 
     <!-- ====== MODAL: TAMBAH MAHASISWA BARU (dari scan) ====== -->
@@ -569,7 +562,6 @@
           <form action="/admin/add" method="POST">
             <input type="hidden" name="kelas" value="<%= currentClass %>">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <input type="hidden" name="username" value="<%= username %>">
             
             <div class="mb-3">
                 <label class="small text-muted fw-bold">NAMA LENGKAP</label>
@@ -602,7 +594,6 @@
           </div>
           <form action="/admin/add-to-class" method="POST">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <input type="hidden" name="username" value="<%= username %>">
             
             <div class="mb-4">
                 <label class="small text-muted fw-bold">PILIH MAHASISWA</label>
@@ -639,7 +630,6 @@
           </div>
           <form action="/admin/edit" method="POST">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <input type="hidden" name="username" value="<%= username %>">
             <input type="hidden" name="id" id="editId" />
             <div class="mb-3">
                 <label class="small text-muted fw-bold">NAMA LENGKAP</label>
@@ -672,7 +662,6 @@
             </div>
             <form action="/admin/add-class" method="POST">
               <input type="hidden" name="current_class" value="<%= currentClass %>">
-              <input type="hidden" name="username" value="<%= username %>">
               <div class="mb-3">
                   <label class="small text-muted fw-bold">NAMA KELAS</label>
                   <input type="text" name="name" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: Pengantar IoT" />
@@ -714,7 +703,6 @@
             </div>
             <form action="/admin/edit-class" method="POST">
               <input type="hidden" name="current_class" value="<%= currentClass %>">
-              <input type="hidden" name="username" value="<%= username %>">
               <input type="hidden" name="id" id="editClassId" />
               <div class="mb-3">
                   <label class="small text-muted fw-bold">NAMA KELAS</label>
@@ -750,7 +738,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       const CURRENT_CLASS = '<%= currentClass || "" %>';
-      const CURRENT_USERNAME = '<%= username %>';
 
       function openAddModal() {
           document.getElementById('rfidInputAdd').value = '';
@@ -935,7 +922,6 @@
 
                             let deleteBtn = `<form action="/admin/manage-uid" method="POST" class="d-inline">
                                 <input type="hidden" name="current_class" value="${CURRENT_CLASS}">
-                                <input type="hidden" name="username" value="${CURRENT_USERNAME}">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="uid" value="${item.uid}">
                                 <input type="hidden" name="entry_id" value="${item.id}">
