@@ -173,6 +173,13 @@ let sessionData = {
 
 let scanCounter = 0;
 
+let syncStatus = {
+  state: "idle",
+  total: 0,
+  berhasil: 0,
+  updatedAt: Date.now(),
+};
+
 // ================= KONEKSI MQTT → HIVEMQ CLOUD =================
 const mqttClient = mqtt.connect({
   host: "c4bbf4787735464dadc96ca13e4a9c6b.s1.eu.hivemq.cloud",
@@ -413,6 +420,23 @@ mqttClient.on("message", async (topic, message) => {
     if (topic === "kelas/alat/sync_status") {
       const { status, pesan, total, berhasil } = payload;
       const timestamp = new Date().toLocaleTimeString("id-ID");
+
+      syncStatus = {
+        state:
+          status === "selesai"
+            ? "done"
+            : status === "error"
+              ? "error"
+              : status === "dibatalkan"
+                ? "cancelled"
+                : status === "progress"
+                  ? "loading"
+                  : "idle",
+        pesan: pesan || "",
+        total: total ?? 0,
+        berhasil: berhasil ?? 0,
+        updatedAt: Date.now(),
+      };
 
       if (status === "selesai") {
         console.log(`\n🎉 [SD SYNC] SELESAI [${timestamp}]`);
@@ -687,10 +711,11 @@ app.get("/api/realtime-logs", async (req, res) => {
         duration_answer,
         student_id,
         students(name,nim),
-        questions(transcript_text,created_at)
+        questions(transcript_text,created_at,audio_file_path)
       `,
       )
       .in("student_id", studentIds)
+      .eq("class_id", classData.class_id)
       .order("created_at", { foreignTable: "questions", ascending: false });
 
     if (logErr) throw logErr;
@@ -703,6 +728,7 @@ app.get("/api/realtime-logs", async (req, res) => {
       name: l.students?.name,
       nim: l.students?.nim,
       question: l.questions?.transcript_text,
+      question_audio_url: l.questions?.audio_file_path || null,
       transcript: l.transcript_text,
       audio_url: l.audio_file_path,
       duration_answer: l.duration_answer,
@@ -713,6 +739,29 @@ app.get("/api/realtime-logs", async (req, res) => {
     console.error("❌ Gagal ambil realtime logs:", err.message);
     res.status(500).json({ error: "Gagal mengambil data logs" });
   }
+});
+
+// ================= API: STATUS SYNC SD CARD =================
+app.get("/api/sync-status", requireLogin, (req, res) => {
+  // Reset otomatis ke idle jika sudah lebih dari 60 detik sejak update terakhir
+  const elapsed = Date.now() - syncStatus.updatedAt;
+  if (syncStatus.state === "loading" && elapsed > 60000) {
+    syncStatus.state = "error";
+    syncStatus.pesan = "Timeout — perangkat tidak merespons.";
+  }
+  res.json(syncStatus);
+});
+
+// Reset sync status (dipanggil saat mulai request baru)
+app.post("/api/sync-status/reset", requireLogin, (req, res) => {
+  syncStatus = {
+    state: "loading",
+    pesan: "Mengirim permintaan ke perangkat...",
+    total: 0,
+    berhasil: 0,
+    updatedAt: Date.now(),
+  };
+  res.json({ ok: true });
 });
 
 // ================= ROUTES =================
@@ -1254,13 +1303,14 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
 
     let filteredLogs = [];
     const studentIds = studentsInClass.map((s) => s.student_id);
-    if (studentIds.length > 0) {
+    if (studentIds.length > 0 && classId) {
       const { data: logs } = await supabase
         .from("answers")
         .select(
-          "answer_id, transcript_text, audio_file_path, duration_answer, student_id, students(name,nim), questions(transcript_text,created_at)",
+          "answer_id, transcript_text, audio_file_path, duration_answer, student_id, class_id, students(name,nim), questions(transcript_text,created_at,audio_file_path)",
         )
-        .in("student_id", studentIds);
+        .in("student_id", studentIds)
+        .eq("class_id", classId);
 
       filteredLogs = (logs || []).map((l) => ({
         id: l.answer_id,
@@ -1268,6 +1318,7 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
         name: l.students?.name,
         nim: l.students?.nim,
         question: l.questions?.transcript_text,
+        question_audio_url: l.questions?.audio_file_path || null,
         transcript: l.transcript_text,
         audio_url: l.audio_file_path,
         duration_answer: l.duration_answer,
