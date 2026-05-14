@@ -10,7 +10,7 @@ const {
   transcribeAnswer,
   transcribeQuestion,
   sweepUntranscribed,
-} = require("./deepgramService");
+} = require("./deepgramservice");
 const bcrypt = require("bcrypt");
 const SALT_ROUNDS = 10;
 const session = require("express-session");
