@@ -322,24 +322,66 @@ mqttClient.on("message", async (topic, message) => {
         }
 
         if (info.tipe === "dsn") {
-          console.log(`   Tanggal      : ${tanggal}`);
+          // DSN_X.txt dibaca ESP (2 baris):
+          //   Baris 1 → no_pertanyaan (integer)
+          //   Baris 2 → tanggal       (string, format DD-MM-YYYY)
+          //
+          // Payload MQTT yang dikirim ESP (dari bacaFileSdKeJson):
+          //   {
+          //     "file": "DSN_1.txt",
+          //     "target_kelas": "...",
+          //     "no_pertanyaan": 1,
+          //     "tanggal": "13-05-2026",
+          //     "uid": "DOSEN"
+          //   }
+          //
+          // number_q di DB = no_pertanyaan dari payload (= X pada DSN_X.txt)
+
+          const numberQ     = parseInt(no_pertanyaan);
+          const parsedTanggal = (tanggal ?? "").trim();
+
+          console.log(`   number_q (dari payload) : ${numberQ}`);
+          console.log(`   number_q (dari namafile): ${info.no_pertanyaan}`);
+          console.log(`   Tanggal                 : ${parsedTanggal}`);
+
+          // Validasi: kedua sumber number_q harus konsisten
+          if (isNaN(numberQ)) {
+            console.warn(`⚠️ [DSN TXT] Field 'no_pertanyaan' tidak valid di payload: ${no_pertanyaan}`);
+            mqttClient.publish(
+              "kelas/alat/perintah",
+              JSON.stringify({ perintah: "ack_file", file }),
+            );
+            return;
+          }
+          if (!parsedTanggal) {
+            console.warn(`⚠️ [DSN TXT] Field 'tanggal' kosong atau tidak ada di payload`);
+            mqttClient.publish(
+              "kelas/alat/perintah",
+              JSON.stringify({ perintah: "ack_file", file }),
+            );
+            return;
+          }
+          if (numberQ !== info.no_pertanyaan) {
+            console.warn(`⚠️ [DSN TXT] Inkonsistensi: no_pertanyaan payload (${numberQ}) ≠ nama file (${info.no_pertanyaan}). Menggunakan payload.`);
+          }
+
           const existing = await sbSelect("questions", {
             class_id: classId,
-            number_q: info.no_pertanyaan,
+            number_q: numberQ,
           });
 
-          // CEK DUPLIKAT: jika sudah ada data
-          if (existing.length > 0 && (existing[0].transcript_text || existing[0].date_id)) {
+          // CEK DUPLIKAT: hanya jika date_id sudah terisi sebelumnya
+          if (existing.length > 0 && existing[0].date_id) {
             duplicateQueueCounter++;
             duplicateQueue.push({
               qid: duplicateQueueCounter,
               file,
               tipe: "txt_dsn",
               target_kelas,
-              no_pertanyaan: info.no_pertanyaan,
-              tanggal,
+              no_pertanyaan: numberQ,
+              tanggal: parsedTanggal,
               existingId: existing[0].question_id,
-              existingPreview: `Pertanyaan #${info.no_pertanyaan} | Tanggal: ${existing[0].date_id || "-"}`,
+              existingPreview: `Pertanyaan #${numberQ} | Tanggal lama: ${existing[0].date_id} → baru: ${parsedTanggal}`,
               resolvedAt: null,
             });
             console.log(`⏸️ [TXT DSN] Duplikat ditahan — menunggu keputusan user. qid=${duplicateQueueCounter}`);
@@ -348,21 +390,23 @@ mqttClient.on("message", async (topic, message) => {
 
           // Tidak duplikat — proses normal
           if (existing.length > 0) {
+            // Update date_id pada pertanyaan yang sudah ada
             await sbUpdate(
               "questions",
               { question_id: existing[0].question_id },
-              { date_id: tanggal || null },
+              { date_id: parsedTanggal },
             );
-            console.log(`✅ [DSN TXT] questions.id=${existing[0].question_id} diperbarui.`);
+            console.log(`✅ [DSN TXT] questions.id=${existing[0].question_id} → date_id="${parsedTanggal}" diperbarui.`);
           } else {
+            // Buat question baru
             await sbInsert("questions", {
               class_id: classId,
               device_id: null,
-              number_q: info.no_pertanyaan,
-              date_id: tanggal || null,
+              number_q: numberQ,
+              date_id: parsedTanggal,
               transcript_text: "",
             });
-            console.log(`✅ [DSN TXT] question baru dibuat.`);
+            console.log(`✅ [DSN TXT] question baru dibuat: number_q=${numberQ}, date_id="${parsedTanggal}".`);
           }
 
         } else if (info.tipe === "mhs") {
@@ -871,13 +915,13 @@ app.post("/api/duplicate-resolve", requireLogin, async (req, res) => {
       await sbUpdate(
         "questions",
         { question_id: item.existingId },
-        { date_id: item.tanggal || null },
+        { date_id: item.tanggal },
       );
       mqttClient.publish(
         "kelas/alat/perintah",
         JSON.stringify({ perintah: "ack_file", file: item.file }),
       );
-      console.log(`🔄 [DUPLIKAT] REPLACE TXT DSN: ${item.file}`);
+      console.log(`🔄 [DUPLIKAT] REPLACE TXT DSN: ${item.file} → date_id="${item.tanggal}"`);
 
     } else if (item.tipe === "txt_mhs") {
       await sbUpdate(
