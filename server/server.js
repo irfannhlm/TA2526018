@@ -349,7 +349,14 @@ mqttClient.on("message", async (topic, message) => {
           // number_q di DB = no_pertanyaan dari payload (= X pada DSN_X.txt)
 
           const numberQ = parseInt(no_pertanyaan);
-          const parsedTanggal = (tanggal ?? "").trim();
+          // BARU
+          const rawTanggal = (tanggal ?? "").trim();
+          const parsedTanggal = (() => {
+            const parts = rawTanggal.split("-");
+            if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4)
+              return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+            return rawTanggal;
+          })();
 
           console.log(`   number_q (dari payload) : ${numberQ}`);
           console.log(`   number_q (dari namafile): ${info.no_pertanyaan}`);
