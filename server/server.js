@@ -10,7 +10,7 @@ const {
   transcribeAnswer,
   transcribeQuestion,
   sweepUntranscribed,
-} = require("./deepgramservice");
+} = require("./Deepgramservice");
 const bcrypt = require("bcrypt");
 const SALT_ROUNDS = 10;
 const session = require("express-session");
@@ -353,7 +353,11 @@ mqttClient.on("message", async (topic, message) => {
           const rawTanggal = (tanggal ?? "").trim();
           const parsedTanggal = (() => {
             const parts = rawTanggal.split("-");
-            if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4)
+            if (
+              parts.length === 3 &&
+              parts[0].length <= 2 &&
+              parts[2].length === 4
+            )
               return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
             return rawTanggal;
           })();
