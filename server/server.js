@@ -6,6 +6,11 @@ const multer = require("multer");
 const fs = require("fs");
 const { createClient } = require("@supabase/supabase-js");
 require("dotenv").config();
+const {
+  transcribeAnswer,
+  transcribeQuestion,
+  sweepUntranscribed,
+} = require("./deepgramService");
 const bcrypt = require("bcrypt");
 const SALT_ROUNDS = 10;
 const session = require("express-session");
@@ -175,7 +180,7 @@ let scanCounter = 0;
 
 // ================= STATUS SYNC SD CARD (RAM) =================
 let syncStatus = {
-  state: "idle",      // "idle" | "loading" | "done" | "error" | "cancelled"
+  state: "idle", // "idle" | "loading" | "done" | "error" | "cancelled"
   pesan: "",
   total: 0,
   berhasil: 0,
@@ -194,6 +199,8 @@ const mqttClient = mqtt.connect({
   username: "catchnote",
   password: "Ta2526018",
   rejectUnauthorized: true,
+  clientId: `catchnote_server_${Math.random().toString(16).slice(2, 8)}`, // ID unik tiap koneksi
+  clean: true,
 });
 
 mqttClient.on("connect", () => {
@@ -207,7 +214,9 @@ mqttClient.on("connect", () => {
     ],
     (err) => {
       if (!err)
-        console.log("✅ Subscribe Berhasil: rfid, status, audio_data, sync_status");
+        console.log(
+          "✅ Subscribe Berhasil: rfid, status, audio_data, sync_status",
+        );
       else console.error("❌ Gagal berlangganan topik:", err);
     },
   );
@@ -313,7 +322,9 @@ mqttClient.on("message", async (topic, message) => {
         const classId = classes.length > 0 ? classes[0].class_id : null;
 
         if (!classId) {
-          console.warn(`⚠️ Kelas "${target_kelas}" tidak ditemukan di database.`);
+          console.warn(
+            `⚠️ Kelas "${target_kelas}" tidak ditemukan di database.`,
+          );
           mqttClient.publish(
             "kelas/alat/perintah",
             JSON.stringify({ perintah: "ack_file", file }),
@@ -337,7 +348,7 @@ mqttClient.on("message", async (topic, message) => {
           //
           // number_q di DB = no_pertanyaan dari payload (= X pada DSN_X.txt)
 
-          const numberQ     = parseInt(no_pertanyaan);
+          const numberQ = parseInt(no_pertanyaan);
           const parsedTanggal = (tanggal ?? "").trim();
 
           console.log(`   number_q (dari payload) : ${numberQ}`);
@@ -346,7 +357,9 @@ mqttClient.on("message", async (topic, message) => {
 
           // Validasi: kedua sumber number_q harus konsisten
           if (isNaN(numberQ)) {
-            console.warn(`⚠️ [DSN TXT] Field 'no_pertanyaan' tidak valid di payload: ${no_pertanyaan}`);
+            console.warn(
+              `⚠️ [DSN TXT] Field 'no_pertanyaan' tidak valid di payload: ${no_pertanyaan}`,
+            );
             mqttClient.publish(
               "kelas/alat/perintah",
               JSON.stringify({ perintah: "ack_file", file }),
@@ -354,7 +367,9 @@ mqttClient.on("message", async (topic, message) => {
             return;
           }
           if (!parsedTanggal) {
-            console.warn(`⚠️ [DSN TXT] Field 'tanggal' kosong atau tidak ada di payload`);
+            console.warn(
+              `⚠️ [DSN TXT] Field 'tanggal' kosong atau tidak ada di payload`,
+            );
             mqttClient.publish(
               "kelas/alat/perintah",
               JSON.stringify({ perintah: "ack_file", file }),
@@ -362,7 +377,9 @@ mqttClient.on("message", async (topic, message) => {
             return;
           }
           if (numberQ !== info.no_pertanyaan) {
-            console.warn(`⚠️ [DSN TXT] Inkonsistensi: no_pertanyaan payload (${numberQ}) ≠ nama file (${info.no_pertanyaan}). Menggunakan payload.`);
+            console.warn(
+              `⚠️ [DSN TXT] Inkonsistensi: no_pertanyaan payload (${numberQ}) ≠ nama file (${info.no_pertanyaan}). Menggunakan payload.`,
+            );
           }
 
           const existing = await sbSelect("questions", {
@@ -384,7 +401,9 @@ mqttClient.on("message", async (topic, message) => {
               existingPreview: `Pertanyaan #${numberQ} | Tanggal lama: ${existing[0].date_id} → baru: ${parsedTanggal}`,
               resolvedAt: null,
             });
-            console.log(`⏸️ [TXT DSN] Duplikat ditahan — menunggu keputusan user. qid=${duplicateQueueCounter}`);
+            console.log(
+              `⏸️ [TXT DSN] Duplikat ditahan — menunggu keputusan user. qid=${duplicateQueueCounter}`,
+            );
             return; // Tahan, tidak ACK
           }
 
@@ -396,7 +415,9 @@ mqttClient.on("message", async (topic, message) => {
               { question_id: existing[0].question_id },
               { date_id: parsedTanggal },
             );
-            console.log(`✅ [DSN TXT] questions.id=${existing[0].question_id} → date_id="${parsedTanggal}" diperbarui.`);
+            console.log(
+              `✅ [DSN TXT] questions.id=${existing[0].question_id} → date_id="${parsedTanggal}" diperbarui.`,
+            );
           } else {
             // Buat question baru
             await sbInsert("questions", {
@@ -406,9 +427,10 @@ mqttClient.on("message", async (topic, message) => {
               date_id: parsedTanggal,
               transcript_text: "",
             });
-            console.log(`✅ [DSN TXT] question baru dibuat: number_q=${numberQ}, date_id="${parsedTanggal}".`);
+            console.log(
+              `✅ [DSN TXT] question baru dibuat: number_q=${numberQ}, date_id="${parsedTanggal}".`,
+            );
           }
-
         } else if (info.tipe === "mhs") {
           console.log(`   No Jawaban   : ${no_jawaban}`);
           console.log(`   UID          : ${uid}`);
@@ -442,7 +464,10 @@ mqttClient.on("message", async (topic, message) => {
           });
 
           // CEK DUPLIKAT: jika sudah ada data jawaban
-          if (aRows.length > 0 && (aRows[0].student_id || aRows[0].duration_answer)) {
+          if (
+            aRows.length > 0 &&
+            (aRows[0].student_id || aRows[0].duration_answer)
+          ) {
             duplicateQueueCounter++;
             duplicateQueue.push({
               qid: duplicateQueueCounter,
@@ -459,7 +484,9 @@ mqttClient.on("message", async (topic, message) => {
               existingPreview: `Q${info.no_pertanyaan} A${info.no_jawaban} | ${student?.name || uid}`,
               resolvedAt: null,
             });
-            console.log(`⏸️ [TXT MHS] Duplikat ditahan — menunggu keputusan user. qid=${duplicateQueueCounter}`);
+            console.log(
+              `⏸️ [TXT MHS] Duplikat ditahan — menunggu keputusan user. qid=${duplicateQueueCounter}`,
+            );
             return; // Tahan, tidak ACK
           }
 
@@ -474,7 +501,9 @@ mqttClient.on("message", async (topic, message) => {
                 class_id: classId,
               },
             );
-            console.log(`✅ [MHS TXT] answers.id=${aRows[0].answer_id} diperbarui.`);
+            console.log(
+              `✅ [MHS TXT] answers.id=${aRows[0].answer_id} diperbarui.`,
+            );
           } else {
             await sbInsert("answers", {
               question_id: qId,
@@ -484,7 +513,9 @@ mqttClient.on("message", async (topic, message) => {
               number_a: info.no_jawaban,
               class_id: classId,
             });
-            console.log(`✅ [MHS TXT] answer baru | Q${info.no_pertanyaan} A${info.no_jawaban} | student=${student?.name || "unknown"}`);
+            console.log(
+              `✅ [MHS TXT] answer baru | Q${info.no_pertanyaan} A${info.no_jawaban} | student=${student?.name || "unknown"}`,
+            );
           }
         }
 
@@ -494,9 +525,11 @@ mqttClient.on("message", async (topic, message) => {
           if (err) console.error("❌ Gagal kirim ACK:", err);
           else console.log(`📤 ACK dikirim untuk file: ${file}`);
         });
-
       } catch (dbErr) {
-        console.error("❌ [SD SYNC TXT] Gagal simpan ke database:", dbErr.message);
+        console.error(
+          "❌ [SD SYNC TXT] Gagal simpan ke database:",
+          dbErr.message,
+        );
       }
     }
 
@@ -508,12 +541,17 @@ mqttClient.on("message", async (topic, message) => {
       // Update syncStatus agar bisa di-polling frontend
       syncStatus = {
         state:
-          status === "selesai"    ? "done"      :
-          status === "error"      ? "error"     :
-          status === "dibatalkan" ? "cancelled" :
-          status === "progress"   ? "loading"   : "idle",
-        pesan:    pesan    || "",
-        total:    total    ?? 0,
+          status === "selesai"
+            ? "done"
+            : status === "error"
+              ? "error"
+              : status === "dibatalkan"
+                ? "cancelled"
+                : status === "progress"
+                  ? "loading"
+                  : "idle",
+        pesan: pesan || "",
+        total: total ?? 0,
         berhasil: berhasil ?? 0,
         updatedAt: Date.now(),
       };
@@ -532,7 +570,6 @@ mqttClient.on("message", async (topic, message) => {
         console.log(`\n🔄 [SD SYNC] Progress: ${berhasil}/${total} — ${pesan}`);
       }
     }
-
   } catch (error) {
     console.error("❌ MQTT Error:", error);
   }
@@ -567,7 +604,9 @@ async function simpanAudioKeDB(info, classId, audioUrl) {
         { question_id: qRows[0].question_id },
         { audio_file_path: audioUrl },
       );
-      console.log(`✅ [DSN WAV] audio_file_path disimpan di questions.id=${qRows[0].question_id}`);
+      console.log(
+        `✅ [DSN WAV] audio_file_path disimpan di questions.id=${qRows[0].question_id}`,
+      );
     } else {
       const newQ = await sbInsert("questions", {
         class_id: classId,
@@ -607,7 +646,9 @@ async function simpanAudioKeDB(info, classId, audioUrl) {
         { answer_id: aRows[0].answer_id },
         { audio_file_path: audioUrl },
       );
-      console.log(`✅ [MHS WAV] audio_file_path disimpan di answers.id=${aRows[0].answer_id}`);
+      console.log(
+        `✅ [MHS WAV] audio_file_path disimpan di answers.id=${aRows[0].answer_id}`,
+      );
     } else {
       const newA = await sbInsert("answers", {
         question_id: qId,
@@ -645,11 +686,15 @@ app.post(
     const namaFile = req.body.nama_file || req.file?.originalname || "";
     const targetKelas = req.body.target_kelas || "";
 
-    console.log(`\n🎵 [AUDIO SD] Menerima: ${namaFile} | Kelas: ${targetKelas}`);
+    console.log(
+      `\n🎵 [AUDIO SD] Menerima: ${namaFile} | Kelas: ${targetKelas}`,
+    );
 
     if (!tempPath || !namaFile) {
       if (tempPath) fs.unlinkSync(tempPath);
-      return res.status(400).json({ success: false, message: "File atau nama_file tidak ada." });
+      return res
+        .status(400)
+        .json({ success: false, message: "File atau nama_file tidak ada." });
     }
 
     const info = parseNamaFile(namaFile);
@@ -670,7 +715,8 @@ app.post(
         .from(STORAGE_BUCKET)
         .list(folderStorage, { search: namaFile });
 
-      const fileExists = existingFiles && existingFiles.some(f => f.name === namaFile);
+      const fileExists =
+        existingFiles && existingFiles.some((f) => f.name === namaFile);
 
       if (fileExists) {
         const classes = await sbSelect("classes", { class_name: targetKelas });
@@ -683,14 +729,16 @@ app.post(
           file: namaFile,
           tipe: "wav",
           target_kelas: targetKelas,
-          tempPath,         // simpan path temp untuk diproses nanti
+          tempPath, // simpan path temp untuk diproses nanti
           storagePath,
           classId,
           info,
           existingPreview: `File audio: ${namaFile} | Kelas: ${targetKelas}`,
           resolvedAt: null,
         });
-        console.log(`⏸️ [WAV] Duplikat ditahan — menunggu keputusan user. qid=${qid}`);
+        console.log(
+          `⏸️ [WAV] Duplikat ditahan — menunggu keputusan user. qid=${qid}`,
+        );
         return res.status(200).json({
           success: true,
           pending: true,
@@ -718,8 +766,54 @@ app.post(
       }
 
       await simpanAudioKeDB(info, classId, audioUrl);
-      res.status(200).json({ success: true, audio_file_path: audioUrl, file: namaFile });
 
+      // ── Auto-transcribe langsung setelah audio tersimpan ──
+      // Jalankan di background (tidak blocking response ke ESP32)
+      setImmediate(async () => {
+        try {
+          if (info.tipe === "dsn") {
+            const qRows = await sbSelect("questions", {
+              class_id: classId,
+              number_q: info.no_pertanyaan,
+            });
+            if (
+              qRows.length > 0 &&
+              (!qRows[0].transcript_text ||
+                qRows[0].transcript_text.trim() === "")
+            ) {
+              await transcribeQuestion(
+                sbUpdate,
+                qRows[0].question_id,
+                audioUrl,
+              );
+            }
+          } else if (info.tipe === "mhs") {
+            const qRows = await sbSelect("questions", {
+              class_id: classId,
+              number_q: info.no_pertanyaan,
+            });
+            if (qRows.length > 0) {
+              const aRows = await sbSelect("answers", {
+                question_id: qRows[0].question_id,
+                number_a: info.no_jawaban,
+              });
+              if (
+                aRows.length > 0 &&
+                (!aRows[0].transcript_text ||
+                  aRows[0].transcript_text.trim() === "")
+              ) {
+                await transcribeAnswer(sbUpdate, aRows[0].answer_id, audioUrl);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("❌ [Auto-transcribe] Error:", e.message);
+        }
+      });
+
+      res
+        .status(200)
+        .json({ success: true, audio_file_path: audioUrl, file: namaFile });
     } catch (err) {
       console.error("❌ [AUDIO SD] Error:", err.message);
       if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -884,7 +978,9 @@ app.post("/api/duplicate-resolve", requireLogin, async (req, res) => {
   );
 
   if (!item)
-    return res.status(404).json({ ok: false, message: "Item tidak ditemukan." });
+    return res
+      .status(404)
+      .json({ ok: false, message: "Item tidak ditemukan." });
 
   item.resolvedAt = Date.now();
 
@@ -906,11 +1002,14 @@ app.post("/api/duplicate-resolve", requireLogin, async (req, res) => {
 
     // action === "replace"
     if (item.tipe === "wav") {
-      const audioUrl = await uploadToSupabaseStorage(item.tempPath, item.storagePath);
+      const audioUrl = await uploadToSupabaseStorage(
+        item.tempPath,
+        item.storagePath,
+      );
       if (fs.existsSync(item.tempPath)) fs.unlinkSync(item.tempPath);
-      if (item.classId) await simpanAudioKeDB(item.info, item.classId, audioUrl);
+      if (item.classId)
+        await simpanAudioKeDB(item.info, item.classId, audioUrl);
       console.log(`🔄 [DUPLIKAT] REPLACE WAV: ${item.file}`);
-
     } else if (item.tipe === "txt_dsn") {
       await sbUpdate(
         "questions",
@@ -921,8 +1020,9 @@ app.post("/api/duplicate-resolve", requireLogin, async (req, res) => {
         "kelas/alat/perintah",
         JSON.stringify({ perintah: "ack_file", file: item.file }),
       );
-      console.log(`🔄 [DUPLIKAT] REPLACE TXT DSN: ${item.file} → date_id="${item.tanggal}"`);
-
+      console.log(
+        `🔄 [DUPLIKAT] REPLACE TXT DSN: ${item.file} → date_id="${item.tanggal}"`,
+      );
     } else if (item.tipe === "txt_mhs") {
       await sbUpdate(
         "answers",
@@ -1137,7 +1237,9 @@ app.get("/admin", requireRole("admin"), async (req, res) => {
     const allStudents = await sbSelect("students");
 
     if (!currentDeviceId && devices.length > 0) {
-      return res.redirect(`/admin?kelas=${currentClass}&device=${devices[0].id}`);
+      return res.redirect(
+        `/admin?kelas=${currentClass}&device=${devices[0].id}`,
+      );
     }
 
     const currentDevice = devices.find(
@@ -1200,7 +1302,9 @@ app.post("/admin/add-class", requireRole("admin"), async (req, res) => {
       lecturer_name: lecturer || "",
       lecturer_user_id: toInt(lecturer_user_id),
     });
-    const target = current_class ? `/admin?kelas=${current_class}` : `/pilih-kelas`;
+    const target = current_class
+      ? `/admin?kelas=${current_class}`
+      : `/pilih-kelas`;
     res.redirect(target);
   } catch (err) {
     console.error(err);
@@ -1210,7 +1314,8 @@ app.post("/admin/add-class", requireRole("admin"), async (req, res) => {
 
 // EDIT KELAS
 app.post("/admin/edit-class", requireRole("admin"), async (req, res) => {
-  const { id, name, code, lecturer, lecturer_user_id, current_class } = req.body;
+  const { id, name, code, lecturer, lecturer_user_id, current_class } =
+    req.body;
   try {
     await sbUpdate(
       "classes",
@@ -1222,7 +1327,9 @@ app.post("/admin/edit-class", requireRole("admin"), async (req, res) => {
         lecturer_user_id: toInt(lecturer_user_id),
       },
     );
-    const target = current_class ? `/admin?kelas=${current_class}` : `/pilih-kelas`;
+    const target = current_class
+      ? `/admin?kelas=${current_class}`
+      : `/pilih-kelas`;
     res.redirect(target);
   } catch (err) {
     console.error(err);
@@ -1246,7 +1353,9 @@ app.post("/admin/delete-class", requireRole("admin"), async (req, res) => {
 
     const remaining = await sbSelect("classes", {}, "class_name", { limit: 1 });
     if (current_class) {
-      const stillExists = await sbSelect("classes", { class_name: current_class });
+      const stillExists = await sbSelect("classes", {
+        class_name: current_class,
+      });
       if (stillExists.length > 0) {
         return res.redirect(`/admin?kelas=${current_class}`);
       }
@@ -1292,7 +1401,9 @@ app.post("/admin/manage-uid", requireRole("admin"), async (req, res) => {
       if (idx !== -1) sessionData.scannedList.splice(idx, 1);
     }
   }
-  const target = current_class ? `/admin?kelas=${current_class}` : `/pilih-kelas`;
+  const target = current_class
+    ? `/admin?kelas=${current_class}`
+    : `/pilih-kelas`;
   res.redirect(target);
 });
 
@@ -1304,7 +1415,11 @@ app.post("/admin/add", requireRole("admin"), async (req, res) => {
     const clsRows = await sbSelect("classes", { class_name: targetClass });
     if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
     const classId = clsRows[0].class_id;
-    const newStudent = await sbInsert("students", { name, nim, rfid_uid: rfid });
+    const newStudent = await sbInsert("students", {
+      name,
+      nim,
+      rfid_uid: rfid,
+    });
     await sbInsert("class_students", {
       student_id: newStudent.student_id,
       class_id: classId,
@@ -1394,7 +1509,9 @@ app.post("/admin/delete-user", requireRole("admin"), async (req, res) => {
       console.error("❌ [delete-user] Error:", err);
     }
   }
-  const target = current_class ? `/admin?kelas=${current_class}` : `/pilih-kelas`;
+  const target = current_class
+    ? `/admin?kelas=${current_class}`
+    : `/pilih-kelas`;
   res.redirect(target);
 });
 
@@ -1435,7 +1552,9 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
     }));
 
     if (!currentDeviceId && devices.length > 0) {
-      return res.redirect(`/dosen?kelas=${currentClass}&device=${devices[0].id}`);
+      return res.redirect(
+        `/dosen?kelas=${currentClass}&device=${devices[0].id}`,
+      );
     }
 
     const currentDevice = devices.find(
@@ -1531,41 +1650,57 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
 });
 
 // DOSEN: DAFTARKAN MAHASISWA BARU
-app.post("/dosen/add-student", requireRole("dosen", "admin"), async (req, res) => {
-  const { name, nim, rfid, kelas, current_class } = req.body;
-  const targetClass = kelas || current_class;
-  try {
-    const clsRows = await sbSelect("classes", { class_name: targetClass }, "class_id");
-    if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
-    const newStudent = await sbInsert("students", { name, nim, rfid_uid: rfid });
-    await sbInsert("class_students", {
-      student_id: newStudent.student_id,
-      class_id: clsRows[0].class_id,
-    });
-    res.redirect(`/dosen?kelas=${targetClass}`);
-  } catch (err) {
-    console.error(err);
-    res.send("Gagal mendaftarkan mahasiswa.");
-  }
-});
+app.post(
+  "/dosen/add-student",
+  requireRole("dosen", "admin"),
+  async (req, res) => {
+    const { name, nim, rfid, kelas, current_class } = req.body;
+    const targetClass = kelas || current_class;
+    try {
+      const clsRows = await sbSelect(
+        "classes",
+        { class_name: targetClass },
+        "class_id",
+      );
+      if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
+      const newStudent = await sbInsert("students", {
+        name,
+        nim,
+        rfid_uid: rfid,
+      });
+      await sbInsert("class_students", {
+        student_id: newStudent.student_id,
+        class_id: clsRows[0].class_id,
+      });
+      res.redirect(`/dosen?kelas=${targetClass}`);
+    } catch (err) {
+      console.error(err);
+      res.send("Gagal mendaftarkan mahasiswa.");
+    }
+  },
+);
 
-app.post("/dosen/update-settings", requireRole("dosen", "admin"), (req, res) => {
-  const { status, mode, timer, current_class } = req.body;
-  if (status) sessionData.status = status;
-  if (mode) sessionData.mode = mode;
-  if (timer) {
-    sessionData.maxTime = parseInt(timer);
-    const payload = JSON.stringify({
-      perintah: "set_timer",
-      durasi_detik: sessionData.maxTime,
-    });
-    mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-      if (err) console.error("❌ Gagal mengirim timer ke MQTT:", err);
-      else console.log("✅ Berhasil mengirim timer ke MQTT:", payload);
-    });
-  }
-  res.redirect(`/dosen?kelas=${current_class}`);
-});
+app.post(
+  "/dosen/update-settings",
+  requireRole("dosen", "admin"),
+  (req, res) => {
+    const { status, mode, timer, current_class } = req.body;
+    if (status) sessionData.status = status;
+    if (mode) sessionData.mode = mode;
+    if (timer) {
+      sessionData.maxTime = parseInt(timer);
+      const payload = JSON.stringify({
+        perintah: "set_timer",
+        durasi_detik: sessionData.maxTime,
+      });
+      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+        if (err) console.error("❌ Gagal mengirim timer ke MQTT:", err);
+        else console.log("✅ Berhasil mengirim timer ke MQTT:", payload);
+      });
+    }
+    res.redirect(`/dosen?kelas=${current_class}`);
+  },
+);
 
 app.post("/dosen/sync-uid", requireRole("dosen", "admin"), async (req, res) => {
   const { current_class, mode } = req.body;
@@ -1573,18 +1708,32 @@ app.post("/dosen/sync-uid", requireRole("dosen", "admin"), async (req, res) => {
 
   if (mode === "semua_kelas") {
     try {
-      const classRec = await sbSelect("classes", { class_name: current_class }, "class_id");
+      const classRec = await sbSelect(
+        "classes",
+        { class_name: current_class },
+        "class_id",
+      );
       if (classRec.length > 0) {
-        const csRows = await sbSelect("class_students", { class_id: classRec[0].class_id }, "student_id");
+        const csRows = await sbSelect(
+          "class_students",
+          { class_id: classRec[0].class_id },
+          "student_id",
+        );
         const studentIds = csRows.map((r) => r.student_id);
         if (studentIds.length > 0) {
-          const students = await sbSelect("students", { student_id: studentIds }, "rfid_uid");
+          const students = await sbSelect(
+            "students",
+            { student_id: studentIds },
+            "rfid_uid",
+          );
           daftarUid = students.map((s) => s.rfid_uid).filter(Boolean);
         }
       }
     } catch (err) {
       console.error("❌ Gagal ambil UID semua kelas:", err.message);
-      return res.status(500).json({ success: false, message: "Gagal mengambil data mahasiswa." });
+      return res
+        .status(500)
+        .json({ success: false, message: "Gagal mengambil data mahasiswa." });
     }
     const payload = JSON.stringify({
       perintah: "sync_uid_kelas",
@@ -1594,10 +1743,15 @@ app.post("/dosen/sync-uid", requireRole("dosen", "admin"), async (req, res) => {
     mqttClient.publish("kelas/alat/perintah", payload, (err) => {
       if (err) {
         console.error("❌ Gagal kirim sync_uid_kelas:", err);
-        return res.status(500).json({ success: false, message: "Gagal mengirim ke alat." });
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal mengirim ke alat." });
       }
       console.log(`✅ sync_uid_kelas: ${daftarUid.length} UID`);
-      res.json({ success: true, message: `✅ Daftar Kelas: ${daftarUid.length} UID dikirim ke alat.` });
+      res.json({
+        success: true,
+        message: `✅ Daftar Kelas: ${daftarUid.length} UID dikirim ke alat.`,
+      });
     });
   } else {
     daftarUid = sessionData.scannedList.map((item) => item.uid);
@@ -1609,23 +1763,48 @@ app.post("/dosen/sync-uid", requireRole("dosen", "admin"), async (req, res) => {
     mqttClient.publish("kelas/alat/perintah", payload, (err) => {
       if (err) {
         console.error("❌ Gagal kirim sync_uid_aktif:", err);
-        return res.status(500).json({ success: false, message: "Gagal mengirim ke alat." });
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal mengirim ke alat." });
       }
       console.log(`✅ sync_uid_aktif: ${daftarUid.length} UID`);
-      res.json({ success: true, message: `✅ Peserta Aktif: ${daftarUid.length} UID dikirim ke alat.` });
+      res.json({
+        success: true,
+        message: `✅ Peserta Aktif: ${daftarUid.length} UID dikirim ke alat.`,
+      });
     });
   }
 });
 
 app.post("/dosen/edit-log", requireRole("dosen", "admin"), async (req, res) => {
-  const { id, student_id, edit_date, edit_time, transcript, question, current_class } = req.body;
+  const {
+    id,
+    student_id,
+    edit_date,
+    edit_time,
+    transcript,
+    question,
+    current_class,
+  } = req.body;
   try {
     const newDateObj = new Date(`${edit_date}T${edit_time}`).toISOString();
-    const ansInfo = await sbSelect("answers", { answer_id: toInt(id) }, "question_id");
+    const ansInfo = await sbSelect(
+      "answers",
+      { answer_id: toInt(id) },
+      "question_id",
+    );
     if (ansInfo.length > 0) {
       const qId = ansInfo[0].question_id;
-      await sbUpdate("answers", { answer_id: toInt(id) }, { transcript_text: transcript, created_at: newDateObj });
-      await sbUpdate("questions", { question_id: qId }, { transcript_text: question, created_at: newDateObj });
+      await sbUpdate(
+        "answers",
+        { answer_id: toInt(id) },
+        { transcript_text: transcript, created_at: newDateObj },
+      );
+      await sbUpdate(
+        "questions",
+        { question_id: qId },
+        { transcript_text: question, created_at: newDateObj },
+      );
     }
     res.redirect(`/dosen?kelas=${current_class}`);
   } catch (err) {
@@ -1634,102 +1813,146 @@ app.post("/dosen/edit-log", requireRole("dosen", "admin"), async (req, res) => {
   }
 });
 
-app.post("/dosen/manage-uid", requireRole("dosen", "admin"), async (req, res) => {
-  const { action, uid, entry_id, student_id, target_date, current_class } = req.body;
+app.post(
+  "/dosen/manage-uid",
+  requireRole("dosen", "admin"),
+  async (req, res) => {
+    const { action, uid, entry_id, student_id, target_date, current_class } =
+      req.body;
 
-  if (action === "delete") {
-    if (entry_id) {
-      const idx = sessionData.scannedList.findIndex(
-        (item) => item.id === parseInt(entry_id),
-      );
-      if (idx !== -1) sessionData.scannedList.splice(idx, 1);
-    } else {
-      const idx = sessionData.scannedList.findIndex((item) => item.uid === uid);
-      if (idx !== -1) sessionData.scannedList.splice(idx, 1);
-    }
-  } else if (action === "add_single") {
-    try {
-      const rows = await sbSelect("students", { student_id: toInt(student_id) }, "rfid_uid");
-      if (rows.length > 0) {
-        scanCounter++;
-        sessionData.scannedList.unshift({ id: scanCounter, uid: rows[0].rfid_uid });
+    if (action === "delete") {
+      if (entry_id) {
+        const idx = sessionData.scannedList.findIndex(
+          (item) => item.id === parseInt(entry_id),
+        );
+        if (idx !== -1) sessionData.scannedList.splice(idx, 1);
+      } else {
+        const idx = sessionData.scannedList.findIndex(
+          (item) => item.uid === uid,
+        );
+        if (idx !== -1) sessionData.scannedList.splice(idx, 1);
       }
-    } catch (err) {}
-  } else if (action === "add_date" && current_class) {
-    try {
-      const { data: logs } = await supabase
-        .from("answers")
-        .select("student_id, questions!inner(created_at)")
-        .gte("questions.created_at", `${target_date}T00:00:00`)
-        .lte("questions.created_at", `${target_date}T23:59:59`);
-
-      const activeIds = [...new Set((logs || []).map((l) => l.student_id))];
-      if (activeIds.length > 0) {
-        const students = await sbSelect("students", { student_id: activeIds }, "rfid_uid");
-        students.forEach((s) => {
+    } else if (action === "add_single") {
+      try {
+        const rows = await sbSelect(
+          "students",
+          { student_id: toInt(student_id) },
+          "rfid_uid",
+        );
+        if (rows.length > 0) {
           scanCounter++;
-          sessionData.scannedList.push({ id: scanCounter, uid: s.rfid_uid });
-        });
-      }
-    } catch (err) {}
-  }
+          sessionData.scannedList.unshift({
+            id: scanCounter,
+            uid: rows[0].rfid_uid,
+          });
+        }
+      } catch (err) {}
+    } else if (action === "add_date" && current_class) {
+      try {
+        const { data: logs } = await supabase
+          .from("answers")
+          .select("student_id, questions!inner(created_at)")
+          .gte("questions.created_at", `${target_date}T00:00:00`)
+          .lte("questions.created_at", `${target_date}T23:59:59`);
 
-  res.redirect(`/dosen?kelas=${current_class}`);
-});
+        const activeIds = [...new Set((logs || []).map((l) => l.student_id))];
+        if (activeIds.length > 0) {
+          const students = await sbSelect(
+            "students",
+            { student_id: activeIds },
+            "rfid_uid",
+          );
+          students.forEach((s) => {
+            scanCounter++;
+            sessionData.scannedList.push({ id: scanCounter, uid: s.rfid_uid });
+          });
+        }
+      } catch (err) {}
+    }
 
-app.post("/dosen/request-audio", requireRole("dosen", "admin"), async (req, res) => {
-  const { id, current_class } = req.body;
-  try {
-    await sbUpdate("answers", { answer_id: toInt(id) }, { audio_file_path: "#" });
     res.redirect(`/dosen?kelas=${current_class}`);
-  } catch (err) {
-    console.error(err);
-    res.send("Gagal request audio.");
-  }
-});
+  },
+);
 
-app.post("/dosen/request-audio-sync", requireRole("dosen", "admin"), (req, res) => {
-  const { current_class } = req.body;
-  const payloadTxt = JSON.stringify({
-    perintah: "request_sync_audio",
-    target_kelas: current_class,
-  });
-  const payloadWav = JSON.stringify({
-    perintah: "request_sync_wav",
-    target_kelas: current_class,
-  });
-
-  mqttClient.publish("kelas/alat/perintah", payloadTxt, (errTxt) => {
-    if (errTxt) {
-      console.error("❌ Gagal kirim request_sync_audio:", errTxt);
-      return res.status(500).json({ success: false, message: "Gagal menghubungi alat." });
+app.post(
+  "/dosen/request-audio",
+  requireRole("dosen", "admin"),
+  async (req, res) => {
+    const { id, current_class } = req.body;
+    try {
+      await sbUpdate(
+        "answers",
+        { answer_id: toInt(id) },
+        { audio_file_path: "#" },
+      );
+      res.redirect(`/dosen?kelas=${current_class}`);
+    } catch (err) {
+      console.error(err);
+      res.send("Gagal request audio.");
     }
-    console.log("✅ request_sync_audio terkirim:", payloadTxt);
-    setTimeout(() => {
-      mqttClient.publish("kelas/alat/perintah", payloadWav, (errWav) => {
-        if (errWav) console.error("❌ Gagal kirim request_sync_wav:", errWav);
-        else console.log("✅ request_sync_wav terkirim:", payloadWav);
+  },
+);
+
+app.post(
+  "/dosen/request-audio-sync",
+  requireRole("dosen", "admin"),
+  (req, res) => {
+    const { current_class } = req.body;
+    const payloadTxt = JSON.stringify({
+      perintah: "request_sync_audio",
+      target_kelas: current_class,
+    });
+    const payloadWav = JSON.stringify({
+      perintah: "request_sync_wav",
+      target_kelas: current_class,
+    });
+
+    mqttClient.publish("kelas/alat/perintah", payloadTxt, (errTxt) => {
+      if (errTxt) {
+        console.error("❌ Gagal kirim request_sync_audio:", errTxt);
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal menghubungi alat." });
+      }
+      console.log("✅ request_sync_audio terkirim:", payloadTxt);
+      setTimeout(() => {
+        mqttClient.publish("kelas/alat/perintah", payloadWav, (errWav) => {
+          if (errWav) console.error("❌ Gagal kirim request_sync_wav:", errWav);
+          else console.log("✅ request_sync_wav terkirim:", payloadWav);
+        });
+      }, 2000);
+      res.json({
+        success: true,
+        message: "Permintaan sync metadata & audio dikirim ke alat.",
       });
-    }, 2000);
-    res.json({ success: true, message: "Permintaan sync metadata & audio dikirim ke alat." });
-  });
-});
+    });
+  },
+);
 
-app.post("/dosen/request-wav-sync", requireRole("dosen", "admin"), (req, res) => {
-  const { current_class } = req.body;
-  const payload = JSON.stringify({
-    perintah: "request_sync_wav",
-    target_kelas: current_class,
-  });
-  mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-    if (err) {
-      console.error("❌ Gagal kirim request_sync_wav:", err);
-      return res.status(500).json({ success: false, message: "Gagal menghubungi alat." });
-    }
-    console.log("✅ request_sync_wav terkirim:", payload);
-    res.json({ success: true, message: "Permintaan sync audio WAV dikirim ke alat." });
-  });
-});
+app.post(
+  "/dosen/request-wav-sync",
+  requireRole("dosen", "admin"),
+  (req, res) => {
+    const { current_class } = req.body;
+    const payload = JSON.stringify({
+      perintah: "request_sync_wav",
+      target_kelas: current_class,
+    });
+    mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+      if (err) {
+        console.error("❌ Gagal kirim request_sync_wav:", err);
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal menghubungi alat." });
+      }
+      console.log("✅ request_sync_wav terkirim:", payload);
+      res.json({
+        success: true,
+        message: "Permintaan sync audio WAV dikirim ke alat.",
+      });
+    });
+  },
+);
 
 // ================= API KONTROL SD SYNC =================
 app.post("/api/sd-sync-keputusan", (req, res) => {
@@ -1738,7 +1961,9 @@ app.post("/api/sd-sync-keputusan", (req, res) => {
     const payload = JSON.stringify({ perintah: "ack_file", file: "" });
     mqttClient.publish("kelas/alat/perintah", payload, (err) => {
       if (err)
-        return res.status(500).json({ success: false, message: "Gagal kirim perintah." });
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal kirim perintah." });
       console.log("🔄 [SD SYNC] Server memilih: ULANGI / LANJUT");
       res.json({ success: true, message: "ESP diperintahkan melanjutkan." });
     });
@@ -1746,7 +1971,9 @@ app.post("/api/sd-sync-keputusan", (req, res) => {
     const payload = JSON.stringify({ perintah: "batalkan_sync" });
     mqttClient.publish("kelas/alat/perintah", payload, (err) => {
       if (err)
-        return res.status(500).json({ success: false, message: "Gagal kirim perintah." });
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal kirim perintah." });
       console.log("🛑 [SD SYNC] Server memilih: BATALKAN");
       res.json({ success: true, message: "Sinkronisasi dibatalkan." });
     });
@@ -1760,14 +1987,34 @@ app.post("/api/upload-audio", upload.single("audio"), async (req, res) => {
     const { log_id } = req.body;
     if (!req.file) return res.status(400).send("Tidak ada file yang diunggah.");
     const audioUrl = `/recordings/${req.file.filename}`;
-    await sbUpdate("answers", { answer_id: toInt(log_id) }, { audio_file_path: audioUrl });
-    console.log(`✅ File audio diterima untuk Answer ID ${log_id}: ${audioUrl}`);
+    await sbUpdate(
+      "answers",
+      { answer_id: toInt(log_id) },
+      { audio_file_path: audioUrl },
+    );
+    console.log(
+      `✅ File audio diterima untuk Answer ID ${log_id}: ${audioUrl}`,
+    );
     res.status(200).json({ status: "success", url: audioUrl });
   } catch (error) {
     console.error("❌ Gagal memproses upload audio:", error);
     res.status(500).send("Server Error");
   }
 });
+
+// ================= DEEPGRAM AUTO-SWEEP =================
+// Jalankan sweep pertama 10 detik setelah server nyala,
+// lalu setiap 5 menit sekali cek ulang.
+setTimeout(() => {
+  sweepUntranscribed(supabase, sbUpdate);
+}, 10_000);
+
+setInterval(
+  () => {
+    sweepUntranscribed(supabase, sbUpdate);
+  },
+  5 * 60 * 1000,
+); // setiap 5 menit
 
 // ================= START SERVER =================
 const PORT = process.env.PORT || 3000;
