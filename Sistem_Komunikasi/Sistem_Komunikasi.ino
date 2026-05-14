@@ -23,7 +23,7 @@ const char* mqtt_user   = "catchnote";
 const char* mqtt_pass   = "Ta2526018";
 
 // ================= KONFIGURASI BACKEND (Render — HTTPS) =================
-const char* backend_server = "ta2526018.onrender.com";  // hostname saja, tanpa https://
+const char* backend_server = "ta2526018.onrender.com";
 
 // ================= KONFIGURASI WIFI =================
 char eap_nim[40]    = "";
@@ -31,6 +31,14 @@ char eap_pass[40]   = "";
 char saved_ssid[40] = "";
 char wifi_type[10]  = "biasa";
 char wifi_pass[64]  = "";
+
+// ================= KONFIGURASI THRESHOLD =================
+// Nilai default: Tinggi=90, Sedang=70, Rendah=50
+int threshold_value = 70;  // nilai aktif yang dipakai sistem
+
+const int THRESHOLD_TINGGI = 90;
+const int THRESHOLD_SEDANG = 70;
+const int THRESHOLD_RENDAH = 50;
 
 const int device_id = 1;
 
@@ -295,9 +303,8 @@ int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
   size_t contentLength = partHeader.length() + ukuranFile + partMid.length();
   Serial.printf("📦 Content-Length: %u bytes\n", contentLength);
 
-  // ✅ Gunakan WiFiClientSecure untuk HTTPS ke Render (port 443)
   WiFiClientSecure client;
-  client.setInsecure(); // Skip verifikasi sertifikat (sama seperti koneksi MQTT)
+  client.setInsecure();
 
   Serial.printf("🔌 Menghubungkan ke %s:443 ...\n", backend_server);
   if (!client.connect(backend_server, 443)) {
@@ -307,7 +314,6 @@ int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
   }
   Serial.println("🔌 Terhubung ke Render, mulai stream...");
 
-  // Kirim HTTP request header
   client.printf(
     "POST /api/upload-audio-sd HTTP/1.1\r\n"
     "Host: %s\r\n"
@@ -318,10 +324,8 @@ int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
     backend_server, boundary.c_str(), (unsigned int)contentLength
   );
 
-  // Kirim part header multipart
   client.print(partHeader);
 
-  // Stream isi file WAV dalam chunk
   const size_t CHUNK = 512;
   uint8_t chunkBuf[CHUNK];
   size_t terkirim = 0;
@@ -342,10 +346,8 @@ int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
   f.close();
   Serial.printf("✅ File selesai distream: %u bytes\n", terkirim);
 
-  // Kirim penutup multipart
   client.print(partMid);
 
-  // Baca HTTP response code
   int httpCode = -1;
   String responseLine = "";
   unsigned long timeout = millis();
@@ -365,7 +367,6 @@ int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
 
   if (httpCode == -1) Serial.println("⏱️ Timeout baca response dari server.");
 
-  // Baca body response (JSON dari server)
   String body = "";
   unsigned long bodyTimeout = millis();
   while (client.available() && millis() - bodyTimeout < 3000) {
@@ -678,6 +679,7 @@ void kirimStatus() {
   doc["device_id"] = device_id;
   doc["status"]    = "online";
   doc["battery"]   = dummyBattery;
+  doc["threshold"] = threshold_value;   // ← sertakan threshold di status
   char buf[256];
   serializeJson(doc, buf);
   mqttClient.publish(topic_status, buf);
@@ -755,15 +757,42 @@ bool connectEduroam(const char* ssid, const char* nim, const char* pass) {
 void bukaPortal() {
   Serial.println("🌐 Membuka captive portal...");
 
+  // ── Baca nilai tersimpan untuk pre-fill form ──
+  preferences.begin("catch_note", true);  // read-only
+  String saved_nim_str      = preferences.getString("nim",       "");
+  String saved_eap_pass_str = preferences.getString("eap_pass",  "");
+  String saved_ssid_str     = preferences.getString("ssid",      "");
+  String saved_type_str     = preferences.getString("wifi_type", "biasa");
+  String saved_wpass_str    = preferences.getString("wifi_pass", "");
+  int    saved_threshold    = preferences.getInt   ("threshold", THRESHOLD_SEDANG);
+  preferences.end();
+
+  // Tentukan kategori threshold yang aktif untuk pre-select di form
+  String saved_threshold_cat = "sedang";
+  if (saved_threshold == THRESHOLD_TINGGI)       saved_threshold_cat = "tinggi";
+  else if (saved_threshold == THRESHOLD_RENDAH)  saved_threshold_cat = "rendah";
+
   WiFi.mode(WIFI_AP);
   WiFi.softAP("CatchNote-Setup");
   IPAddress apIP = WiFi.softAPIP();
   Serial.printf("📡 Portal aktif. IP: %s\n", apIP.toString().c_str());
 
-  // DNS Server: arahkan SEMUA domain ke IP AP
   dnsServer.start(DNS_PORT, "*", apIP);
 
   WebServer server(80);
+
+  // ── Bangun HTML dengan nilai tersimpan ──
+  // Untuk keamanan, password eduroam tidak di-pre-fill (hanya NIM & SSID)
+  String chk_biasa    = (saved_type_str == "biasa")    ? "active" : "";
+  String chk_eduroam  = (saved_type_str == "eduroam")  ? "active" : "";
+  String sec_biasa    = (saved_type_str == "biasa")    ? "show"   : "";
+  String sec_eduroam  = (saved_type_str == "eduroam")  ? "show"   : "";
+  String initType     = saved_type_str;
+
+  // Threshold radio pre-select
+  String chkT = (saved_threshold_cat == "tinggi") ? "checked" : "";
+  String chkS = (saved_threshold_cat == "sedang") ? "checked" : "";
+  String chkR = (saved_threshold_cat == "rendah") ? "checked" : "";
 
   String html = R"rawhtml(
 <!DOCTYPE html>
@@ -806,7 +835,7 @@ void bukaPortal() {
       border-radius: 24px;
       padding: 36px 32px;
       width: 100%;
-      max-width: 420px;
+      max-width: 440px;
       box-shadow: 0 4px 40px rgba(232,99,140,0.10);
       border: 1px solid var(--border);
     }
@@ -824,9 +853,20 @@ void bukaPortal() {
     .logo h1 { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--text); }
     .logo p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
+    /* ── Section divider ── */
+    .section-title {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin: 24px 0 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
     .toggle-wrap {
       display: flex; background: var(--pink-lt); border-radius: 12px;
-      padding: 4px; margin-bottom: 24px; gap: 4px;
+      padding: 4px; margin-bottom: 20px; gap: 4px;
     }
     .toggle-btn {
       flex: 1; padding: 10px; border: none; border-radius: 9px;
@@ -843,17 +883,61 @@ void bukaPortal() {
       display: block; font-size: 12px; font-weight: 600; color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
     }
-    .field input {
+    .field input[type=text],
+    .field input[type=password] {
       width: 100%; padding: 12px 14px; border: 1.5px solid var(--border);
       border-radius: var(--radius); font-family: 'DM Sans', sans-serif;
       font-size: 15px; color: var(--text); background: #fff;
       transition: border-color 0.2s, box-shadow 0.2s; outline: none;
     }
-    .field input:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba(232,99,140,0.10); }
+    .field input[type=text]:focus,
+    .field input[type=password]:focus {
+      border-color: var(--pink); box-shadow: 0 0 0 3px rgba(232,99,140,0.10);
+    }
+
+    /* ── Threshold cards ── */
+    .threshold-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin-bottom: 8px;
+    }
+    .threshold-card {
+      position: relative; cursor: pointer;
+    }
+    .threshold-card input[type=radio] {
+      position: absolute; opacity: 0; width: 0; height: 0;
+    }
+    .threshold-label {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 14px 8px 12px;
+      border: 2px solid var(--border); border-radius: 14px;
+      background: #fff; transition: all 0.18s; user-select: none;
+      cursor: pointer;
+    }
+    .threshold-card input[type=radio]:checked + .threshold-label {
+      border-color: var(--pink);
+      background: var(--pink-lt);
+      box-shadow: 0 0 0 3px rgba(232,99,140,0.12);
+    }
+    .threshold-label .th-icon  { font-size: 22px; margin-bottom: 6px; }
+    .threshold-label .th-name  { font-size: 13px; font-weight: 600; color: var(--text); }
+    .threshold-label .th-value {
+      font-size: 11px; color: var(--muted); margin-top: 3px;
+      background: var(--border); border-radius: 20px; padding: 2px 8px;
+    }
+    .threshold-card input[type=radio]:checked + .threshold-label .th-value {
+      background: var(--pink-md); color: white;
+    }
 
     .hint {
       background: var(--pink-lt); border-radius: 10px; padding: 10px 14px;
       font-size: 12.5px; color: var(--pink); margin-bottom: 16px; line-height: 1.5;
+    }
+
+    /* ── Saved badge ── */
+    .saved-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; color: var(--pink); background: var(--pink-lt);
+      border-radius: 20px; padding: 3px 10px; margin-bottom: 10px;
     }
 
     button[type=submit] {
@@ -861,7 +945,7 @@ void bukaPortal() {
       background: linear-gradient(135deg, #e8638c, #f598b4);
       color: white; border: none; border-radius: var(--radius);
       font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600;
-      cursor: pointer; margin-top: 8px; box-shadow: 0 4px 16px rgba(232,99,140,0.35);
+      cursor: pointer; margin-top: 12px; box-shadow: 0 4px 16px rgba(232,99,140,0.35);
       transition: opacity 0.2s, transform 0.1s;
     }
     button[type=submit]:hover  { opacity: 0.92; }
@@ -877,37 +961,102 @@ void bukaPortal() {
   </div>
 
   <form method="POST" action="/save">
-    <input type="hidden" name="wifi_type" id="wifi_type_val" value="biasa">
+    <input type="hidden" name="wifi_type" id="wifi_type_val" value=")rawhtml" + initType + R"rawhtml(">
+
+    <!-- ══ BAGIAN WIFI ══ -->
+    <div class="section-title">📶 Koneksi WiFi</div>
+
     <div class="toggle-wrap">
-      <button type="button" class="toggle-btn active" onclick="setTipe('biasa', this)">📶 WiFi Biasa</button>
-      <button type="button" class="toggle-btn"        onclick="setTipe('eduroam', this)">🏫 Eduroam ITB</button>
+      <button type="button" class="toggle-btn )rawhtml" + chk_biasa + R"rawhtml(" onclick="setTipe('biasa', this)">📶 WiFi Biasa</button>
+      <button type="button" class="toggle-btn )rawhtml" + chk_eduroam + R"rawhtml(" onclick="setTipe('eduroam', this)">🏫 Eduroam ITB</button>
     </div>
 
-    <div class="section show" id="sec-biasa">
+    <div class="section )rawhtml" + sec_biasa + R"rawhtml(" id="sec-biasa">
       <div class="field">
         <label>Nama WiFi (SSID)</label>
-        <input name="ssid_biasa" placeholder="Nama jaringan WiFi">
+        <input type="text" name="ssid_biasa" placeholder="Nama jaringan WiFi" value=")rawhtml";
+
+  // inject saved SSID untuk WiFi biasa (hanya jika tipe sebelumnya biasa)
+  if (saved_type_str == "biasa") html += saved_ssid_str;
+
+  html += R"rawhtml(">
       </div>
       <div class="field">
         <label>Password WiFi</label>
-        <input name="wifi_pass" type="password" placeholder="Password jaringan">
+        <input type="password" name="wifi_pass" placeholder="Password jaringan">
       </div>
     </div>
 
-    <div class="section" id="sec-eduroam">
-      <div class="hint">Gunakan akun SSO ITB Anda.</div>
+    <div class="section )rawhtml" + sec_eduroam + R"rawhtml(" id="sec-eduroam">
+      <div class="hint">Gunakan akun SSO ITB Anda.</div>)rawhtml";
+
+  // Tampilkan badge "tersimpan" jika ada NIM sebelumnya
+  if (saved_nim_str.length() > 0) {
+    html += "<div class='saved-badge'>✅ Akun tersimpan: " + saved_nim_str + "</div>";
+  }
+
+  html += R"rawhtml(
       <div class="field">
         <label>Nama WiFi (SSID)</label>
-        <input name="ssid_eduroam" placeholder="eduroam">
+        <input type="text" name="ssid_eduroam" placeholder="eduroam" value=")rawhtml";
+
+  if (saved_type_str == "eduroam") html += saved_ssid_str;
+
+  html += R"rawhtml(">
       </div>
       <div class="field">
         <label>NIM ITB</label>
-        <input name="nim" placeholder="13xxxxxxx@itb.ac.id">
+        <input type="text" name="nim" placeholder="13xxxxxxx" value=")rawhtml" + saved_nim_str + R"rawhtml(">
       </div>
       <div class="field">
-        <label>Password SSO</label>
-        <input name="eap_pass" type="password" placeholder="Password SSO ITB">
+        <label>Password SSO)rawhtml";
+
+  // Tampilkan hint password sudah tersimpan jika ada
+  if (saved_eap_pass_str.length() > 0) {
+    html += R"rawhtml( <span style="font-weight:400;color:#c47090;font-size:11px;">(kosongkan jika tidak berubah)</span>)rawhtml";
+  }
+
+  html += R"rawhtml(</label>
+        <input type="password" name="eap_pass" placeholder=")rawhtml";
+  html += (saved_eap_pass_str.length() > 0) ? "••••••••" : "Password SSO ITB";
+  html += R"rawhtml(">
       </div>
+    </div>
+
+    <!-- ══ BAGIAN THRESHOLD ══ -->
+    <div class="section-title"> Sensitivitas Deteksi</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+      Pilih level sensitivitas untuk deteksi suara. Nilai lebih tinggi = lebih sensitif.
+    </p>
+
+    <div class="threshold-grid">
+      <!-- Tinggi -->
+      <label class="threshold-card">
+        <input type="radio" name="threshold_cat" value="tinggi" )rawhtml" + chkT + R"rawhtml(>
+        <span class="threshold-label">
+          <span class="th-icon">🔴</span>
+          <span class="th-name">Tinggi</span>
+          <span class="th-value">90</span>
+        </span>
+      </label>
+      <!-- Sedang -->
+      <label class="threshold-card">
+        <input type="radio" name="threshold_cat" value="sedang" )rawhtml" + chkS + R"rawhtml(>
+        <span class="threshold-label">
+          <span class="th-icon">🟡</span>
+          <span class="th-name">Sedang</span>
+          <span class="th-value">70</span>
+        </span>
+      </label>
+      <!-- Rendah -->
+      <label class="threshold-card">
+        <input type="radio" name="threshold_cat" value="rendah" )rawhtml" + chkR + R"rawhtml(>
+        <span class="threshold-label">
+          <span class="th-icon">🟢</span>
+          <span class="th-name">Rendah</span>
+          <span class="th-value">50</span>
+        </span>
+      </label>
     </div>
 
     <button type="submit">Simpan &amp; Restart →</button>
@@ -932,49 +1081,35 @@ void bukaPortal() {
     server.send(200, "text/html", html);
   });
 
-  // ── Captive Portal Detection: Android / Chrome ──
+  // ── Captive Portal Detection ──
   server.on("/generate_204", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: Android lama ──
   server.on("/fwlink", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: iOS / macOS ──
   server.on("/hotspot-detect.html", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: iOS alternatif ──
   server.on("/library/test/success.html", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: Windows (NCSI) ──
   server.on("/ncsi.txt", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: Windows 10/11 ──
   server.on("/connecttest.txt", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Captive Portal Detection: Windows redirect ──
   server.on("/redirect", HTTP_GET, [&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
-
-  // ── Fallback: semua path tidak dikenal → redirect ke / ──
   server.onNotFound([&]() {
     server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
@@ -982,22 +1117,41 @@ void bukaPortal() {
 
   // ── Handler simpan konfigurasi ──
   server.on("/save", HTTP_POST, [&]() {
-    String wifiType = server.arg("wifi_type");
-    String nim      = server.arg("nim");
-    String eapPass  = server.arg("eap_pass");
-    String wifiPass = server.arg("wifi_pass");
+    String wifiType     = server.arg("wifi_type");
+    String nim          = server.arg("nim");
+    String eapPassNew   = server.arg("eap_pass");
+    String wifiPass     = server.arg("wifi_pass");
+    String thresholdCat = server.arg("threshold_cat");
 
     String ssid = (wifiType == "eduroam")
                   ? server.arg("ssid_eduroam")
                   : server.arg("ssid_biasa");
+
+    // Hitung nilai threshold dari kategori
+    int thresholdVal = THRESHOLD_SEDANG;
+    if (thresholdCat == "tinggi")      thresholdVal = THRESHOLD_TINGGI;
+    else if (thresholdCat == "rendah") thresholdVal = THRESHOLD_RENDAH;
 
     preferences.begin("catch_note", false);
     preferences.putString("ssid",      ssid);
     preferences.putString("wifi_type", wifiType);
     preferences.putString("wifi_pass", wifiPass);
     preferences.putString("nim",       nim);
-    preferences.putString("eap_pass",  eapPass);
+    preferences.putInt   ("threshold", thresholdVal);
+
+    // Password eduroam: hanya diperbarui jika user mengisi field baru
+    // (bukan placeholder "••••••••"), jika kosong gunakan yang lama
+    if (eapPassNew.length() > 0) {
+      preferences.putString("eap_pass", eapPassNew);
+      Serial.println("🔐 Password eduroam diperbarui.");
+    } else {
+      Serial.println("🔐 Password eduroam tidak berubah (kosong = pakai lama).");
+    }
+
     preferences.end();
+
+    Serial.printf("💾 Tersimpan → SSID: %s | Tipe: %s | Threshold: %d (%s)\n",
+      ssid.c_str(), wifiType.c_str(), thresholdVal, thresholdCat.c_str());
 
     server.send(200, "text/html",
       "<!DOCTYPE html><html><head>"
@@ -1006,12 +1160,14 @@ void bukaPortal() {
       "body{font-family:'DM Sans',sans-serif;background:#fdf4f7;"
       "display:flex;align-items:center;justify-content:center;min-height:100vh;}"
       ".box{background:white;border-radius:24px;padding:40px 32px;text-align:center;"
-      "box-shadow:0 4px 40px rgba(232,99,140,.1);}"
+      "box-shadow:0 4px 40px rgba(232,99,140,.1);max-width:360px;width:100%;}"
       ".icon{font-size:48px;margin-bottom:16px;}"
-      "h2{color:#e8638c;}</style></head><body>"
+      "h2{color:#e8638c;margin-bottom:8px;}"
+      "p{color:#9c7585;font-size:14px;}"
+      "</style></head><body>"
       "<div class='box'><div class='icon'>✅</div>"
       "<h2>Konfigurasi tersimpan!</h2>"
-      "<p>ESP32 akan restart...</p>"
+      "<p>ESP32 akan restart dalam beberapa detik...</p>"
       "</div></body></html>"
     );
 
@@ -1022,7 +1178,6 @@ void bukaPortal() {
   server.begin();
   Serial.println("✅ Web server aktif, menunggu koneksi...");
 
-  // ── Loop portal: DNS + HTTP harus diproses bersamaan ──
   while (true) {
     dnsServer.processNextRequest();
     server.handleClient();
@@ -1047,7 +1202,10 @@ void setup() {
   preferences.getString("ssid",      "").toCharArray(saved_ssid, 40);
   preferences.getString("wifi_type", "biasa").toCharArray(wifi_type, 10);
   preferences.getString("wifi_pass", "").toCharArray(wifi_pass,  64);
+  threshold_value = preferences.getInt("threshold", THRESHOLD_SEDANG);  // ← load threshold
   preferences.end();
+
+  Serial.printf("📊 Threshold aktif: %d\n", threshold_value);
 
   bool isConnected = false;
 
@@ -1063,7 +1221,6 @@ void setup() {
 
   Serial.printf("\n✅ Jaringan siap! IP: %s\n", WiFi.localIP().toString().c_str());
 
-  // TLS tanpa verifikasi sertifikat
   espClient.setInsecure();
 
   mqttClient.setServer(mqtt_server, mqtt_port);
@@ -1085,21 +1242,18 @@ void loop() {
   if (!mqttClient.connected()) reconnect();
   mqttClient.loop();
 
-  // ── Sinkronisasi TXT ──
   if (sdSyncAktif && sdTargetKelas != "") {
     String kelas = sdTargetKelas;
     sdTargetKelas = "";
     prosesSinkronisasiSD(kelas);
   }
 
-  // ── Sinkronisasi Audio WAV ──
   if (audioSyncAktif && audioTargetKelas != "") {
     String kelas = audioTargetKelas;
     audioTargetKelas = "";
     prosesSinkronisasiAudio(kelas);
   }
 
-  // ── Baca RFID ──
   uint8_t uid[7], uidLength;
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
     String uidStr = "";
@@ -1116,6 +1270,7 @@ void loop() {
     doc["action"]    = "tap_rfid";
     doc["uid"]       = uidStr;
     doc["battery"]   = dummyBattery;
+    doc["threshold"] = threshold_value;  // ← sertakan threshold di data RFID
     char buf[256];
     serializeJson(doc, buf);
     mqttClient.publish(topic_rfid, buf);
