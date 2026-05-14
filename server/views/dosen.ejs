@@ -1276,6 +1276,99 @@
 
       setInterval(updateLogs, 5000);
       updateLogs();
+
+      // =========================================================
+      // POLLING DUPLIKAT — cek antrian file duplikat tiap 3 detik
+      // =========================================================
+      let shownDuplicateQids = new Set();
+
+      async function checkDuplicateQueue() {
+        try {
+          const res = await fetch('/api/duplicate-queue', { cache: 'no-store' });
+          if (!res.ok) return;
+          const data = await res.json();
+          const pending = data.pending || [];
+
+          for (const item of pending) {
+            if (shownDuplicateQids.has(item.qid)) continue; // sudah ditampilkan
+            shownDuplicateQids.add(item.qid);
+            showDuplicatePopup(item);
+          }
+        } catch (e) { /* silent */ }
+      }
+
+      async function showDuplicatePopup(item) {
+        const tipeLabel =
+          item.tipe === "wav"     ? "File Audio (WAV)" :
+          item.tipe === "txt_dsn" ? "Data Pertanyaan (TXT)" :
+          item.tipe === "txt_mhs" ? "Data Jawaban (TXT)" : item.tipe;
+
+        const iconClass =
+          item.tipe === "wav" ? "fas fa-file-audio" : "fas fa-file-alt";
+
+        const result = await Swal.fire({
+          title: '<i class="fas fa-exclamation-triangle" style="color:#f57c00;"></i> File Duplikat Terdeteksi',
+          html: `
+            <div class="text-start">
+              <div class="rounded-3 p-3 mb-3" style="background:#fff3e0;border:1px solid #ffe0b2;">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="${iconClass}" style="color:#e65100;font-size:1.1rem;"></i>
+                  <span class="fw-bold text-dark" style="font-size:0.95rem;">${item.file}</span>
+                </div>
+                <div class="text-muted" style="font-size:0.82rem;">${tipeLabel} · Kelas: ${item.target_kelas}</div>
+              </div>
+              <div class="text-muted mb-3" style="font-size:0.88rem;">
+                <i class="fas fa-database me-1" style="color:#bbb;"></i>
+                Data yang sudah ada: <strong>${item.existingPreview}</strong>
+              </div>
+              <div class="rounded-3 p-3" style="background:#fce4ec;border:1px solid #f8bbd0;font-size:0.85rem;color:#880e4f;">
+                <i class="fas fa-info-circle me-1"></i>
+                Pilih <strong>Timpa (Replace)</strong> untuk mengganti data lama dengan yang baru,
+                atau <strong>Lewati (Skip)</strong> untuk mempertahankan data lama.
+              </div>
+            </div>
+          `,
+          icon: null,
+          showCancelButton: true,
+          confirmButtonColor: '#d81b60',
+          cancelButtonColor: '#607d8b',
+          confirmButtonText: '<i class="fas fa-sync-alt me-1"></i> Timpa (Replace)',
+          cancelButtonText: '<i class="fas fa-forward me-1"></i> Lewati (Skip)',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+        });
+
+        const action = result.isConfirmed ? 'replace' : 'skip';
+
+        try {
+          await fetch('/api/duplicate-resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qid: item.qid, action }),
+          });
+
+          // Notifikasi kecil hasil keputusan
+          const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+          });
+          Toast.fire({
+            icon: action === 'replace' ? 'success' : 'info',
+            title: action === 'replace'
+              ? `File <b>${item.file}</b> berhasil ditimpa.`
+              : `File <b>${item.file}</b> dilewati, data lama dipertahankan.`,
+          });
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Gagal!', text: 'Tidak dapat mengirim keputusan ke server.', confirmButtonColor: '#d81b60' });
+        }
+      }
+
+      setInterval(checkDuplicateQueue, 3000);
+      checkDuplicateQueue();
+
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
