@@ -360,6 +360,13 @@
                   </tr>
                   <% lastQuestion = currentQuestion; %> <% } %>
 
+                  <% if (log.id === null || log.id === undefined) { %>
+                  <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
+                    <td colspan="4" class="text-center text-muted py-3" style="font-size: 0.9rem; font-style: italic;">
+                      <i class="fas fa-comment-slash me-2"></i> Belum ada jawaban untuk pertanyaan ini
+                    </td>
+                  </tr>
+                  <% } else { %>
                   <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
                     <td style="width: 1%; white-space: nowrap">
                       <div class="fw-bold text-dark"><%= logDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) %></div>
@@ -406,6 +413,7 @@
                       </button>
                     </td>
                   </tr>
+                  <% } %>
                   <% }) %>
                 </tbody>
               </table>
@@ -1220,7 +1228,13 @@
             lastQuestion = currentQuestion;
           }
 
-          html += `
+          if (log.id === null || log.id === undefined) {
+            html += `
+            <div class="${dateClass} ${questionClass} ms-5 mb-2 text-center text-muted py-3" style="font-size:0.9rem;font-style:italic;">
+              <i class="fas fa-comment-slash me-2"></i> Belum ada jawaban untuk pertanyaan ini
+            </div>`;
+          } else {
+            html += `
           <div class="${dateClass} ${questionClass} log-entry ms-5 mb-2" style="position:relative;">
             <div style="position:absolute;left:-20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#ffb6c1,#fce4ec);border-radius:2px;"></div>
             <div style="position:absolute;left:-25px;top:20px;width:12px;height:12px;background:var(--primary-pink);border-radius:50%;border:2px solid white;box-shadow:0 0 0 2px var(--primary-pink);"></div>
@@ -1250,6 +1264,7 @@
                   </button>`}
             </div>
           </div>`;
+          }
         });
         return html;
       }

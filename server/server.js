@@ -907,42 +907,58 @@ app.get("/api/realtime-logs", async (req, res) => {
       .from("class_students")
       .select("student_id, students(student_id,name,nim)")
       .eq("class_id", classData.class_id);
-    if (!csData || csData.length === 0) return res.json({ logs: [] });
 
-    const studentIds = csData.map((r) => r.student_id);
+    const studentIds = (csData || []).map((r) => r.student_id);
 
-    const { data: logs, error: logErr } = await supabase
-      .from("answers")
+    const { data: questions, error: qErr } = await supabase
+      .from("questions")
       .select(
         `
-        answer_id,
+        question_id,
         transcript_text,
+        created_at,
         audio_file_path,
-        duration_answer,
-        student_id,
-        students(name,nim),
-        questions(transcript_text,created_at,audio_file_path)
+        answers(answer_id, transcript_text, audio_file_path, duration_answer, student_id, students(name,nim))
       `,
       )
-      .in("student_id", studentIds)
       .eq("class_id", classData.class_id)
-      .order("created_at", { foreignTable: "questions", ascending: false });
+      .order("created_at", { ascending: false });
 
-    if (logErr) throw logErr;
+    if (qErr) throw qErr;
 
-    const formatted = (logs || []).map((l) => ({
-      id: l.answer_id,
-      date_obj: l.questions?.created_at
-        ? new Date(l.questions.created_at).toISOString()
-        : null,
-      name: l.students?.name,
-      nim: l.students?.nim,
-      question: l.questions?.transcript_text,
-      question_audio_url: l.questions?.audio_file_path || null,
-      transcript: l.transcript_text,
-      audio_url: l.audio_file_path,
-      duration_answer: l.duration_answer,
-    }));
+    const formatted = [];
+    for (const q of (questions || [])) {
+      const relevantAnswers = (q.answers || []).filter((a) =>
+        studentIds.includes(a.student_id),
+      );
+      if (relevantAnswers.length > 0) {
+        for (const a of relevantAnswers) {
+          formatted.push({
+            id: a.answer_id,
+            date_obj: q.created_at ? new Date(q.created_at).toISOString() : null,
+            name: a.students?.name,
+            nim: a.students?.nim,
+            question: q.transcript_text,
+            question_audio_url: q.audio_file_path || null,
+            transcript: a.transcript_text,
+            audio_url: a.audio_file_path,
+            duration_answer: a.duration_answer,
+          });
+        }
+      } else {
+        formatted.push({
+          id: null,
+          date_obj: q.created_at ? new Date(q.created_at).toISOString() : null,
+          name: null,
+          nim: null,
+          question: q.transcript_text,
+          question_audio_url: q.audio_file_path || null,
+          transcript: null,
+          audio_url: null,
+          duration_answer: null,
+        });
+      }
+    }
 
     res.json({ logs: formatted });
   } catch (err) {
@@ -1597,26 +1613,46 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
 
     let filteredLogs = [];
     const studentIds = studentsInClass.map((s) => s.student_id);
-    if (studentIds.length > 0 && classId) {
-      const { data: logs } = await supabase
-        .from("answers")
+    if (classId) {
+      const { data: questions } = await supabase
+        .from("questions")
         .select(
-          "answer_id, transcript_text, audio_file_path, duration_answer, student_id, class_id, students(name,nim), questions(transcript_text,created_at,audio_file_path)",
+          "question_id, transcript_text, created_at, audio_file_path, answers(answer_id, transcript_text, audio_file_path, duration_answer, student_id, students(name,nim))",
         )
-        .in("student_id", studentIds)
         .eq("class_id", classId);
 
-      filteredLogs = (logs || []).map((l) => ({
-        id: l.answer_id,
-        date_obj: l.questions?.created_at,
-        name: l.students?.name,
-        nim: l.students?.nim,
-        question: l.questions?.transcript_text,
-        question_audio_url: l.questions?.audio_file_path || null,
-        transcript: l.transcript_text,
-        audio_url: l.audio_file_path,
-        duration_answer: l.duration_answer,
-      }));
+      for (const q of (questions || [])) {
+        const relevantAnswers = (q.answers || []).filter((a) =>
+          studentIds.includes(a.student_id),
+        );
+        if (relevantAnswers.length > 0) {
+          for (const a of relevantAnswers) {
+            filteredLogs.push({
+              id: a.answer_id,
+              date_obj: q.created_at,
+              name: a.students?.name,
+              nim: a.students?.nim,
+              question: q.transcript_text,
+              question_audio_url: q.audio_file_path || null,
+              transcript: a.transcript_text,
+              audio_url: a.audio_file_path,
+              duration_answer: a.duration_answer,
+            });
+          }
+        } else {
+          filteredLogs.push({
+            id: null,
+            date_obj: q.created_at,
+            name: null,
+            nim: null,
+            question: q.transcript_text,
+            question_audio_url: q.audio_file_path || null,
+            transcript: null,
+            audio_url: null,
+            duration_answer: null,
+          });
+        }
+      }
     }
 
     let stats = studentsInClass.map((s) => ({
@@ -1627,19 +1663,23 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
     stats.sort((a, b) => b.count - a.count);
 
     filteredLogs.sort((a, b) => {
-      const dateA = new Date(a.date_obj).setHours(0, 0, 0, 0);
-      const dateB = new Date(b.date_obj).setHours(0, 0, 0, 0);
+      const dateA = new Date(a.date_obj || 0).setHours(0, 0, 0, 0);
+      const dateB = new Date(b.date_obj || 0).setHours(0, 0, 0, 0);
       if (dateA !== dateB) return dateB - dateA;
-      if (a.question < b.question) return -1;
-      if (a.question > b.question) return 1;
-      return new Date(a.date_obj) - new Date(b.date_obj);
+      const qA = a.question || "";
+      const qB = b.question || "";
+      if (qA < qB) return -1;
+      if (qA > qB) return 1;
+      return new Date(a.date_obj || 0) - new Date(b.date_obj || 0);
     });
 
-    const rawDates = filteredLogs.map((l) => {
-      const d = new Date(l.date_obj);
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      return d.toISOString().split("T")[0];
-    });
+    const rawDates = filteredLogs
+      .filter((l) => l.date_obj)
+      .map((l) => {
+        const d = new Date(l.date_obj);
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().split("T")[0];
+      });
     const uniqueDates = [...new Set(rawDates)].sort().reverse();
 
     res.render("dosen", {
