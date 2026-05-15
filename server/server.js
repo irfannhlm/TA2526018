@@ -333,20 +333,21 @@ mqttClient.on("message", async (topic, message) => {
         }
 
         if (info.tipe === "dsn") {
-          // DSN_X.txt dibaca ESP (2 baris):
+          // DSN_{device_id}_{no_pertanyaan}.txt dibaca ESP (2 baris):
           //   Baris 1 → no_pertanyaan (integer)
           //   Baris 2 → tanggal       (string, format DD-MM-YYYY)
           //
           // Payload MQTT yang dikirim ESP (dari bacaFileSdKeJson):
           //   {
-          //     "file": "DSN_1.txt",
+          //     "file": "DSN_2_1.txt",
           //     "target_kelas": "...",
+          //     "device_id": 2,
           //     "no_pertanyaan": 1,
           //     "tanggal": "13-05-2026",
           //     "uid": "DOSEN"
           //   }
           //
-          // number_q di DB = no_pertanyaan dari payload (= X pada DSN_X.txt)
+          // device_id dan number_q di DB diambil dari parseNamaFile(file)
 
           const numberQ = parseInt(no_pertanyaan);
           // BARU
@@ -420,11 +421,15 @@ mqttClient.on("message", async (topic, message) => {
 
           // Tidak duplikat — proses normal
           if (existing.length > 0) {
-            // Update date_id pada pertanyaan yang sudah ada
+            // Update date_id (dan device_id jika belum terisi) pada pertanyaan yang sudah ada
+            const updateFields = { date_id: parsedTanggal };
+            if (info.device_id != null && existing[0].device_id == null) {
+              updateFields.device_id = info.device_id;
+            }
             await sbUpdate(
               "questions",
               { question_id: existing[0].question_id },
-              { date_id: parsedTanggal },
+              updateFields,
             );
             console.log(
               `✅ [DSN TXT] questions.id=${existing[0].question_id} → date_id="${parsedTanggal}" diperbarui.`,
@@ -433,7 +438,7 @@ mqttClient.on("message", async (topic, message) => {
             // Buat question baru
             await sbInsert("questions", {
               class_id: classId,
-              device_id: null,
+              device_id: info.device_id ?? null,
               number_q: numberQ,
               date_id: parsedTanggal,
               transcript_text: "",
@@ -462,7 +467,7 @@ mqttClient.on("message", async (topic, message) => {
           } else {
             const newQ = await sbInsert("questions", {
               class_id: classId,
-              device_id: null,
+              device_id: info.device_id ?? null,
               number_q: info.no_pertanyaan,
               transcript_text: "",
             });
@@ -588,14 +593,21 @@ mqttClient.on("message", async (topic, message) => {
 
 // ================= HELPER: Parse nama file dari ESP =================
 function parseNamaFile(namaFile) {
-  const dsnMatch = namaFile.match(/^DSN_(\d+)\.(wav|txt)$/i);
-  if (dsnMatch) return { tipe: "dsn", no_pertanyaan: parseInt(dsnMatch[1]) };
-  const mhsMatch = namaFile.match(/^MHS_(\d+)_(\d+)\.(wav|txt)$/i);
+  const dsnMatch = namaFile.match(/^DSN_(\d+)_(\d+)\.(wav|txt)$/i);
+  if (dsnMatch) {
+    return {
+      tipe: "dsn",
+      device_id: parseInt(dsnMatch[1]),
+      no_pertanyaan: parseInt(dsnMatch[2]),
+    };
+  }
+  const mhsMatch = namaFile.match(/^MHS_(\d+)_(\d+)_(\d+)\.(wav|txt)$/i);
   if (mhsMatch) {
     return {
       tipe: "mhs",
-      no_pertanyaan: parseInt(mhsMatch[1]),
-      no_jawaban: parseInt(mhsMatch[2]),
+      device_id: parseInt(mhsMatch[1]),
+      no_pertanyaan: parseInt(mhsMatch[2]),
+      no_jawaban: parseInt(mhsMatch[3]),
     };
   }
   return null;
@@ -610,10 +622,14 @@ async function simpanAudioKeDB(info, classId, audioUrl) {
       number_q: info.no_pertanyaan,
     });
     if (qRows.length > 0) {
+      const updateFields = { audio_file_path: audioUrl };
+      if (info.device_id != null && qRows[0].device_id == null) {
+        updateFields.device_id = info.device_id;
+      }
       await sbUpdate(
         "questions",
         { question_id: qRows[0].question_id },
-        { audio_file_path: audioUrl },
+        updateFields,
       );
       console.log(
         `✅ [DSN WAV] audio_file_path disimpan di questions.id=${qRows[0].question_id}`,
@@ -621,7 +637,7 @@ async function simpanAudioKeDB(info, classId, audioUrl) {
     } else {
       const newQ = await sbInsert("questions", {
         class_id: classId,
-        device_id: null,
+        device_id: info.device_id ?? null,
         number_q: info.no_pertanyaan,
         audio_file_path: audioUrl,
         transcript_text: "",
@@ -639,7 +655,7 @@ async function simpanAudioKeDB(info, classId, audioUrl) {
     } else {
       const newQ = await sbInsert("questions", {
         class_id: classId,
-        device_id: null,
+        device_id: info.device_id ?? null,
         number_q: info.no_pertanyaan,
         transcript_text: "",
       });

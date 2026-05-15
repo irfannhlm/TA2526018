@@ -91,18 +91,23 @@ void initFileIndex() {
         String name = String(entry.name());
         
         if (name.startsWith("DSN_")) {
-            int dotPos = name.lastIndexOf('.');
-            if (dotPos != -1) {
-                int q = name.substring(4, dotPos).toInt();
-                if (q > maxQ) maxQ = q;
-            }
-        } else if (name.startsWith("MHS_")) {
+            // Format: DSN_{device_id}_{no_pertanyaan}.ext
             int firstU = name.indexOf('_');
             int secondU = name.indexOf('_', firstU + 1);
             int dotPos = name.lastIndexOf('.');
             if (firstU != -1 && secondU != -1 && dotPos != -1) {
-                int q = name.substring(firstU + 1, secondU).toInt();
-                int a = name.substring(secondU + 1, dotPos).toInt();
+                int q = name.substring(secondU + 1, dotPos).toInt();
+                if (q > maxQ) maxQ = q;
+            }
+        } else if (name.startsWith("MHS_")) {
+            // Format: MHS_{device_id}_{no_pertanyaan}_{no_jawaban}.ext
+            int firstU = name.indexOf('_');
+            int secondU = name.indexOf('_', firstU + 1);
+            int thirdU = name.indexOf('_', secondU + 1);
+            int dotPos = name.lastIndexOf('.');
+            if (firstU != -1 && secondU != -1 && thirdU != -1 && dotPos != -1) {
+                int q = name.substring(secondU + 1, thirdU).toInt();
+                int a = name.substring(thirdU + 1, dotPos).toInt();
                 if (q > maxQ) maxQ = q;
                 if (a > maxA) maxA = a;
             }
@@ -270,9 +275,9 @@ void rekamSuara(String uid, unsigned long waktuBerpikir) {
 
     String filename;
     if (prefix == "DSN") {
-        filename = "/DSN_" + String(currentQ) + ".wav";
+        filename = "/DSN_" + String(DEVICE_ID) + "_" + String(currentQ) + ".wav";
     } else {
-        filename = "/MHS_" + String(currentQ) + "_" + String(currentA) + ".wav";
+        filename = "/MHS_" + String(DEVICE_ID) + "_" + String(currentQ) + "_" + String(currentA) + ".wav";
     }
     
     File file = SD.open(filename, FILE_WRITE); 

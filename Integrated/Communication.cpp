@@ -51,26 +51,40 @@ static bool allDigits(const String& s) {
     return true;
 }
 static bool isFormatDSNTxt(const String& n) {
+    // Format: DSN_{device_id}_{no_pertanyaan}.txt
     if (!n.startsWith("DSN_") || !n.endsWith(".txt")) return false;
-    return allDigits(n.substring(4, n.length() - 4));
+    String mid = n.substring(4, n.length() - 4);
+    int us = mid.indexOf('_');
+    if (us <= 0 || mid.indexOf('_', us + 1) != -1) return false;
+    return allDigits(mid.substring(0, us)) && allDigits(mid.substring(us + 1));
 }
 static bool isFormatMHSTxt(const String& n) {
+    // Format: MHS_{device_id}_{no_pertanyaan}_{no_jawaban}.txt
     if (!n.startsWith("MHS_") || !n.endsWith(".txt")) return false;
     String mid = n.substring(4, n.length() - 4);
-    int us = mid.indexOf('_');
-    if (us <= 0 || mid.indexOf('_', us + 1) != -1) return false;
-    return allDigits(mid.substring(0, us)) && allDigits(mid.substring(us + 1));
+    int us1 = mid.indexOf('_');
+    if (us1 <= 0) return false;
+    int us2 = mid.indexOf('_', us1 + 1);
+    if (us2 <= us1 + 1 || mid.indexOf('_', us2 + 1) != -1) return false;
+    return allDigits(mid.substring(0, us1)) && allDigits(mid.substring(us1 + 1, us2)) && allDigits(mid.substring(us2 + 1));
 }
 static bool isFormatDSNWav(const String& n) {
+    // Format: DSN_{device_id}_{no_pertanyaan}.wav
     if (!n.startsWith("DSN_") || !n.endsWith(".wav")) return false;
-    return allDigits(n.substring(4, n.length() - 4));
-}
-static bool isFormatMHSWav(const String& n) {
-    if (!n.startsWith("MHS_") || !n.endsWith(".wav")) return false;
     String mid = n.substring(4, n.length() - 4);
     int us = mid.indexOf('_');
     if (us <= 0 || mid.indexOf('_', us + 1) != -1) return false;
     return allDigits(mid.substring(0, us)) && allDigits(mid.substring(us + 1));
+}
+static bool isFormatMHSWav(const String& n) {
+    // Format: MHS_{device_id}_{no_pertanyaan}_{no_jawaban}.wav
+    if (!n.startsWith("MHS_") || !n.endsWith(".wav")) return false;
+    String mid = n.substring(4, n.length() - 4);
+    int us1 = mid.indexOf('_');
+    if (us1 <= 0) return false;
+    int us2 = mid.indexOf('_', us1 + 1);
+    if (us2 <= us1 + 1 || mid.indexOf('_', us2 + 1) != -1) return false;
+    return allDigits(mid.substring(0, us1)) && allDigits(mid.substring(us1 + 1, us2)) && allDigits(mid.substring(us2 + 1));
 }
 
 // ════════════════════════════════════════════════
@@ -205,25 +219,37 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
     File f = SD.open("/" + namaFile, FILE_READ);
     if (!f) return "";
 
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<300> doc;
     doc["file"]         = namaFile;
     doc["target_kelas"] = targetKelas;
 
     if (isFormatDSNTxt(namaFile)) {
+        // DSN_{device_id}_{no_pertanyaan}.txt
+        String mid = namaFile.substring(4, namaFile.length() - 4);
+        int us = mid.indexOf('_');
+        int deviceId = mid.substring(0, us).toInt();
+
         String baris[2]; int idx = 0;
         while (f.available() && idx < 2) { baris[idx] = f.readStringUntil('\n'); baris[idx].trim(); idx++; }
         f.close();
         if (idx < 2) return "";
+        doc["device_id"]     = deviceId;
         doc["no_pertanyaan"] = baris[0].toInt();
         doc["tanggal"]       = baris[1];
         doc["uid"]           = "DOSEN";
     }
     else if (isFormatMHSTxt(namaFile)) {
+        // MHS_{device_id}_{no_pertanyaan}_{no_jawaban}.txt
+        String mid = namaFile.substring(4, namaFile.length() - 4);
+        int us1 = mid.indexOf('_');
+        int deviceId = mid.substring(0, us1).toInt();
+
         String baris[4]; int idx = 0;
         while (f.available() && idx < 4) { baris[idx] = f.readStringUntil('\n'); baris[idx].trim(); idx++; }
         f.close();
         if (idx < 4) return "";
         String ws = baris[3]; ws.replace(" ms", ""); ws.trim();
+        doc["device_id"]     = deviceId;
         doc["no_pertanyaan"] = baris[0].toInt();
         doc["no_jawaban"]    = baris[1].toInt();
         doc["uid"]           = baris[2];
@@ -231,7 +257,7 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
     }
     else { f.close(); return ""; }
 
-    char buf[256];
+    char buf[300];
     serializeJson(doc, buf);
     return String(buf);
 }
