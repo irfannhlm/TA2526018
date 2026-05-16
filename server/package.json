@@ -11,11 +11,14 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.1",
+    "@deepgram/sdk": "^3.13.0",
+    "@supabase/supabase-js": "^2.105.3",
+    "bcrypt": "^6.0.0",
     "body-parser": "^2.2.1",
     "dotenv": "^17.4.2",
     "ejs": "^3.1.10",
     "express": "^5.2.1",
+    "express-session": "^1.19.0",
     "mqtt": "^5.15.1",
     "multer": "^2.1.1"
   }

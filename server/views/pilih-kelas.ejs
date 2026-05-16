@@ -150,7 +150,7 @@
         <% } else { %>
         <div class="class-grid">
             <% classes.forEach((cls, i) => { %>
-            <a href="/<%= role %>?kelas=<%= encodeURIComponent(cls.name) %>&username=<%= encodeURIComponent(username) %>" class="class-card">
+            <a href="/<%= role %>?kelas=<%= encodeURIComponent(cls.name) %>" class="class-card">
                 <div class="card-banner banner-<%= i % 6 %>"></div>
                 <div class="card-body-custom">
                     <div class="card-codes">

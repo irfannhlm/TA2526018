@@ -135,16 +135,18 @@
     </div>
 
     <div class="main-content">
-      <div class="d-flex justify-content-between align-items-center">
+      <div class="d-flex justify-content-between align-items-center mb-5">
         <div>
           <h1 class="header-title">
-            Monitoring Sesi 
+            Monitoring Sesi
             <span class="class-badge"><%= currentClass %></span>
           </h1>
-          <p class="header-subtitle">Kelola perangkat dan pantau diskusi mahasiswa.</p>
         </div>
-        <div>
-          <a href="/pilih-kelas?role=dosen&username=<%= encodeURIComponent(username) %>" class="btn btn-outline-secondary rounded-pill">
+        <div class="d-flex gap-2 align-items-center">
+          <button class="btn btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#listMahasiswaModal">
+            <i class="fas fa-users me-1"></i> List Kelas
+          </button>
+          <a href="/pilih-kelas?role=dosen" class="btn btn-outline-secondary rounded-pill">
             <i class="fas fa-exchange-alt me-2"></i>Ganti Kelas
           </a>
         </div>
@@ -154,22 +156,25 @@
 
         <!-- ====== TAB: DASHBOARD ====== -->
         <div class="tab-pane fade show active" id="v-pills-control">
-          <div class="row g-4">
+          <div class="row g-4" style="min-height: calc(100vh - 200px);">
             <div class="col-lg-5">
-              <div class="dashboard-card position-relative overflow-hidden">
+              <div class="dashboard-card position-relative overflow-hidden d-flex flex-column">
                 <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: #ff80ab; opacity: 0.1; border-radius: 50%;"></div>
 
+                <div class="mb-3">
+                  <h5 class="fw-bold mb-0">Pengaturan Perangkat</h5>
+                </div>
+
                 <div class="mb-4">
-                  <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
+                  <label class="small text-muted fw-bold mb-2">PERANGKAT TERHUBUNG</label>
                   <form action="/dosen" method="GET">
                     <input type="hidden" name="kelas" value="<%= currentClass %>">
-                    <input type="hidden" name="username" value="<%= username %>">
                     <div class="input-group">
                       <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
-                      <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
+                      <select id="device-select" name="device" class="form-select border-0 fw-bold" style="font-size:1.25rem;" onchange="applySelectColor(this); this.form.submit()">
                         <% devices.forEach(dev => { %>
-                          <option value="<%= dev.id %>" <%= String(currentDevice.id) === String(dev.id) ? 'selected' : '' %>>
-                            <%= dev.name %> (<%= dev.status.toUpperCase() %>)
+                          <option value="<%= dev.id %>" <%= String(currentDevice.id) === String(dev.id) ? 'selected' : '' %> data-bg="white" data-fg="<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>" style="background-color:white;color:<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>;font-weight:700;">
+                            ● <%= dev.name %>
                           </option>
                         <% }) %>
                       </select>
@@ -177,71 +182,67 @@
                   </form>
                 </div>
 
-                <div id="device-card-bg" class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
-                  <div>
-                    <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
-                    <div id="device-status-container" class="d-flex align-items-center gap-2">
-                      <% if(currentDevice.status === 'online') { %>
-                        <span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>
-                      <% } else { %>
-                        <span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>
-                      <% } %>
-                      <small class="text-muted font-monospace"><%= currentDevice.id %></small>
+                <div id="device-card-bg" class="mb-3 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                  <div class="d-flex align-items-stretch">
+
+                    <div id="device-status-container" class="flex-grow-1">
+                      <div class="d-flex align-items-center gap-2 mb-1">
+                        <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                        <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
+                      </div>
+                      <div class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></div>
                     </div>
+
+                    <div style="width:1px;background:rgba(0,0,0,0.1);margin:0 15px;"></div>
+
+                    <div class="flex-grow-1">
+                      <div class="d-flex align-items-center gap-2 mb-1">
+                        <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %><i class="fas fa-battery-full" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                        <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %><i class="fas fa-battery-three-quarters" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                        <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %><i class="fas fa-battery-half" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                        <% } else { %><i class="fas fa-battery-quarter" style="font-size:0.85rem;color:var(--dark-pink);"></i><% } %>
+                        <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">DAYA BATERAI</small>
+                      </div>
+                      <div id="device-battery-container" class="fw-bold" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                        <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
+                      </div>
+                    </div>
+
+                    <small id="device-battery-label" style="display:none;"></small>
                   </div>
-                  <a href="/dosen?kelas=<%= currentClass %>&device=<%= currentDevice.id %>&username=<%= encodeURIComponent(username) %>" class="btn btn-sm btn-white bg-white rounded-circle shadow-sm text-secondary" title="Refresh Status">
-                    <i class="fas fa-sync-alt"></i>
-                  </a>
                 </div>
 
-                <div class="d-flex align-items-end gap-3 mb-4">
-                  <div id="device-battery-container" class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? (currentDevice.battery !== null && currentDevice.battery > 20 ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
-                    <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %> <i class="fas fa-battery-full"></i>
-                    <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %> <i class="fas fa-battery-three-quarters"></i>
-                    <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %> <i class="fas fa-battery-half"></i>
-                    <% } else { %> <i class="fas fa-battery-quarter"></i> <% } %>
-                    <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
-                  </div>
-                  <small id="device-battery-label" class="text-muted mb-2">
-                    <%= currentDevice.status === 'online' ? 'Status Daya Perangkat' : 'Belum ada data dari broker' %>
-                  </small>
+                <div id="wrapper-sync-uid" class="mt-3">
+                  <button type="button" id="btn-sync-uid" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2 w-100" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
+                    <i class="fas fa-satellite-dish me-1"></i> Sinkron ke Alat
+                  </button>
                 </div>
+
+                <div class="flex-grow-1"></div>
 
                 <form action="/dosen/update-settings" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
-                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
-                  
-                  <div class="mb-4">
+                  <div class="mb-0">
                     <label class="small text-muted fw-bold mb-2">MAX DURASI BICARA (MENIT)</label>
                     <div class="input-group bg-light rounded-pill overflow-hidden border" id="timer-input-group">
                       <span class="input-group-text border-0 bg-transparent ps-3"><i class="fas fa-clock text-secondary"></i></span>
-                      <input type="number" id="timer-input" name="timer" class="form-control border-0 bg-transparent" value="<%= session.maxTime %>" <%= currentDevice.status !== 'online' ? 'disabled' : '' %> />
+                      <input type="number" id="timer-input" name="timer" class="form-control border-0 bg-transparent" min="1" value="<%= session.maxTime %>" <%= currentDevice.status !== 'online' ? 'disabled' : '' %> />
                       <button id="btn-set-alat" class="btn btn-link text-decoration-none text-dark fw-bold pe-3" <%= currentDevice.status !== 'online' ? 'disabled' : '' %>>SET KE ALAT</button>
                     </div>
-                    <small class="text-muted" style="font-size: 11px;">*Menekan SET akan mengirimkan pengaturan ini ke mikrokontroler.</small>
                   </div>
                 </form>
               </div>
             </div>
 
             <div class="col-lg-7">
-              <div class="dashboard-card">
+              <div class="dashboard-card d-flex flex-column">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                   <div>
                     <h5 class="fw-bold mb-0">Peserta Aktif</h5>
-                    <small class="text-muted">Kartu yang didaftarkan sesi ini.</small>
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-light text-dark border" id="badge-peserta-count"><%= currentList.length %> Peserta</span>
-                    <button class="btn btn-outline-secondary rounded-pill px-3 fw-bold" style="font-size:0.82rem;" data-bs-toggle="modal" data-bs-target="#listMahasiswaModal">
-                      <i class="fas fa-users me-1"></i> List Kelas
-                    </button>
-                    <div id="wrapper-sync-uid">
-                      <button type="button" id="btn-sync-uid" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
-                        <i class="fas fa-satellite-dish me-1"></i> Sinkron ke Alat
-                      </button>
-                    </div>
                     <button class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background: var(--dark-pink); border: none" data-bs-toggle="modal" data-bs-target="#addUidModal">
                       <i class="fas fa-plus me-1"></i> Tambah
                     </button>
@@ -249,7 +250,7 @@
                 </div>
 
 
-                <div style="max-height: 400px; overflow-y: auto;">
+                <div style="flex:1 1 0;min-height:0;overflow-y:auto;">
                   <table class="table uid-table align-middle border-0">
                     <tbody id="tabel-antrean-body">
                       <% if (currentList.length === 0) { %>
@@ -287,7 +288,6 @@
                             <!-- Tombol hapus per-entri by unique id -->
                             <form action="/dosen/manage-uid" method="POST" class="d-inline">
                               <input type="hidden" name="current_class" value="<%= currentClass %>">
-                              <input type="hidden" name="username" value="<%= username %>">
                               <input type="hidden" name="action" value="delete">
                               <input type="hidden" name="uid" value="<%= item.uid %>">
                               <input type="hidden" name="entry_id" value="<%= item.id %>">
@@ -323,88 +323,10 @@
                 </div>
               </div>
             </div>
-            <div class="table-responsive">
-              <table class="table align-middle" id="logTable" style="border-collapse: separate; border-spacing: 0 5px">
-                <tbody>
-                  <% let lastDate = ''; let lastQuestion = ''; const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }; %>
-                  <% if (logs.length === 0) { %>
-                  <tr>
-                    <td class="text-center py-5 text-muted">Belum ada data.</td>
-                  </tr>
-                  <% } %>
-                  <% logs.forEach(log => { %>
-                  <% let logDate = new Date(log.dateObj); let currentDate = logDate.toLocaleDateString('id-ID', options); let isoDate = logDate.getFullYear() + '-' + String(logDate.getMonth() + 1).padStart(2, '0') + '-' + String(logDate.getDate()).padStart(2, '0'); let isoTime = String(logDate.getHours()).padStart(2, '0') + ':' + String(logDate.getMinutes()).padStart(2, '0'); let studentObj = students.find(s => s.nim === log.nim); let studentId = studentObj ? studentObj.student_id : ''; let dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, ''); let currentQuestion = log.question || "Sesi Tanpa Pertanyaan"; let questionClass = dateClass + '-q-' + currentQuestion.substring(0, 5).replace(/[^a-zA-Z0-9]/g, ''); %>
-                  <% if (currentDate !== lastDate) { %>
-                  <tr class="date-header-row" onclick="toggleGroup(this, '<%= dateClass %>')">
-                    <td colspan="4" class="date-header px-4 py-3">
-                      <div class="d-flex justify-content-between align-items-center">
-                        <span><i class="far fa-calendar-alt me-2"></i> <%= currentDate %></span>
-                        <i class="fas fa-chevron-down chevron-icon"></i>
-                      </div>
-                    </td>
-                  </tr>
-                  <% lastDate = currentDate; lastQuestion = ''; %> <% } %>
-                  <% if (currentQuestion !== lastQuestion) { %>
-                  <tr class="question-header-row <%= dateClass %>" onclick="toggleGroup(this, '<%= questionClass %>')">
-                    <td colspan="4" class="px-4 py-2">
-                      <div class="question-header p-3 d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-question-circle me-2"></i> <%= currentQuestion %></span>
-                        <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
-                      </div>
-                    </td>
-                  </tr>
-                  <% lastQuestion = currentQuestion; %> <% } %>
-
-                  <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
-                    <td style="width: 1%; white-space: nowrap">
-                      <div class="fw-bold text-dark"><%= logDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) %></div>
-                    </td>
-                    <td style="width: 1%; white-space: nowrap; padding-left: 20px; padding-right: 30px;">
-                      <div class="d-flex align-items-center gap-2">
-                        <div class="bg-light rounded-circle text-center d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; color: var(--primary-pink);">
-                          <i class="fas fa-user"></i>
-                        </div>
-                        <div>
-                          <div class="fw-bold small"><%= log.name %></div>
-                          <div class="text-muted" style="font-size: 11px"><%= log.nim %></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="transcript-box" onclick="toggleTranscript(this)">
-                        <p class="transcript-text"><%= log.transcript %></p>
-                        <small class="read-more-label">Lihat Selengkapnya</small>
-                      </div>
-
-                      <% if (log.audio_url) { %>
-                      <audio controls src="<%= log.audio_url %>" style="width: 100%; height: 35px; border-radius: 20px; opacity: 0.8; margin-top: 5px; background-color: #fce4ec;"></audio>
-                      <% } else { %>
-                      <form action="/dosen/request-audio" method="POST" class="mt-2">
-                        <input type="hidden" name="current_class" value="<%= currentClass %>">
-                        <input type="hidden" name="username" value="<%= username %>">
-                        <input type="hidden" name="id" value="<%= log.id %>" />
-                        <button class="btn btn-request btn-sm w-100 rounded-pill py-2">
-                          <i class="fas fa-cloud-download-alt me-2"></i> Unduh File Audio (Server)
-                        </button>
-                      </form>
-                      <% } %>
-                    </td>
-                    <td class="text-end" style="width: 1%; white-space: nowrap; padding-left: 20px">
-                      <button class="btn btn-sm btn-light text-secondary rounded-circle"
-                        data-id="<%= log.id %>"
-                        data-student="<%= studentId %>"
-                        data-date="<%= isoDate %>"
-                        data-time="<%= isoTime %>"
-                        data-question="<%= currentQuestion %>"
-                        data-transcript="<%= log.transcript %>"
-                        onclick="openEditLogModal(this)">
-                        <i class="fas fa-pen"></i>
-                      </button>
-                    </td>
-                  </tr>
-                  <% }) %>
-                </tbody>
-              </table>
+            <div id="logTable" class="mt-2">
+              <div class="text-center py-5 text-muted">
+                <i class="fas fa-spinner fa-spin me-2"></i> Memuat data...
+              </div>
             </div>
           </div>
         </div>
@@ -619,7 +541,6 @@
           <form action="/dosen/add-student" method="POST">
             <input type="hidden" name="kelas" value="<%= currentClass %>">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <input type="hidden" name="username" value="<%= username %>">
             <div class="mb-3">
               <label class="small text-muted fw-bold">NAMA LENGKAP</label>
               <input type="text" name="name" class="form-control bg-light border-0 rounded-3" required placeholder="Contoh: Budi Santoso" />
@@ -659,7 +580,6 @@
               <div class="tab-pane fade show active" id="pills-single">
                 <form action="/dosen/manage-uid" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
-                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="action" value="add_single" />
                   <div class="mb-3">
                     <label class="small text-muted fw-bold">NAMA MAHASISWA</label>
@@ -679,7 +599,6 @@
               <div class="tab-pane fade" id="pills-date">
                 <form action="/dosen/manage-uid" method="POST">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
-                  <input type="hidden" name="username" value="<%= username %>">
                   <input type="hidden" name="action" value="add_date" />
                   <div class="mb-3">
                     <label class="small text-muted fw-bold">TANGGAL SESI LALU</label>
@@ -712,7 +631,6 @@
           </div>
           <form action="/dosen/edit-log" method="POST">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            <input type="hidden" name="username" value="<%= username %>">
             <div class="modal-body pt-0">
               <input type="hidden" name="id" id="editLogId" />
               <div class="mb-3">
@@ -754,14 +672,50 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       const CURRENT_CLASS = '<%= currentClass %>';
-      const CURRENT_USERNAME = '<%= username %>';
 
-      document.getElementById("searchLog").addEventListener("keyup", function () {
-        let val = this.value.toLowerCase();
-        let rows = document.querySelectorAll("#logTable tbody tr:not(.date-header-row):not(.question-header-row)");
-        rows.forEach((r) => {
-          let text = r.innerText.toLowerCase();
-          r.style.display = text.includes(val) ? "" : "none";
+      function applySelectColor(sel) {
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt) return;
+        sel.style.backgroundColor = opt.dataset.bg || '';
+        sel.style.color = opt.dataset.fg || '';
+        sel.style.fontWeight = '700';
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        const sel = document.getElementById('device-select');
+        if (sel) applySelectColor(sel);
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.getElementById('searchLog');
+        if (!searchInput) return;
+
+        searchInput.addEventListener('input', function () {
+          const val = this.value.toLowerCase().trim();
+
+          // Reset semua elemen ke visible
+          document.querySelectorAll('#logTable > div').forEach(r => r.style.display = '');
+          if (!val) return;
+
+          // Filter entri log (bukan header tanggal/pertanyaan)
+          document.querySelectorAll('#logTable > div:not(.date-header-row):not(.question-header-row)').forEach(r => {
+            r.style.display = r.innerText.toLowerCase().includes(val) ? '' : 'none';
+          });
+
+          // Sembunyikan question-header-row jika semua entri anaknya tersembunyi
+          document.querySelectorAll('#logTable .question-header-row').forEach(qh => {
+            const m = (qh.getAttribute('onclick') || '').match(/'([^']+)'\)/);
+            if (!m) return;
+            const kids = document.querySelectorAll('#logTable .' + m[1] + ':not(.question-header-row)');
+            qh.style.display = Array.from(kids).some(k => k.style.display !== 'none') ? '' : 'none';
+          });
+
+          // Sembunyikan date-header-row jika semua anaknya tersembunyi
+          document.querySelectorAll('#logTable .date-header-row').forEach(dh => {
+            const m = (dh.getAttribute('onclick') || '').match(/'([^']+)'\)/);
+            if (!m) return;
+            const kids = document.querySelectorAll('#logTable .' + m[1] + ':not(.date-header-row)');
+            dh.style.display = Array.from(kids).some(k => k.style.display !== 'none') ? '' : 'none';
+          });
         });
       });
 
@@ -785,7 +739,7 @@
         headerRow.classList.toggle("date-collapsed");
         let rows = document.querySelectorAll("." + className);
         rows.forEach((row) => {
-          row.style.display = row.style.display === "none" ? "table-row" : "none";
+          row.style.display = row.style.display === "none" ? "" : "none";
         });
       }
 
@@ -814,7 +768,7 @@
             const res = await fetch('/dosen/sync-uid', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-              body: JSON.stringify({ current_class: CURRENT_CLASS, username: CURRENT_USERNAME, mode })
+              body: JSON.stringify({ current_class: CURRENT_CLASS, mode })
             });
             const data = await res.json();
             results.push(data);
@@ -894,8 +848,20 @@
         });
       }
 
-      function confirmAudioSync() {
-        Swal.fire({
+      // =========================================================
+      // MINTA FILE PERANGKAT — dengan loading & polling status
+      // =========================================================
+      let syncPollInterval = null;
+
+      function stopSyncPolling() {
+        if (syncPollInterval) {
+          clearInterval(syncPollInterval);
+          syncPollInterval = null;
+        }
+      }
+
+      async function confirmAudioSync() {
+        const result = await Swal.fire({
           title: 'Minta File Rekaman',
           text: "Minta perangkat (ESP32) untuk mengunggah semua file rekaman yang tersisa?",
           icon: 'info',
@@ -904,26 +870,116 @@
           cancelButtonColor: '#888888',
           confirmButtonText: 'Ya, Minta File!',
           cancelButtonText: 'Batal',
-        }).then(async (result) => {
-          if (result.isConfirmed) {
-            Swal.fire({ title: 'Mengirim...', text: 'Mengirimkan permintaan ke alat.', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-            try {
-              const res = await fetch('/dosen/request-audio-sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ current_class: CURRENT_CLASS, username: CURRENT_USERNAME })
-              });
-              const data = await res.json();
-              if (data.success) {
-                Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message, confirmButtonColor: '#d81b60' });
-              } else {
-                Swal.fire({ icon: 'error', title: 'Gagal!', text: data.message, confirmButtonColor: '#d81b60' });
-              }
-            } catch (e) {
-              Swal.fire({ icon: 'error', title: 'Error!', text: 'Tidak dapat terhubung ke server.', confirmButtonColor: '#d81b60' });
-            }
-          }
         });
+
+        if (!result.isConfirmed) return;
+
+        // Reset status di server lalu kirim request ke ESP
+        await fetch('/api/sync-status/reset', { method: 'POST' });
+
+        // Tampilkan loading Swal (tidak bisa ditutup user)
+        Swal.fire({
+          title: '<i class="fas fa-satellite-dish me-2" style="color:#d81b60;"></i>Menghubungi Perangkat',
+          html: `
+            <div class="text-muted mb-3" style="font-size:0.9rem;">Mengirim permintaan ke ESP32...</div>
+            <div class="progress rounded-pill mb-2" style="height:8px;background:#fce4ec;">
+              <div id="swal-sync-bar" class="progress-bar rounded-pill" style="width:0%;background:linear-gradient(90deg,#ff80ab,#d81b60);transition:width 0.5s ease;"></div>
+            </div>
+            <div id="swal-sync-info" class="text-muted" style="font-size:0.8rem;">Menunggu respons perangkat...</div>
+          `,
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
+        // Kirim request ke ESP32
+        try {
+          const res = await fetch('/dosen/request-audio-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ current_class: CURRENT_CLASS })
+          });
+          const data = await res.json();
+          if (!data.success) {
+            stopSyncPolling();
+            Swal.fire({ icon: 'error', title: 'Gagal Mengirim!', text: data.message || 'Tidak dapat menghubungi perangkat.', confirmButtonColor: '#d81b60' });
+            return;
+          }
+        } catch (e) {
+          stopSyncPolling();
+          Swal.fire({ icon: 'error', title: 'Error!', text: 'Tidak dapat terhubung ke server.', confirmButtonColor: '#d81b60' });
+          return;
+        }
+
+        // Mulai polling status sync dari server
+        stopSyncPolling();
+        syncPollInterval = setInterval(async () => {
+          try {
+            const res = await fetch('/api/sync-status', { cache: 'no-store' });
+            if (!res.ok) return;
+            const s = await res.json();
+
+            const bar  = document.getElementById('swal-sync-bar');
+            const info = document.getElementById('swal-sync-info');
+
+            if (s.state === 'loading') {
+              // Hitung progress bar
+              const pct = s.total > 0 ? Math.round((s.berhasil / s.total) * 100) : 15;
+              if (bar)  bar.style.width  = pct + '%';
+              if (info) info.innerHTML   =
+                s.total > 0
+                  ? `<i class="fas fa-spinner fa-spin me-1"></i> Mengunduh file ${s.berhasil} / ${s.total}...`
+                  : `<i class="fas fa-spinner fa-spin me-1"></i> ${s.pesan || 'Sedang memproses...'}`;
+
+            } else if (s.state === 'done') {
+              stopSyncPolling();
+              Swal.fire({
+                icon: 'success',
+                title: 'Sinkronisasi Selesai!',
+                html: `
+                  <div class="text-muted mb-2">Semua file berhasil diterima dari perangkat.</div>
+                  <div class="d-flex justify-content-center gap-4 mt-3">
+                    <div class="text-center">
+                      <div style="font-size:1.8rem;font-weight:700;color:#d81b60;">${s.total}</div>
+                      <div class="text-muted small">Total File</div>
+                    </div>
+                    <div class="text-center">
+                      <div style="font-size:1.8rem;font-weight:700;color:#2e7d32;">${s.berhasil}</div>
+                      <div class="text-muted small">Berhasil</div>
+                    </div>
+                  </div>
+                  ${s.pesan ? `<div class="mt-3 text-muted" style="font-size:0.82rem;">${s.pesan}</div>` : ''}
+                `,
+                confirmButtonColor: '#d81b60',
+                confirmButtonText: 'Tutup',
+              });
+
+            } else if (s.state === 'error') {
+              stopSyncPolling();
+              Swal.fire({
+                icon: 'error',
+                title: 'Sinkronisasi Gagal',
+                html: `
+                  <div class="text-muted mb-2">${s.pesan || 'Terjadi kesalahan pada perangkat.'}</div>
+                  ${s.total > 0 ? `<div class="text-muted small">Progress terakhir: ${s.berhasil} / ${s.total} file</div>` : ''}
+                `,
+                confirmButtonColor: '#d81b60',
+                confirmButtonText: 'Tutup',
+              });
+
+            } else if (s.state === 'cancelled') {
+              stopSyncPolling();
+              Swal.fire({
+                icon: 'warning',
+                title: 'Sinkronisasi Dibatalkan',
+                text: s.pesan || 'Proses dihentikan oleh perangkat.',
+                confirmButtonColor: '#d81b60',
+                confirmButtonText: 'Tutup',
+              });
+            }
+          } catch (e) { /* silent */ }
+        }, 2000); // polling tiap 2 detik
       }
 
       // =========================================================
@@ -987,7 +1043,6 @@
                 let deleteBtn = `
                   <form action="/dosen/manage-uid" method="POST" class="d-inline">
                     <input type="hidden" name="current_class" value="${CURRENT_CLASS}">
-                    <input type="hidden" name="username" value="${CURRENT_USERNAME}">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="uid" value="${item.uid}">
                     <input type="hidden" name="entry_id" value="${item.id}">
@@ -1035,10 +1090,14 @@
 
             const statusContainer = document.querySelector('#device-status-container');
             if (statusContainer) {
-              let badgeHtml = isOnline
-                ? `<span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>`
-                : `<span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>`;
-              statusContainer.innerHTML = `${badgeHtml} <small class="text-muted font-monospace">${dev.id}</small>`;
+              const dotColor = isOnline ? '#2e7d32' : '#c62828';
+              const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
+              statusContainer.innerHTML = `
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                  <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
+                </div>
+                <div class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</div>`;
             }
 
             const batContainer = document.querySelector('#device-battery-container');
@@ -1049,7 +1108,13 @@
               let hasBat = (batVal !== null && batVal !== undefined && batVal !== '');
               batText.innerText = hasBat ? `${batVal}%` : '--';
               batLabel.innerText = hasBat ? 'Status Daya Perangkat' : 'Belum ada data dari broker';
-              batContainer.style.color = isOnline ? ((hasBat && batVal > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999';
+              let batColor = '#999';
+              if (isOnline) {
+                if (hasBat && batVal > 75) batColor = '#43a047';
+                else if (hasBat && batVal > 30) batColor = '#f9a825';
+                else batColor = '#dc3545';
+              }
+              batContainer.style.color = batColor;
             }
           }
 
@@ -1084,10 +1149,11 @@
         logs.forEach(log => {
           const logDate = new Date(log.date_obj);
           const currentDate = logDate.toLocaleDateString('id-ID', options);
-          const currentQuestion = log.question || 'Sesi Tanpa Pertanyaan';
+          const currentQuestion = log.question === '[SILENT]' ? '' : (log.question || '');
           const dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, '');
           const questionClass = dateClass + '-q-' + currentQuestion.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
           const silenceLabel = formatDurasi(log.duration_answer);
+
           if (currentDate !== lastDate) {
             html += `
             <div class="date-header-row mb-2 mt-3" onclick="toggleGroup(this, '${dateClass}')" style="cursor:pointer;">
@@ -1096,19 +1162,40 @@
                 <i class="fas fa-chevron-down chevron-icon"></i>
               </div>
             </div>`;
-            lastDate = currentDate; lastQuestion = '';
+            lastDate = currentDate;
+            lastQuestion = '';
           }
+
           if (currentQuestion !== lastQuestion) {
+            const qAudio = log.question_audio_url || '';
+            const isSilentQuestion = log.question === '[SILENT]';
+            const questionLabel = isSilentQuestion
+              ? `<span style="font-style:italic;color:#aaa;"><i class="fas fa-microphone-slash me-2"></i>Tidak ada suara terdeteksi</span>`
+              : `<span><i class="fas fa-question-circle me-2"></i> ${currentQuestion || 'Sesi Tanpa Pertanyaan'}</span>`;
+            const audioHtml = isSilentQuestion ? '' : (qAudio
+              ? `<audio controls src="${qAudio}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;margin-top:8px;background-color:#fce4ec;" onclick="event.stopPropagation()"></audio>`
+              : `<div class="text-muted mt-2" style="font-size:11px;"><i class="fas fa-microphone-slash me-1"></i> Audio pertanyaan belum tersedia</div>`);
+
             html += `
             <div class="question-header-row ${dateClass} mb-1 ms-3" onclick="toggleGroup(this, '${questionClass}')" style="cursor:pointer;">
-              <div class="question-header px-3 py-2 d-flex justify-content-between align-items-center rounded-3">
-                <span><i class="fas fa-question-circle me-2"></i> ${currentQuestion}</span>
-                <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
+              <div class="question-header px-3 py-2 rounded-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  ${questionLabel}
+                  <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
+                </div>
+                ${audioHtml}
               </div>
             </div>`;
             lastQuestion = currentQuestion;
           }
-          html += `
+
+          if (log.id === null || log.id === undefined) {
+            html += `
+            <div class="${dateClass} ${questionClass} ms-5 mb-2 text-center text-muted py-3" style="font-size:0.9rem;font-style:italic;">
+              <i class="fas fa-comment-slash me-2"></i> Belum ada jawaban untuk pertanyaan ini
+            </div>`;
+          } else {
+            html += `
           <div class="${dateClass} ${questionClass} log-entry ms-5 mb-2" style="position:relative;">
             <div style="position:absolute;left:-20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#ffb6c1,#fce4ec);border-radius:2px;"></div>
             <div style="position:absolute;left:-25px;top:20px;width:12px;height:12px;background:var(--primary-pink);border-radius:50%;border:2px solid white;box-shadow:0 0 0 2px var(--primary-pink);"></div>
@@ -1127,17 +1214,24 @@
                   ${silenceLabel ? `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Waktu diam sebelum menjawab"><i class="fas fa-hourglass-start me-1"></i>${silenceLabel} diam</span>` : ''}
                 </div>
               </div>
-              <div class="transcript-box mb-2" onclick="toggleTranscript(this)" style="background:#fafafa;border:1px solid #f0e0e8;">
-                <p class="transcript-text mb-0" style="font-size:0.88rem;line-height:1.6;color:#4a4a4a;">${log.transcript || '-'}</p>
-                <small class="read-more-label" style="display:none;">Lihat Selengkapnya</small>
-              </div>
+              ${log.transcript === '[SILENT]'
+                ? `<div class="mb-2 px-3 py-2 rounded-3 d-flex align-items-center gap-2" style="background:#f5f5f5;border:1px dashed #ccc;">
+                    <i class="fas fa-microphone-slash" style="color:#bbb;font-size:0.85rem;"></i>
+                    <span style="font-size:0.82rem;color:#aaa;font-style:italic;">Tidak ada suara terdeteksi</span>
+                  </div>`
+                : `<div class="transcript-box mb-2" onclick="toggleTranscript(this)" style="background:#fafafa;border:1px solid #f0e0e8;">
+                    <p class="transcript-text mb-0" style="font-size:0.88rem;line-height:1.6;color:#4a4a4a;">${log.transcript || '-'}</p>
+                    <small class="read-more-label" style="display:none;">Lihat Selengkapnya</small>
+                  </div>`
+              }
               ${log.audio_url && log.audio_url !== '#'
                 ? `<audio controls src="${log.audio_url}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;"></audio>`
                 : `<button class="btn btn-sm w-100 rounded-pill py-1" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;" disabled>
                     <i class="fas fa-cloud-download-alt me-2"></i> Audio belum tersedia
-                   </button>`}
+                  </button>`}
             </div>
           </div>`;
+          }
         });
         return html;
       }
@@ -1164,6 +1258,99 @@
 
       setInterval(updateLogs, 5000);
       updateLogs();
+
+      // =========================================================
+      // POLLING DUPLIKAT — cek antrian file duplikat tiap 3 detik
+      // =========================================================
+      let shownDuplicateQids = new Set();
+
+      async function checkDuplicateQueue() {
+        try {
+          const res = await fetch('/api/duplicate-queue', { cache: 'no-store' });
+          if (!res.ok) return;
+          const data = await res.json();
+          const pending = data.pending || [];
+
+          for (const item of pending) {
+            if (shownDuplicateQids.has(item.qid)) continue; // sudah ditampilkan
+            shownDuplicateQids.add(item.qid);
+            showDuplicatePopup(item);
+          }
+        } catch (e) { /* silent */ }
+      }
+
+      async function showDuplicatePopup(item) {
+        const tipeLabel =
+          item.tipe === "wav"     ? "File Audio (WAV)" :
+          item.tipe === "txt_dsn" ? "Data Pertanyaan (TXT)" :
+          item.tipe === "txt_mhs" ? "Data Jawaban (TXT)" : item.tipe;
+
+        const iconClass =
+          item.tipe === "wav" ? "fas fa-file-audio" : "fas fa-file-alt";
+
+        const result = await Swal.fire({
+          title: '<i class="fas fa-exclamation-triangle" style="color:#f57c00;"></i> File Duplikat Terdeteksi',
+          html: `
+            <div class="text-start">
+              <div class="rounded-3 p-3 mb-3" style="background:#fff3e0;border:1px solid #ffe0b2;">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="${iconClass}" style="color:#e65100;font-size:1.1rem;"></i>
+                  <span class="fw-bold text-dark" style="font-size:0.95rem;">${item.file}</span>
+                </div>
+                <div class="text-muted" style="font-size:0.82rem;">${tipeLabel} · Kelas: ${item.target_kelas}</div>
+              </div>
+              <div class="text-muted mb-3" style="font-size:0.88rem;">
+                <i class="fas fa-database me-1" style="color:#bbb;"></i>
+                Data yang sudah ada: <strong>${item.existingPreview}</strong>
+              </div>
+              <div class="rounded-3 p-3" style="background:#fce4ec;border:1px solid #f8bbd0;font-size:0.85rem;color:#880e4f;">
+                <i class="fas fa-info-circle me-1"></i>
+                Pilih <strong>Timpa (Replace)</strong> untuk mengganti data lama dengan yang baru,
+                atau <strong>Lewati (Skip)</strong> untuk mempertahankan data lama.
+              </div>
+            </div>
+          `,
+          icon: null,
+          showCancelButton: true,
+          confirmButtonColor: '#d81b60',
+          cancelButtonColor: '#607d8b',
+          confirmButtonText: '<i class="fas fa-sync-alt me-1"></i> Timpa (Replace)',
+          cancelButtonText: '<i class="fas fa-forward me-1"></i> Lewati (Skip)',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+        });
+
+        const action = result.isConfirmed ? 'replace' : 'skip';
+
+        try {
+          await fetch('/api/duplicate-resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qid: item.qid, action }),
+          });
+
+          // Notifikasi kecil hasil keputusan
+          const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+          });
+          Toast.fire({
+            icon: action === 'replace' ? 'success' : 'info',
+            title: action === 'replace'
+              ? `File <b>${item.file}</b> berhasil ditimpa.`
+              : `File <b>${item.file}</b> dilewati, data lama dipertahankan.`,
+          });
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Gagal!', text: 'Tidak dapat mengirim keputusan ke server.', confirmButtonColor: '#d81b60' });
+        }
+      }
+
+      setInterval(checkDuplicateQueue, 3000);
+      checkDuplicateQueue();
+
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
