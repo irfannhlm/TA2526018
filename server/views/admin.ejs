@@ -94,9 +94,15 @@
         </div>
         
         <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist">
-            <button class="nav-link active" id="v-pills-dashboard-tab" data-bs-toggle="pill" data-bs-target="#v-pills-dashboard">
-                <i class="fas fa-satellite-dish"></i> Monitoring Live
+            <% if (currentClass) { %>
+            <button class="nav-link" id="v-pills-dashboard-tab" data-bs-toggle="pill" data-bs-target="#v-pills-dashboard">
+                <i class="fas fa-satellite-dish"></i> Dashboard
             </button>
+            <% } else { %>
+            <a href="/pilih-kelas" class="nav-link">
+                <i class="fas fa-satellite-dish"></i> Dashboard
+            </a>
+            <% } %>
             <button class="nav-link" id="v-pills-classes-tab" data-bs-toggle="pill" data-bs-target="#v-pills-classes">
                 <i class="fas fa-chalkboard"></i> Manajemen Kelas
             </button>
@@ -121,77 +127,21 @@
 
     <div class="main-content">
         
-        <% 
-            let activeClassCode = currentClass || '—'; 
-            if (currentClass && typeof classes !== 'undefined' && classes.length > 0) {
-                const matchedClass = classes.find(c => c.name === currentClass);
-                if (matchedClass && matchedClass.code) {
-                    activeClassCode = matchedClass.code;
-                }
-            }
+        <%
+            let activeClassName = currentClass || '—';
         %>
 
         <div class="tab-content" id="v-pills-tabContent">
             
             <!-- ====== TAB: MONITORING LIVE ====== -->
-            <div class="tab-pane fade show active" id="v-pills-dashboard">
-                
-                <% if (!currentClass) { %>
-                <!-- Belum pilih kelas: tampilkan kartu kelas untuk dipilih -->
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h1 class="header-title">Monitoring Live</h1>
-                        <p class="header-subtitle">Pilih kelas terlebih dahulu untuk memulai monitoring.</p>
-                    </div>
-                </div>
-
-                <% if (classes.length === 0) { %>
-                <div class="dashboard-card h-auto text-center py-5">
-                    <i class="fas fa-chalkboard fa-3x text-muted mb-3"></i>
-                    <p class="fw-bold text-muted">Belum ada kelas.</p>
-                    <button class="btn text-white rounded-pill px-4 py-2 fw-bold" style="background: var(--dark-pink);" data-bs-toggle="pill" data-bs-target="#v-pills-classes">
-                        <i class="fas fa-plus me-2"></i> Buat Kelas Baru
-                    </button>
-                </div>
-                <% } else { %>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">
-                    <% classes.forEach((c, i) => { const banners = ['linear-gradient(135deg,#fff9c4,#f5e090)','linear-gradient(135deg,#d4f5e2,#a8ddb5)','linear-gradient(135deg,#ffd6d6,#f5b8b8)','linear-gradient(135deg,#d4e8ff,#b3cfee)','linear-gradient(135deg,#ead5ff,#d0b0f0)','linear-gradient(135deg,#ffe0cc,#f5c4a0)']; %>
-                    <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>" style="text-decoration:none;color:inherit;">
-                        <div style="background:white;border-radius:18px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.07);transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 10px 24px rgba(0,0,0,0.12)';" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 12px rgba(0,0,0,0.07)';">
-                            <div style="height:130px;background:<%= banners[i%6] %>;position:relative;overflow:hidden;">
-                                <div style="position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,0.22);top:-45px;right:-30px;"></div>
-                                <div style="position:absolute;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,0.15);bottom:-25px;right:30px;"></div>
-                            </div>
-                            <div style="padding:14px 16px 10px;">
-                                <div style="font-size:0.7rem;font-weight:700;color:#bbb;margin-bottom:3px;"><%= c.code %> <span style="color:#e0e0e0;">|</span> <span style="color:var(--dark-pink)"><%= c.code %></span></div>
-                                <div style="font-size:0.95rem;font-weight:700;color:#1a1a1a;margin-bottom:10px;"><%= c.name %></div>
-                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-                                    <div style="width:30px;height:30px;border-radius:50%;background:#f0f2f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:0.8rem;flex-shrink:0;"><i class="fas fa-user"></i></div>
-                                    <div>
-                                        <div style="font-size:0.78rem;font-weight:600;color:#333;"><%= c.lecturer || 'Belum diisi' %></div>
-                                        <div style="font-size:0.68rem;color:#aaa;">Dosen Pengampu</div>
-                                    </div>
-                                </div>
-                                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #f2f2f2;">
-                                    <span style="font-size:0.75rem;color:#666;">Kelas <strong style="color:#22c55e"><%= c.code %></strong></span>
-                                    <span style="font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;<%= c.student_count > 0 ? 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;' : 'background:#f9fafb;color:#9ca3af;border:1px solid #e5e7eb;' %>"><%= c.student_count %> Mhs</span>
-                                </div>
-                            </div>
-                        </div>
-                    </a>
-                    <% }) %>
-                </div>
-                <% } %>
-
-                <% } else { %>
-                <!-- Sudah pilih kelas: tampilkan monitoring normal -->
+            <div class="tab-pane fade" id="v-pills-dashboard">
+                <% if (currentClass) { %>
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h1 class="header-title">
-                            Panel Admin 
-                            <span class="class-badge"><%= activeClassCode %></span>
+                            Panel Admin
+                            <span class="class-badge"><%= activeClassName %></span>
                         </h1>
-                        <p class="header-subtitle">Monitoring perangkat dan manajemen data.</p>
                     </div>
                     
                     <div class="d-flex gap-2">
@@ -207,13 +157,13 @@
                     </div>
                 </div>
 
-                <div class="row g-4" style="min-height: calc(100vh - 200px);">
+                <div class="row g-4 mt-3" style="min-height: calc(100vh - 200px);">
                     <div class="col-lg-5">
                         <div class="dashboard-card position-relative overflow-hidden d-flex flex-column">
                             <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: #ff80ab; opacity: 0.1; border-radius: 50%;"></div>
 
                             <div class="mb-4">
-                                <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
+                                <h5 class="fw-bold mb-3">Perangkat Terhubung</h5>
                                 <form action="/admin" method="GET">
                                     <input type="hidden" name="kelas" value="<%= currentClass %>">
                                     <div class="input-group">
@@ -268,8 +218,7 @@
                         <div class="dashboard-card d-flex flex-column">
                             <div class="d-flex justify-content-between align-items-center mb-4">
                                 <div>
-                                    <h5 class="fw-bold mb-0">Aktivitas Scan (Live)</h5>
-                                    <small class="text-muted">Kartu yang terdeteksi perangkat saat ini.</small>
+                                    <h5 class="fw-bold mb-0">Aktivitas Scan</h5>
                                 </div>
                                 <span class="badge bg-light text-dark border"><%= currentList.length %> Scan</span>
                             </div>
@@ -333,7 +282,7 @@
 
             <!-- ====== TAB: MANAJEMEN KELAS ====== -->
             <div class="tab-pane fade" id="v-pills-classes">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Kelas</h1>
                         <p class="header-subtitle">Tambah, edit, atau hapus data kelas.</p>
@@ -405,7 +354,7 @@
 
             <!-- ====== TAB: MANAJEMEN AKUN ====== -->
             <div class="tab-pane fade" id="v-pills-accounts">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Akun</h1>
                         <p class="header-subtitle">Atur hak akses login sistem.</p>
@@ -885,7 +834,11 @@
     <script>
         // 1. SISTEM MENGINGAT TAB
         document.addEventListener("DOMContentLoaded", function () {
-            let activePillId = localStorage.getItem("activePill");
+            // Tanpa kelas: selalu tampilkan Manajemen Akun
+            let activePillId = CURRENT_CLASS
+                ? localStorage.getItem("activePill")
+                : '#v-pills-accounts';
+
             if (activePillId) {
                 let triggerEl = document.querySelector(`button[data-bs-target="${activePillId}"]`);
                 if (triggerEl) {
@@ -897,7 +850,7 @@
             pillElements.forEach(function (pill) {
                 pill.addEventListener("shown.bs.tab", function (event) {
                     let targetId = event.target.getAttribute("data-bs-target");
-                    localStorage.setItem("activePill", targetId);
+                    if (CURRENT_CLASS) localStorage.setItem("activePill", targetId);
                 });
             });
         });

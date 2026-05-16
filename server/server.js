@@ -513,7 +513,7 @@ mqttClient.on("message", async (topic, message) => {
               { answer_id: aRows[0].answer_id },
               {
                 student_id: student ? student.student_id : null,
-                duration_answer: Math.round(waktu_diam_ms / 1000),
+                duration_answer: waktu_diam_ms / 1000,
                 class_id: classId,
               },
             );
@@ -525,7 +525,7 @@ mqttClient.on("message", async (topic, message) => {
               question_id: qId,
               student_id: student ? student.student_id : null,
               transcript_text: "",
-              duration_answer: Math.round(waktu_diam_ms / 1000),
+              duration_answer: waktu_diam_ms / 1000,
               number_a: info.no_jawaban,
               class_id: classId,
             });
@@ -1073,7 +1073,7 @@ app.post("/api/duplicate-resolve", requireLogin, async (req, res) => {
         {
           student_id: item.studentId,
           duration_answer: item.waktu_diam_ms
-            ? Math.round(item.waktu_diam_ms / 1000)
+            ? item.waktu_diam_ms / 1000
             : null,
           class_id: item.classId,
         },
@@ -1112,7 +1112,8 @@ app.post("/login", async (req, res) => {
       role: user.role,
     };
 
-    return res.redirect("/pilih-kelas");
+    const redirectTo = user.role === "admin" ? "/admin" : "/pilih-kelas";
+    return res.redirect(redirectTo);
   } catch (err) {
     console.error(err);
     res.render("login", { error: "Terjadi kesalahan server." });
@@ -1174,8 +1175,6 @@ app.get("/admin", requireRole("admin"), async (req, res) => {
   const currentClass = req.query.kelas || null;
   const currentDeviceId = req.query.device;
 
-  if (!currentClass) return res.redirect("/pilih-kelas");
-
   try {
     const { data: allClassesRaw } = await supabase
       .from("classes")
@@ -1192,6 +1191,30 @@ app.get("/admin", requireRole("admin"), async (req, res) => {
       student_count: c.class_students?.length || 0,
     }));
 
+    const users = await sbSelect("users");
+    const dosenUsers = await sbSelect(
+      "users",
+      { role: "dosen" },
+      "user_id,username",
+    );
+
+    if (!currentClass) {
+      return res.render("admin", {
+        students: [],
+        studentsNotInClass: [],
+        devices: [],
+        currentDevice: { id: "N/A", name: "Belum Ada Perangkat", status: "offline", battery: null },
+        classes: allClasses,
+        currentClass: null,
+        session: sessionData,
+        currentList: [],
+        users,
+        dosenUsers,
+        logs: [],
+        username,
+      });
+    }
+
     const devicesRaw = await sbSelect(
       "devices",
       {},
@@ -1203,13 +1226,6 @@ app.get("/admin", requireRole("admin"), async (req, res) => {
       status: d.status,
       battery: d.battery_level,
     }));
-
-    const users = await sbSelect("users");
-    const dosenUsers = await sbSelect(
-      "users",
-      { role: "dosen" },
-      "user_id,username",
-    );
 
     const classRec = allClasses.find((c) => c.name === currentClass);
 

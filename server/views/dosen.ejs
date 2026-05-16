@@ -171,7 +171,7 @@
                     <input type="hidden" name="kelas" value="<%= currentClass %>">
                     <div class="input-group">
                       <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
-                      <select id="device-select" name="device" class="form-select border-0 fw-bold" onchange="applySelectColor(this); this.form.submit()">
+                      <select id="device-select" name="device" class="form-select border-0 fw-bold" style="font-size:1.25rem;" onchange="applySelectColor(this); this.form.submit()">
                         <% devices.forEach(dev => { %>
                           <option value="<%= dev.id %>" <%= String(currentDevice.id) === String(dev.id) ? 'selected' : '' %> data-bg="white" data-fg="<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>" style="background-color:white;color:<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>;font-weight:700;">
                             ● <%= dev.name %>
@@ -323,103 +323,10 @@
                 </div>
               </div>
             </div>
-            <div class="table-responsive">
-              <table class="table align-middle" id="logTable" style="border-collapse: separate; border-spacing: 0 5px">
-                <tbody>
-                  <% let lastDate = ''; let lastQuestion = ''; let lastQuestionAudio = ''; const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }; %>
-                  <% if (logs.length === 0) { %>
-                  <tr>
-                    <td class="text-center py-5 text-muted">Belum ada data.</td>
-                  </tr>
-                  <% } %>
-                  <% logs.forEach(log => { %>
-                  <% let logDate = new Date(log.dateObj); let currentDate = logDate.toLocaleDateString('id-ID', options); let isoDate = logDate.getFullYear() + '-' + String(logDate.getMonth() + 1).padStart(2, '0') + '-' + String(logDate.getDate()).padStart(2, '0'); let isoTime = String(logDate.getHours()).padStart(2, '0') + ':' + String(logDate.getMinutes()).padStart(2, '0'); let studentObj = students.find(s => s.nim === log.nim); let studentId = studentObj ? studentObj.student_id : ''; let dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, ''); let currentQuestion = log.question || "Sesi Tanpa Pertanyaan"; let questionClass = dateClass + '-q-' + currentQuestion.substring(0, 5).replace(/[^a-zA-Z0-9]/g, ''); %>
-                  <% if (currentDate !== lastDate) { %>
-                  <tr class="date-header-row" onclick="toggleGroup(this, '<%= dateClass %>')">
-                    <td colspan="4" class="date-header px-4 py-3">
-                      <div class="d-flex justify-content-between align-items-center">
-                        <span><i class="far fa-calendar-alt me-2"></i> <%= currentDate %></span>
-                        <i class="fas fa-chevron-down chevron-icon"></i>
-                      </div>
-                    </td>
-                  </tr>
-                  <% lastDate = currentDate; lastQuestion = ''; lastQuestionAudio = ''; %> <% } %>
-                  <% if (currentQuestion !== lastQuestion) { %>
-                  <% lastQuestionAudio = log.question_audio_url || ''; %>
-                  <tr class="question-header-row <%= dateClass %>" onclick="toggleGroup(this, '<%= questionClass %>')">
-                    <td colspan="4" class="px-4 py-2">
-                      <div class="question-header p-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                          <span><i class="fas fa-question-circle me-2"></i> <%= currentQuestion %></span>
-                          <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
-                        </div>
-                        <% if (lastQuestionAudio) { %>
-                        <audio controls src="<%= lastQuestionAudio %>" style="width: 100%; height: 35px; border-radius: 20px; opacity: 0.8; margin-top: 8px; background-color: #fce4ec;" onclick="event.stopPropagation()"></audio>
-                        <% } else { %>
-                        <div class="text-muted mt-2" style="font-size: 11px;"><i class="fas fa-microphone-slash me-1"></i> Audio pertanyaan belum tersedia</div>
-                        <% } %>
-                      </div>
-                    </td>
-                  </tr>
-                  <% lastQuestion = currentQuestion; %> <% } %>
-
-                  <% if (log.id === null || log.id === undefined) { %>
-                  <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
-                    <td colspan="4" class="text-center text-muted py-3" style="font-size: 0.9rem; font-style: italic;">
-                      <i class="fas fa-comment-slash me-2"></i> Belum ada jawaban untuk pertanyaan ini
-                    </td>
-                  </tr>
-                  <% } else { %>
-                  <tr class="border-bottom <%= dateClass %> <%= questionClass %>">
-                    <td style="width: 1%; white-space: nowrap">
-                      <div class="fw-bold text-dark"><%= logDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) %></div>
-                    </td>
-                    <td style="width: 1%; white-space: nowrap; padding-left: 20px; padding-right: 30px;">
-                      <div class="d-flex align-items-center gap-2">
-                        <div class="bg-light rounded-circle text-center d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; color: var(--primary-pink);">
-                          <i class="fas fa-user"></i>
-                        </div>
-                        <div>
-                          <div class="fw-bold small"><%= log.name %></div>
-                          <div class="text-muted" style="font-size: 11px"><%= log.nim %></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="transcript-box" onclick="toggleTranscript(this)">
-                        <p class="transcript-text"><%= log.transcript %></p>
-                        <small class="read-more-label">Lihat Selengkapnya</small>
-                      </div>
-
-                      <% if (log.audio_url) { %>
-                      <audio controls src="<%= log.audio_url %>" style="width: 100%; height: 35px; border-radius: 20px; opacity: 0.8; margin-top: 5px; background-color: #fce4ec;"></audio>
-                      <% } else { %>
-                      <form action="/dosen/request-audio" method="POST" class="mt-2">
-                        <input type="hidden" name="current_class" value="<%= currentClass %>">
-                        <input type="hidden" name="id" value="<%= log.id %>" />
-                        <button class="btn btn-request btn-sm w-100 rounded-pill py-2">
-                          <i class="fas fa-cloud-download-alt me-2"></i> Unduh File Audio (Server)
-                        </button>
-                      </form>
-                      <% } %>
-                    </td>
-                    <td class="text-end" style="width: 1%; white-space: nowrap; padding-left: 20px">
-                      <button class="btn btn-sm btn-light text-secondary rounded-circle"
-                        data-id="<%= log.id %>"
-                        data-student="<%= studentId %>"
-                        data-date="<%= isoDate %>"
-                        data-time="<%= isoTime %>"
-                        data-question="<%= currentQuestion %>"
-                        data-transcript="<%= log.transcript %>"
-                        onclick="openEditLogModal(this)">
-                        <i class="fas fa-pen"></i>
-                      </button>
-                    </td>
-                  </tr>
-                  <% } %>
-                  <% }) %>
-                </tbody>
-              </table>
+            <div id="logTable" class="mt-2">
+              <div class="text-center py-5 text-muted">
+                <i class="fas fa-spinner fa-spin me-2"></i> Memuat data...
+              </div>
             </div>
           </div>
         </div>
@@ -785,28 +692,28 @@
         searchInput.addEventListener('input', function () {
           const val = this.value.toLowerCase().trim();
 
-          // Reset semua baris ke visible
-          document.querySelectorAll('#logTable tbody tr').forEach(r => r.style.display = '');
+          // Reset semua elemen ke visible
+          document.querySelectorAll('#logTable > div').forEach(r => r.style.display = '');
           if (!val) return;
 
-          // Filter baris data (bukan header)
-          document.querySelectorAll('#logTable tbody tr:not(.date-header-row):not(.question-header-row)').forEach(r => {
+          // Filter entri log (bukan header tanggal/pertanyaan)
+          document.querySelectorAll('#logTable > div:not(.date-header-row):not(.question-header-row)').forEach(r => {
             r.style.display = r.innerText.toLowerCase().includes(val) ? '' : 'none';
           });
 
-          // Sembunyikan question-header-row jika semua anaknya tersembunyi
-          document.querySelectorAll('#logTable tbody tr.question-header-row').forEach(qh => {
+          // Sembunyikan question-header-row jika semua entri anaknya tersembunyi
+          document.querySelectorAll('#logTable .question-header-row').forEach(qh => {
             const m = (qh.getAttribute('onclick') || '').match(/'([^']+)'\)/);
             if (!m) return;
-            const kids = document.querySelectorAll('#logTable tbody tr.' + m[1] + ':not(.question-header-row)');
+            const kids = document.querySelectorAll('#logTable .' + m[1] + ':not(.question-header-row)');
             qh.style.display = Array.from(kids).some(k => k.style.display !== 'none') ? '' : 'none';
           });
 
           // Sembunyikan date-header-row jika semua anaknya tersembunyi
-          document.querySelectorAll('#logTable tbody tr.date-header-row').forEach(dh => {
+          document.querySelectorAll('#logTable .date-header-row').forEach(dh => {
             const m = (dh.getAttribute('onclick') || '').match(/'([^']+)'\)/);
             if (!m) return;
-            const kids = document.querySelectorAll('#logTable tbody tr.' + m[1] + ':not(.date-header-row)');
+            const kids = document.querySelectorAll('#logTable .' + m[1] + ':not(.date-header-row)');
             dh.style.display = Array.from(kids).some(k => k.style.display !== 'none') ? '' : 'none';
           });
         });
@@ -832,7 +739,7 @@
         headerRow.classList.toggle("date-collapsed");
         let rows = document.querySelectorAll("." + className);
         rows.forEach((row) => {
-          row.style.display = row.style.display === "none" ? "table-row" : "none";
+          row.style.display = row.style.display === "none" ? "" : "none";
         });
       }
 
@@ -1242,7 +1149,7 @@
         logs.forEach(log => {
           const logDate = new Date(log.date_obj);
           const currentDate = logDate.toLocaleDateString('id-ID', options);
-          const currentQuestion = log.question || 'Sesi Tanpa Pertanyaan';
+          const currentQuestion = log.question === '[SILENT]' ? '' : (log.question || '');
           const dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, '');
           const questionClass = dateClass + '-q-' + currentQuestion.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
           const silenceLabel = formatDurasi(log.duration_answer);
@@ -1261,15 +1168,19 @@
 
           if (currentQuestion !== lastQuestion) {
             const qAudio = log.question_audio_url || '';
-            const audioHtml = qAudio
+            const isSilentQuestion = log.question === '[SILENT]';
+            const questionLabel = isSilentQuestion
+              ? `<span style="font-style:italic;color:#aaa;"><i class="fas fa-microphone-slash me-2"></i>Tidak ada suara terdeteksi</span>`
+              : `<span><i class="fas fa-question-circle me-2"></i> ${currentQuestion || 'Sesi Tanpa Pertanyaan'}</span>`;
+            const audioHtml = isSilentQuestion ? '' : (qAudio
               ? `<audio controls src="${qAudio}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;margin-top:8px;background-color:#fce4ec;" onclick="event.stopPropagation()"></audio>`
-              : `<div class="text-muted mt-2" style="font-size:11px;"><i class="fas fa-microphone-slash me-1"></i> Audio pertanyaan belum tersedia</div>`;
+              : `<div class="text-muted mt-2" style="font-size:11px;"><i class="fas fa-microphone-slash me-1"></i> Audio pertanyaan belum tersedia</div>`);
 
             html += `
             <div class="question-header-row ${dateClass} mb-1 ms-3" onclick="toggleGroup(this, '${questionClass}')" style="cursor:pointer;">
               <div class="question-header px-3 py-2 rounded-3">
                 <div class="d-flex justify-content-between align-items-center">
-                  <span><i class="fas fa-question-circle me-2"></i> ${currentQuestion}</span>
+                  ${questionLabel}
                   <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
                 </div>
                 ${audioHtml}
@@ -1303,10 +1214,16 @@
                   ${silenceLabel ? `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Waktu diam sebelum menjawab"><i class="fas fa-hourglass-start me-1"></i>${silenceLabel} diam</span>` : ''}
                 </div>
               </div>
-              <div class="transcript-box mb-2" onclick="toggleTranscript(this)" style="background:#fafafa;border:1px solid #f0e0e8;">
-                <p class="transcript-text mb-0" style="font-size:0.88rem;line-height:1.6;color:#4a4a4a;">${log.transcript || '-'}</p>
-                <small class="read-more-label" style="display:none;">Lihat Selengkapnya</small>
-              </div>
+              ${log.transcript === '[SILENT]'
+                ? `<div class="mb-2 px-3 py-2 rounded-3 d-flex align-items-center gap-2" style="background:#f5f5f5;border:1px dashed #ccc;">
+                    <i class="fas fa-microphone-slash" style="color:#bbb;font-size:0.85rem;"></i>
+                    <span style="font-size:0.82rem;color:#aaa;font-style:italic;">Tidak ada suara terdeteksi</span>
+                  </div>`
+                : `<div class="transcript-box mb-2" onclick="toggleTranscript(this)" style="background:#fafafa;border:1px solid #f0e0e8;">
+                    <p class="transcript-text mb-0" style="font-size:0.88rem;line-height:1.6;color:#4a4a4a;">${log.transcript || '-'}</p>
+                    <small class="read-more-label" style="display:none;">Lihat Selengkapnya</small>
+                  </div>`
+              }
               ${log.audio_url && log.audio_url !== '#'
                 ? `<audio controls src="${log.audio_url}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;"></audio>`
                 : `<button class="btn btn-sm w-100 rounded-pill py-1" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;" disabled>

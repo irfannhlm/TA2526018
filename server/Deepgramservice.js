@@ -56,10 +56,14 @@ async function transcribeAnswer(sbUpdate, answerId, audioUrl) {
   if (!audioUrl || audioUrl === "#") return;
 
   const transcript = await transcribeAudio(audioUrl);
-  if (!transcript) return;
+  const textToSave = transcript || "[SILENT]";
+
+  if (!transcript) {
+    console.log(`🔇 [Deepgram] answers.id=${answerId} → tidak ada suara, ditandai [SILENT]`);
+  }
 
   try {
-    await sbUpdate("answers", { answer_id: answerId }, { transcript_text: transcript });
+    await sbUpdate("answers", { answer_id: answerId }, { transcript_text: textToSave });
     console.log(`✅ [Deepgram] answers.id=${answerId} → transcript disimpan`);
   } catch (err) {
     console.error(`❌ [Deepgram] Gagal simpan transcript answers.id=${answerId}:`, err.message);
@@ -78,10 +82,14 @@ async function transcribeQuestion(sbUpdate, questionId, audioUrl) {
   if (!audioUrl || audioUrl === "#") return;
 
   const transcript = await transcribeAudio(audioUrl);
-  if (!transcript) return;
+  const textToSave = transcript || "[SILENT]";
+
+  if (!transcript) {
+    console.log(`🔇 [Deepgram] questions.id=${questionId} → tidak ada suara, ditandai [SILENT]`);
+  }
 
   try {
-    await sbUpdate("questions", { question_id: questionId }, { transcript_text: transcript });
+    await sbUpdate("questions", { question_id: questionId }, { transcript_text: textToSave });
     console.log(`✅ [Deepgram] questions.id=${questionId} → transcript disimpan`);
   } catch (err) {
     console.error(`❌ [Deepgram] Gagal simpan transcript questions.id=${questionId}:`, err.message);
