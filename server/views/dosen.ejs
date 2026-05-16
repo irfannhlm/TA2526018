@@ -312,6 +312,9 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
               <h5 class="fw-bold mb-0">Riwayat Diskusi</h5>
               <div class="d-flex gap-3">
+                <button type="button" id="btn-kelola-riwayat" onclick="toggleKelola()" class="btn rounded-pill px-3 fw-bold" style="background:#fff3e0;color:#e65100;border:1px solid #ffe0b2;">
+                  <i class="fas fa-pen-to-square me-2"></i> Kelola Riwayat
+                </button>
                 <div id="wrapper-sync-audio">
                   <button type="button" id="btn-sync-audio" onclick="confirmAudioSync()" class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background-color: var(--dark-pink)" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
                     <i class="fas fa-cloud-download-alt me-2"></i> Minta File Perangkat
@@ -341,122 +344,134 @@
           <% } else { %>
 
           <%
-            // Hitung ringkasan global dari logs
-            const totalBicara = logs.length;
+            const totalBicara = logs.filter(l => l.id !== null).length;
             const totalMahasiswa = stats.length;
             const aktif = stats.filter(s => s.count > 0).length;
             const tidakAktif = totalMahasiswa - aktif;
-            const rataRata = totalMahasiswa > 0 ? (totalBicara / aktif).toFixed(1) : 0;
-            const topStudent = stats[0];
+            const rataRata = aktif > 0 ? (totalBicara / aktif).toFixed(1) : 0;
+            const maxCount = stats[0].count;
+            const topStudents = stats.filter(s => s.count === maxCount && maxCount > 0);
+            const belumBicara = stats.filter(s => s.count === 0);
+            const statsAktif = stats.filter(s => s.count > 0);
+
+            // Hitung waktu diam per mahasiswa dari logs
+            const logsWithDuration = logs.filter(l => l.id !== null && l.duration_answer !== null && l.duration_answer !== undefined);
+            const diamPerMhs = {};
+            logsWithDuration.forEach(l => {
+              if (!diamPerMhs[l.nim]) diamPerMhs[l.nim] = { name: l.name, nim: l.nim, durations: [] };
+              diamPerMhs[l.nim].durations.push(l.duration_answer);
+            });
+            const diamStats = Object.values(diamPerMhs).map(d => ({
+              name: d.name,
+              nim: d.nim,
+              avg: d.durations.reduce((a,b) => a+b, 0) / d.durations.length,
+              min: Math.min(...d.durations),
+              max: Math.max(...d.durations),
+              count: d.durations.length,
+            })).sort((a, b) => a.avg - b.avg);
+            const totalDurations = logsWithDuration.map(l => l.duration_answer);
+            const avgDiamGlobal = totalDurations.length > 0
+              ? (totalDurations.reduce((a,b) => a+b, 0) / totalDurations.length).toFixed(2)
+              : null;
           %>
 
-          <!-- Kartu Ringkasan Atas -->
-          <div class="row g-3 mb-4">
-            <div class="col-6 col-lg-3">
-              <div class="dashboard-card text-center py-3 px-2">
-                <div style="font-size:2rem;font-weight:700;color:var(--dark-pink)"><%= totalBicara %></div>
-                <div class="text-muted small fw-semibold">Total Bicara</div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="dashboard-card text-center py-3 px-2">
-                <div style="font-size:2rem;font-weight:700;color:#43a047"><%= aktif %></div>
-                <div class="text-muted small fw-semibold">Mahasiswa Aktif</div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="dashboard-card text-center py-3 px-2">
-                <div style="font-size:2rem;font-weight:700;color:#e65100"><%= tidakAktif %></div>
-                <div class="text-muted small fw-semibold">Belum Bicara</div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="dashboard-card text-center py-3 px-2">
-                <div style="font-size:2rem;font-weight:700;color:#8e24aa"><%= rataRata %>x</div>
-                <div class="text-muted small fw-semibold">Rata‑rata / Orang</div>
-              </div>
-            </div>
-          </div>
+          <!-- Kartu: Paling Aktif + Belum Bicara -->
+          <div class="row g-4 mb-4">
 
-          <div class="row g-4">
-            <!-- Kolom kiri: Ranking -->
+            <!-- Paling Aktif -->
             <div class="col-lg-6">
-              <div class="dashboard-card h-100">
-                <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-trophy me-2"></i>Ranking Keaktifan</h6>
-                <small class="text-muted d-block mb-4">Jumlah giliran bicara per mahasiswa.</small>
-
-                <% stats.forEach((s, i) => { %>
-                <%
-                  let pct = (stats[0].count > 0) ? (s.count / stats[0].count) * 100 : 0;
-                  let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
-                  let barColor = i === 0
-                    ? 'linear-gradient(90deg,#ff80ab,#f06292)'
-                    : i === 1
-                    ? 'linear-gradient(90deg,#ce93d8,#ab47bc)'
-                    : i === 2
-                    ? 'linear-gradient(90deg,#ffcc80,#ffa726)'
-                    : 'linear-gradient(90deg,#b0bec5,#90a4ae)';
-                %>
-                <div class="mb-3">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="d-flex align-items-center gap-2">
-                      <% if (medal) { %>
-                        <span style="font-size:1.1rem;"><%= medal %></span>
-                      <% } else { %>
-                        <span class="badge bg-light text-muted rounded-circle fw-bold" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;"><%= i+1 %></span>
-                      <% } %>
-                      <span class="fw-semibold text-dark" style="font-size:0.88rem;"><%= s.name %></span>
-                    </div>
-                    <span class="fw-bold" style="color:var(--dark-pink);font-size:0.9rem;"><%= s.count %>x</span>
-                  </div>
-                  <div class="progress rounded-pill" style="height:7px;background:#fce4ec;">
-                    <div class="progress-bar rounded-pill" style="width:<%= pct %>%;background:<%= barColor %>;transition:width 0.8s ease;"></div>
-                  </div>
-                </div>
-                <% }) %>
-              </div>
-            </div>
-
-            <!-- Kolom kanan: Chart pie + Top speaker -->
-            <div class="col-lg-6 d-flex flex-column gap-4">
-
-              <!-- Top Speaker Card -->
-              <div class="dashboard-card" style="background:linear-gradient(135deg,#fce4ec,#f8bbd0);border:none;">
-                <div class="d-flex align-items-center gap-3">
-                  <div style="width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#ff80ab,#d81b60);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;flex-shrink:0;">
+              <div class="dashboard-card h-100" style="background:linear-gradient(135deg,#fce4ec,#f8bbd0);border:none;">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ff80ab,#d81b60);display:flex;align-items:center;justify-content:center;color:white;font-size:1.1rem;flex-shrink:0;">
                     <i class="fas fa-star"></i>
                   </div>
                   <div>
-                    <div class="text-muted small fw-bold mb-1">PALING AKTIF</div>
-                    <div class="fw-bold" style="font-size:1.1rem;color:var(--dark-pink);"><%= topStudent.name %></div>
-                    <div class="text-muted small"><%= topStudent.nim %> &bull; <%= topStudent.count %> kali bicara</div>
+                    <div class="fw-bold" style="color:var(--dark-pink);font-size:0.85rem;letter-spacing:0.5px;">PALING AKTIF</div>
+                    <div class="text-muted" style="font-size:0.75rem;">
+                      <% if (topStudents.length === 0) { %>Belum ada data<% } else if (topStudents.length === 1) { %><%= maxCount %> kali bicara<% } else { %><%= topStudents.length %> mahasiswa &bull; <%= maxCount %> kali bicara<% } %>
+                    </div>
                   </div>
                 </div>
+                <% if (topStudents.length === 0) { %>
+                  <div class="text-muted small fst-italic text-center py-3">Belum ada mahasiswa yang bicara.</div>
+                <% } else { %>
+                  <% topStudents.forEach(s => { %>
+                  <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 rounded-3" style="background:rgba(255,255,255,0.65);">
+                    <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ff80ab,#f06292);display:flex;align-items:center;justify-content:center;color:white;font-size:0.75rem;flex-shrink:0;">
+                      <i class="fas fa-user"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                      <div class="fw-bold text-dark" style="font-size:0.88rem;"><%= s.name %></div>
+                      <div class="text-muted" style="font-size:0.72rem;"><%= s.nim %></div>
+                    </div>
+                    <span class="fw-bold rounded-pill px-2 py-1" style="background:var(--dark-pink);color:white;font-size:0.75rem;"><%= s.count %>x</span>
+                  </div>
+                  <% }) %>
+                  <% if (statsAktif.length > topStudents.length) { %>
+                  <button class="btn btn-sm w-100 mt-2 rounded-pill fw-semibold" style="background:rgba(255,255,255,0.7);color:var(--dark-pink);font-size:0.78rem;border:1px solid #f8bbd0;" type="button" data-bs-toggle="collapse" data-bs-target="#listAktifCollapse">
+                    <i class="fas fa-users me-1"></i> Lihat semua mahasiswa aktif (<%= statsAktif.length %>)
+                  </button>
+                  <div class="collapse mt-2" id="listAktifCollapse">
+                    <% statsAktif.forEach((s, i) => { %>
+                    <div class="d-flex align-items-center justify-content-between px-3 py-2 rounded-3 mb-1" style="background:rgba(255,255,255,0.5);font-size:0.8rem;">
+                      <div>
+                        <span class="fw-semibold text-dark"><%= i+1 %>. <%= s.name %></span>
+                        <span class="text-muted ms-1" style="font-size:0.72rem;"><%= s.nim %></span>
+                      </div>
+                      <span class="fw-bold" style="color:var(--dark-pink);"><%= s.count %>x</span>
+                    </div>
+                    <% }) %>
+                  </div>
+                  <% } %>
+                <% } %>
               </div>
+            </div>
 
-              <!-- Distribusi chart (canvas) -->
-              <div class="dashboard-card flex-grow-1">
-                <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-chart-pie me-2"></i>Distribusi Kontribusi</h6>
-                <small class="text-muted d-block mb-3">Proporsi giliran bicara setiap mahasiswa.</small>
-                <div style="position:relative;height:200px;">
-                  <canvas id="statsDonutChart"></canvas>
+            <!-- Belum Bicara -->
+            <div class="col-lg-6">
+              <div class="dashboard-card h-100" style="background:linear-gradient(135deg,#fff3e0,#ffe0b2);border:none;">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ffa726,#e65100);display:flex;align-items:center;justify-content:center;color:white;font-size:1.1rem;flex-shrink:0;">
+                    <i class="fas fa-user-slash"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold" style="color:#e65100;font-size:0.85rem;letter-spacing:0.5px;">BELUM BICARA</div>
+                    <div class="text-muted" style="font-size:0.75rem;"><%= tidakAktif %> dari <%= totalMahasiswa %> mahasiswa</div>
+                  </div>
                 </div>
+                <% if (belumBicara.length === 0) { %>
+                  <div class="text-muted small fst-italic text-center py-3">Semua mahasiswa sudah bicara.</div>
+                <% } else { %>
+                  <% belumBicara.forEach((s, i) => { %>
+                  <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 rounded-3" style="background:rgba(255,255,255,0.65);">
+                    <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ffa726,#e65100);display:flex;align-items:center;justify-content:center;color:white;font-size:0.8rem;flex-shrink:0;">
+                      <%= i+1 %>
+                    </div>
+                    <div>
+                      <div class="fw-bold text-dark" style="font-size:0.88rem;"><%= s.name %></div>
+                      <div class="text-muted" style="font-size:0.72rem;"><%= s.nim %></div>
+                    </div>
+                  </div>
+                  <% }) %>
+                <% } %>
               </div>
-
             </div>
           </div>
 
-          <!-- Tabel detail bawah -->
-          <div class="dashboard-card mt-4">
-            <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-table me-2"></i>Detail Per Mahasiswa</h6>
-            <small class="text-muted d-block mb-3">Persentase kontribusi masing-masing mahasiswa dari total bicara.</small>
+          <!-- Detail Per Mahasiswa -->
+          <div class="dashboard-card mb-4">
+            <div class="mb-3">
+              <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-table me-2"></i>Detail Per Mahasiswa</h6>
+              <small class="text-muted">Total bicara: <strong style="color:var(--dark-pink);"><%= totalBicara %></strong> giliran &bull; Rata-rata: <strong style="color:#8e24aa;"><%= rataRata %>x</strong> per mahasiswa aktif</small>
+            </div>
             <div class="table-responsive">
               <table class="table align-middle" style="font-size:0.87rem;">
                 <thead>
-                  <tr style="background:#fce4ec;border-radius:10px;">
+                  <tr style="background:#fce4ec;">
                     <th class="border-0 ps-3 rounded-start" style="color:var(--dark-pink)">#</th>
                     <th class="border-0" style="color:var(--dark-pink)">Mahasiswa</th>
-                    <th class="border-0 text-center" style="color:var(--dark-pink)">Bicara</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">Total Bicara</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">vs Rata-rata</th>
                     <th class="border-0 text-center" style="color:var(--dark-pink)">Porsi</th>
                     <th class="border-0 rounded-end" style="color:var(--dark-pink)">Status</th>
                   </tr>
@@ -464,8 +479,10 @@
                 <tbody>
                   <% stats.forEach((s, i) => { %>
                   <%
-                    let porsi = totalBicara > 0 ? ((s.count / totalBicara) * 100).toFixed(1) : 0;
-                    let statusBadge = s.count === 0
+                    const porsi = totalBicara > 0 ? ((s.count / totalBicara) * 100).toFixed(1) : 0;
+                    const vsAvg = (s.count - parseFloat(rataRata)).toFixed(1);
+                    const vsAvgNum = parseFloat(vsAvg);
+                    const statusBadge = s.count === 0
                       ? '<span class="badge rounded-pill px-3" style="background:#ffebee;color:#c62828;font-size:0.75rem;">Belum Bicara</span>'
                       : s.count >= 3
                       ? '<span class="badge rounded-pill px-3" style="background:#e8f5e9;color:#2e7d32;font-size:0.75rem;">Aktif</span>'
@@ -477,7 +494,17 @@
                       <div class="fw-semibold text-dark"><%= s.name %></div>
                       <div class="text-muted" style="font-size:0.75rem;"><%= s.nim %></div>
                     </td>
-                    <td class="text-center fw-bold" style="color:var(--dark-pink)"><%= s.count %></td>
+                    <td class="text-center fw-bold" style="color:var(--dark-pink);"><%= s.count %>x</td>
+                    <td class="text-center">
+                      <% if (s.count === 0) { %>
+                        <span class="text-muted" style="font-size:0.8rem;">—</span>
+                      <% } else { %>
+                        <span class="fw-semibold" style="font-size:0.82rem;color:<%= vsAvgNum >= 0 ? '#2e7d32' : '#c62828' %>;">
+                          <%= vsAvgNum >= 0 ? '+' : '' %><%= vsAvg %>
+                        </span>
+                        <div class="text-muted" style="font-size:0.68rem;">dari <%= rataRata %>x</div>
+                      <% } %>
+                    </td>
                     <td class="text-center">
                       <span class="fw-semibold text-dark"><%= porsi %>%</span>
                     </td>
@@ -487,6 +514,99 @@
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <!-- Waktu Diam -->
+          <div class="dashboard-card">
+            <div class="mb-3">
+              <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-hourglass-half me-2"></i>Waktu Diam Sebelum Menjawab</h6>
+              <small class="text-muted">Rata-rata jeda diam mahasiswa sebelum mulai berbicara.</small>
+            </div>
+
+            <% if (diamStats.length === 0) { %>
+              <div class="text-center py-4 text-muted">
+                <i class="fas fa-hourglass fa-2x mb-2 d-block" style="color:#ffb6c1;"></i>
+                Belum ada data waktu diam.
+              </div>
+            <% } else { %>
+
+              <!-- Ringkasan waktu diam -->
+              <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3">
+                  <div class="text-center py-3 px-2 rounded-3" style="background:#f3e5f5;">
+                    <div style="font-size:1.6rem;font-weight:700;color:#8e24aa;"><%= avgDiamGlobal %>s</div>
+                    <div class="text-muted small fw-semibold">Rata-rata Kelas</div>
+                  </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                  <div class="text-center py-3 px-2 rounded-3" style="background:#e8f5e9;">
+                    <div style="font-size:1.6rem;font-weight:700;color:#2e7d32;"><%= diamStats[0].avg.toFixed(2) %>s</div>
+                    <div class="text-muted small fw-semibold">Tercepat Merespons</div>
+                    <div style="font-size:0.7rem;color:#2e7d32;" class="fw-semibold"><%= diamStats[0].name %></div>
+                  </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                  <div class="text-center py-3 px-2 rounded-3" style="background:#ffebee;">
+                    <div style="font-size:1.6rem;font-weight:700;color:#c62828;"><%= diamStats[diamStats.length-1].avg.toFixed(2) %>s</div>
+                    <div class="text-muted small fw-semibold">Terlama Merespons</div>
+                    <div style="font-size:0.7rem;color:#c62828;" class="fw-semibold"><%= diamStats[diamStats.length-1].name %></div>
+                  </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                  <div class="text-center py-3 px-2 rounded-3" style="background:#e3f2fd;">
+                    <div style="font-size:1.6rem;font-weight:700;color:#1565c0;"><%= totalDurations.length %></div>
+                    <div class="text-muted small fw-semibold">Jawaban Terukur</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tabel per mahasiswa -->
+              <div class="table-responsive">
+                <table class="table align-middle" style="font-size:0.87rem;">
+                  <thead>
+                    <tr style="background:#f3e5f5;">
+                      <th class="border-0 ps-3 rounded-start" style="color:#8e24aa;">#</th>
+                      <th class="border-0" style="color:#8e24aa;">Mahasiswa</th>
+                      <th class="border-0 text-center" style="color:#8e24aa;">Rata-rata Diam</th>
+                      <th class="border-0 text-center" style="color:#8e24aa;">Tercepat</th>
+                      <th class="border-0 text-center" style="color:#8e24aa;">Terlama</th>
+                      <th class="border-0 rounded-end text-center" style="color:#8e24aa;">Jawaban</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% diamStats.forEach((d, i) => { %>
+                    <%
+                      const avgGlobal = parseFloat(avgDiamGlobal);
+                      const isTercepat = i === 0;
+                      const isTerlama = i === diamStats.length - 1;
+                      const diamColor = d.avg <= avgGlobal ? '#2e7d32' : '#c62828';
+                    %>
+                    <tr style="border-bottom:1px solid #f3e5f5;">
+                      <td class="ps-3 text-muted"><%= i+1 %></td>
+                      <td>
+                        <div class="d-flex align-items-center gap-2">
+                          <div class="fw-semibold text-dark"><%= d.name %></div>
+                          <% if (isTercepat && diamStats.length > 1) { %>
+                            <span class="badge rounded-pill px-2" style="background:#e8f5e9;color:#2e7d32;font-size:0.68rem;">Tercepat</span>
+                          <% } %>
+                          <% if (isTerlama && diamStats.length > 1) { %>
+                            <span class="badge rounded-pill px-2" style="background:#ffebee;color:#c62828;font-size:0.68rem;">Terlama</span>
+                          <% } %>
+                        </div>
+                        <div class="text-muted" style="font-size:0.75rem;"><%= d.nim %></div>
+                      </td>
+                      <td class="text-center">
+                        <span class="fw-bold" style="color:<%= diamColor %>;font-size:0.9rem;"><%= d.avg.toFixed(2) %>s</span>
+                      </td>
+                      <td class="text-center text-muted" style="font-size:0.82rem;"><%= d.min.toFixed(2) %>s</td>
+                      <td class="text-center text-muted" style="font-size:0.82rem;"><%= d.max.toFixed(2) %>s</td>
+                      <td class="text-center fw-semibold" style="color:#6a1b9a;"><%= d.count %>x</td>
+                    </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+            <% } %>
           </div>
 
           <% } %>
@@ -665,6 +785,52 @@
               </div>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== MODAL: KELOLA RIWAYAT — EDIT TRANSKRIP ====== -->
+    <div class="modal fade" id="editTranscriptModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-3">
+          <div class="modal-header border-0 pb-0">
+            <div>
+              <h5 class="modal-title fw-bold mb-0" id="editTranscriptTitle">Edit Transkrip</h5>
+              <small class="text-muted" id="editTranscriptSubtitle"></small>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body pt-3">
+            <input type="hidden" id="etType" />
+            <input type="hidden" id="etId" />
+
+            <!-- Field khusus jawaban -->
+            <div id="etAnswerFields">
+              <div class="mb-3">
+                <label class="small text-muted fw-bold mb-1 d-block">MAHASISWA</label>
+                <select id="etStudent" class="form-select bg-light border-0 rounded-3">
+                  <% students.forEach(s => { %>
+                  <option value="<%= s.student_id %>"><%= s.name %> — <%= s.nim %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="small text-muted fw-bold mb-1 d-block">WAKTU DIAM (detik)</label>
+                <input type="number" id="etDuration" class="form-control bg-light border-0 rounded-3" step="0.01" min="0" placeholder="contoh: 1.25" />
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="small text-muted fw-bold mb-1 d-block">TRANSKRIP</label>
+              <textarea id="etTranscript" class="form-control bg-light border-0 rounded-3" rows="4" placeholder="Ketik transkrip di sini..."></textarea>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+              <button type="button" class="btn flex-grow-1 rounded-pill py-2 fw-bold text-white" style="background:var(--dark-pink);" onclick="submitEditTranscript()">
+                <i class="fas fa-save me-1"></i> Simpan
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1135,6 +1301,14 @@
         return detik + 's';
       }
 
+      function escAttr(str) {
+        return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      function openEditFromBtn(btn) {
+        openEditTranscript(btn.dataset.type, btn.dataset.id, btn.dataset.transcript, btn.dataset.studentId, btn.dataset.duration);
+      }
+
       function buildLogHTML(logs) {
         if (logs.length === 0) {
           return `<div class="text-center py-5 text-muted">
@@ -1178,6 +1352,18 @@
               : `<button class="btn btn-sm w-100 rounded-pill py-1 mt-2" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;font-weight:600;pointer-events:none;" disabled onclick="event.stopPropagation()">
                   <i class="fas fa-microphone-slash me-2"></i> Audio pertanyaan belum tersedia
                 </button>`;
+            const kelolaQHtml = currentQuestionId ? `
+              <div class="kelola-actions" style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap;">
+                <button class="btn btn-sm rounded-pill px-3 fw-semibold" style="background:#e3f2fd;color:#1565c0;font-size:0.75rem;"
+                  data-type="question" data-id="${currentQuestionId}" data-transcript="${escAttr(isSilentQuestion ? '' : currentQuestion)}"
+                  onclick="event.stopPropagation();openEditFromBtn(this)">
+                  <i class="fas fa-pen me-1"></i> Edit Pertanyaan
+                </button>
+                <button class="btn btn-sm rounded-pill px-3 fw-semibold" style="background:#ffebee;color:#c62828;font-size:0.75rem;"
+                  onclick="event.stopPropagation();confirmDeleteQuestion('${currentQuestionId}')">
+                  <i class="fas fa-trash me-1"></i> Hapus Pertanyaan
+                </button>
+              </div>` : '';
 
             html += `
             <div class="question-header-row ${dateClass} mb-1 ms-3" onclick="toggleGroup(this, '${questionClass}')" style="cursor:pointer;">
@@ -1187,6 +1373,7 @@
                   <small class="text-muted"><i class="fas fa-chevron-down"></i></small>
                 </div>
                 ${audioHtml}
+                ${kelolaQHtml}
               </div>
             </div>`;
             lastQuestionId = currentQuestionId;
@@ -1198,6 +1385,7 @@
               <i class="fas fa-comment-slash me-2"></i> Belum ada jawaban untuk pertanyaan ini
             </div>`;
           } else {
+            const isSilentAnswer = log.transcript === '[SILENT]';
             html += `
           <div class="${dateClass} ${questionClass} log-entry ms-5 mb-2" style="position:relative;">
             <div style="position:absolute;left:-20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#ffb6c1,#fce4ec);border-radius:2px;"></div>
@@ -1215,9 +1403,21 @@
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                   ${silenceLabel ? `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Waktu diam sebelum menjawab"><i class="fas fa-hourglass-start me-1"></i>${silenceLabel} diam</span>` : ''}
+                  <div class="kelola-actions" style="display:none;gap:4px;">
+                    <button class="btn btn-sm rounded-circle" style="width:28px;height:28px;padding:0;background:#e3f2fd;color:#1565c0;" title="Edit jawaban"
+                      data-type="answer" data-id="${log.id}" data-transcript="${escAttr(isSilentAnswer ? '' : (log.transcript || ''))}"
+                      data-student-id="${log.student_id || ''}" data-duration="${log.duration_answer ?? ''}"
+                      onclick="openEditFromBtn(this)">
+                      <i class="fas fa-pen" style="font-size:0.7rem;"></i>
+                    </button>
+                    <button class="btn btn-sm rounded-circle" style="width:28px;height:28px;padding:0;background:#ffebee;color:#c62828;" title="Hapus jawaban"
+                      onclick="confirmDeleteAnswer('${log.id}')">
+                      <i class="fas fa-trash" style="font-size:0.7rem;"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
-              ${log.transcript === '[SILENT]'
+              ${isSilentAnswer
                 ? `<div class="mb-2 px-3 py-2 rounded-3 d-flex align-items-center gap-2" style="background:#f5f5f5;border:1px dashed #ccc;">
                     <i class="fas fa-microphone-slash" style="color:#bbb;font-size:0.85rem;"></i>
                     <span style="font-size:0.82rem;color:#aaa;font-style:italic;">Tidak ada suara terdeteksi</span>
@@ -1239,13 +1439,13 @@
         return html;
       }
 
-      async function updateLogs() {
+      async function updateLogs(force = false) {
         try {
           const res = await fetch(`/api/realtime-logs?kelas=${encodeURIComponent(CURRENT_CLASS)}`, { cache: 'no-store' });
           if (!res.ok) return;
           const data = await res.json();
           const logs = data.logs || [];
-          if (logs.length !== lastLogCount) {
+          if (force || logs.length !== lastLogCount) {
             lastLogCount = logs.length;
             const container = document.getElementById('logTable');
             if (container) {
@@ -1254,6 +1454,11 @@
                 const label = t.nextElementSibling;
                 if (label) label.style.display = t.scrollHeight > 72 ? 'block' : 'none';
               });
+              if (kelolaMode) {
+                container.querySelectorAll('.kelola-actions').forEach(el => {
+                  el.style.display = 'flex';
+                });
+              }
             }
           }
         } catch (e) { /* silent */ }
@@ -1261,6 +1466,119 @@
 
       setInterval(updateLogs, 5000);
       updateLogs();
+
+      // =========================================================
+      // KELOLA RIWAYAT — toggle mode edit
+      // =========================================================
+      let kelolaMode = false;
+
+      function toggleKelola() {
+        kelolaMode = !kelolaMode;
+        const btn = document.getElementById('btn-kelola-riwayat');
+        if (kelolaMode) {
+          btn.style.background = '#e65100';
+          btn.style.color = 'white';
+          btn.style.border = '1px solid #e65100';
+          btn.innerHTML = '<i class="fas fa-times me-2"></i> Selesai Kelola';
+        } else {
+          btn.style.background = '#fff3e0';
+          btn.style.color = '#e65100';
+          btn.style.border = '1px solid #ffe0b2';
+          btn.innerHTML = '<i class="fas fa-pen-to-square me-2"></i> Kelola Riwayat';
+        }
+        document.querySelectorAll('.kelola-actions').forEach(el => {
+          el.style.display = kelolaMode ? 'flex' : 'none';
+        });
+      }
+
+      function openEditTranscript(type, id, currentText, studentId, duration) {
+        document.getElementById('etType').value = type;
+        document.getElementById('etId').value = id;
+        document.getElementById('etTranscript').value = currentText || '';
+        document.getElementById('editTranscriptTitle').textContent =
+          type === 'answer' ? 'Edit Jawaban' : 'Edit Pertanyaan';
+        document.getElementById('editTranscriptSubtitle').textContent =
+          type === 'answer' ? 'Ubah mahasiswa, waktu diam, atau transkrip jawaban.' : 'Ubah transkrip pertanyaan.';
+
+        const answerFields = document.getElementById('etAnswerFields');
+        if (type === 'answer') {
+          answerFields.style.display = 'block';
+          const sel = document.getElementById('etStudent');
+          if (studentId) sel.value = studentId;
+          document.getElementById('etDuration').value = duration !== undefined && duration !== '' ? duration : '';
+        } else {
+          answerFields.style.display = 'none';
+        }
+        new bootstrap.Modal(document.getElementById('editTranscriptModal')).show();
+      }
+
+      async function submitEditTranscript() {
+        const type = document.getElementById('etType').value;
+        const id = document.getElementById('etId').value;
+        const transcript = document.getElementById('etTranscript').value.trim();
+        const url = type === 'answer' ? `/dosen/answer/${id}` : `/dosen/question/${id}`;
+        const body = { transcript };
+        if (type === 'answer') {
+          body.student_id = document.getElementById('etStudent').value;
+          const dur = document.getElementById('etDuration').value;
+          body.duration_answer = dur !== '' ? dur : null;
+        }
+        try {
+          const res = await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) throw new Error();
+          bootstrap.Modal.getInstance(document.getElementById('editTranscriptModal')).hide();
+          await updateLogs(true);
+          Swal.fire({ icon: 'success', title: 'Tersimpan', text: 'Transkrip berhasil diperbarui.', timer: 1800, showConfirmButton: false });
+        } catch {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: 'Gagal menyimpan perubahan.' });
+        }
+      }
+
+      async function confirmDeleteAnswer(id) {
+        const result = await Swal.fire({
+          title: 'Hapus jawaban ini?',
+          text: 'Jawaban akan dihapus permanen.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#c62828',
+          cancelButtonText: 'Batal',
+          confirmButtonText: 'Ya, Hapus'
+        });
+        if (!result.isConfirmed) return;
+        try {
+          const res = await fetch(`/dosen/answer/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error();
+          await updateLogs(true);
+          Swal.fire({ icon: 'success', title: 'Dihapus', timer: 1500, showConfirmButton: false });
+        } catch {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: 'Gagal menghapus jawaban.' });
+        }
+      }
+
+      async function confirmDeleteQuestion(id) {
+        const result = await Swal.fire({
+          title: 'Hapus pertanyaan ini?',
+          text: 'Pertanyaan beserta semua jawabannya akan dihapus permanen.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#c62828',
+          cancelButtonText: 'Batal',
+          confirmButtonText: 'Ya, Hapus Semua'
+        });
+        if (!result.isConfirmed) return;
+        try {
+          const res = await fetch(`/dosen/question/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error();
+          await updateLogs(true);
+          Swal.fire({ icon: 'success', title: 'Dihapus', timer: 1500, showConfirmButton: false });
+        } catch {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: 'Gagal menghapus pertanyaan.' });
+        }
+      }
 
       // =========================================================
       // POLLING DUPLIKAT — cek antrian file duplikat tiap 3 detik

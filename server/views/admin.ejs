@@ -285,7 +285,6 @@
                 <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Kelas</h1>
-                        <p class="header-subtitle">Tambah, edit, atau hapus data kelas.</p>
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-outline-danger rounded-pill px-4 py-2 fw-bold" onclick="confirmResetAll()">
@@ -329,9 +328,6 @@
                                             </span>
                                         </td>
                                         <td class="text-end pe-4">
-                                            <a href="/admin?kelas=<%= encodeURIComponent(c.name) %>" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1" style="font-size:0.75rem;" title="Buka Monitoring Live">
-                                                <i class="fas fa-satellite-dish me-1"></i> Monitoring
-                                            </a>
                                             <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" onclick="openEditClassModal('<%= c.id %>', '<%= c.name %>', '<%= c.code %>', `<%= (c.lecturer || '').replace(/`/g, '') %>`, '<%= c.lecturer_user_id || "" %>')">
                                                 <i class="fas fa-pen"></i>
                                             </button>
@@ -357,7 +353,6 @@
                 <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Akun</h1>
-                        <p class="header-subtitle">Atur hak akses login sistem.</p>
                     </div>
                 </div>
 

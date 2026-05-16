@@ -952,6 +952,7 @@ app.get("/api/realtime-logs", async (req, res) => {
           formatted.push({
             id: a.answer_id,
             question_id: q.question_id,
+            student_id: a.student_id,
             date_obj: q.created_at ? new Date(q.created_at).toISOString() : null,
             name: a.students?.name,
             nim: a.students?.nim,
@@ -1899,6 +1900,59 @@ app.post("/dosen/edit-log", requireRole("dosen", "admin"), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.send("Gagal mengedit log.");
+  }
+});
+
+// ================= KELOLA RIWAYAT: EDIT/HAPUS JAWABAN & PERTANYAAN =================
+app.patch("/dosen/answer/:id", requireRole("dosen", "admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transcript, student_id, duration_answer } = req.body;
+    const updates = { transcript_text: transcript };
+    if (student_id !== undefined && student_id !== null && student_id !== '')
+      updates.student_id = parseInt(student_id);
+    if (duration_answer !== undefined && duration_answer !== '')
+      updates.duration_answer = duration_answer === null ? null : parseFloat(duration_answer);
+    await sbUpdate("answers", { answer_id: parseInt(id) }, updates);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal memperbarui jawaban." });
+  }
+});
+
+app.delete("/dosen/answer/:id", requireRole("dosen", "admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sbDelete("answers", { answer_id: parseInt(id) });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal menghapus jawaban." });
+  }
+});
+
+app.patch("/dosen/question/:id", requireRole("dosen", "admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transcript } = req.body;
+    await sbUpdate("questions", { question_id: parseInt(id) }, { transcript_text: transcript });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal memperbarui pertanyaan." });
+  }
+});
+
+app.delete("/dosen/question/:id", requireRole("dosen", "admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sbDelete("answers", { question_id: parseInt(id) });
+    await sbDelete("questions", { question_id: parseInt(id) });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal menghapus pertanyaan." });
   }
 });
 
