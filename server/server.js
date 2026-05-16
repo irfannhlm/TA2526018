@@ -1594,10 +1594,12 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
       battery: d.battery_level,
     }));
 
+    if (currentDeviceId) {
+      req.session.lastDeviceId = String(currentDeviceId);
+    }
     if (!currentDeviceId && devices.length > 0) {
-      return res.redirect(
-        `/dosen?kelas=${currentClass}&device=${devices[0].id}`,
-      );
+      const fallback = req.session.lastDeviceId || String(devices[0].id);
+      return res.redirect(`/dosen?kelas=${currentClass}&device=${fallback}`);
     }
 
     const currentDevice = devices.find(

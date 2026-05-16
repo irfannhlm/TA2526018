@@ -207,21 +207,21 @@
                     </div>
                 </div>
 
-                <div class="row g-4">
+                <div class="row g-4" style="min-height: calc(100vh - 200px);">
                     <div class="col-lg-5">
-                        <div class="dashboard-card position-relative overflow-hidden">
+                        <div class="dashboard-card position-relative overflow-hidden d-flex flex-column">
                             <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: #ff80ab; opacity: 0.1; border-radius: 50%;"></div>
-                            
+
                             <div class="mb-4">
                                 <label class="small text-muted fw-bold mb-2">PILIH PERANGKAT TERHUBUNG</label>
                                 <form action="/admin" method="GET">
                                     <input type="hidden" name="kelas" value="<%= currentClass %>">
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0"><i class="fas fa-microchip text-secondary"></i></span>
-                                        <select name="device" class="form-select bg-light border-0 fw-bold text-dark" onchange="this.form.submit()">
+                                        <select id="device-select-admin" name="device" class="form-select border-0 fw-bold" onchange="applySelectColorAdmin(this); this.form.submit()">
                                             <% devices.forEach(dev => { %>
-                                                <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %>>
-                                                    <%= dev.name %> (<%= dev.status.toUpperCase() %>)
+                                                <option value="<%= dev.id %>" <%= currentDevice.id === dev.id ? 'selected' : '' %> data-bg="white" data-fg="<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>" style="background-color:white;color:<%= dev.status === 'online' ? '#2e7d32' : '#c62828' %>;font-weight:700;">
+                                                    ● <%= dev.name %>
                                                 </option>
                                             <% }) %>
                                         </select>
@@ -229,45 +229,43 @@
                                 </form>
                             </div>
 
-                            <div id="device-card-bg" class="d-flex justify-content-between align-items-start mb-4 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
-                                <div>
-                                    <h5 class="fw-bold mb-1 text-dark"><%= currentDevice.name %></h5>
-                                    <div id="device-status-container" class="d-flex align-items-center gap-2">
-                                        <% if(currentDevice.status === 'online') { %>
-                                            <span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>
-                                        <% } else { %>
-                                            <span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>
-                                        <% } %>
-                                        <small class="text-muted font-monospace"><%= currentDevice.id %></small>
+                            <div id="device-card-bg" class="mb-3 p-3 rounded-4" style="background-color: <%= currentDevice.status === 'online' ? '#e8f5e9' : '#ffebee' %>;">
+                                <div class="d-flex align-items-stretch">
+
+                                    <div id="device-status-container" class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                                            <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
+                                        </div>
+                                        <div class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></div>
                                     </div>
+
+                                    <div style="width:1px;background:rgba(0,0,0,0.1);margin:0 15px;"></div>
+
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %><i class="fas fa-battery-full" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                                            <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %><i class="fas fa-battery-three-quarters" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                                            <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %><i class="fas fa-battery-half" style="font-size:0.85rem;color:var(--dark-pink);"></i>
+                                            <% } else { %><i class="fas fa-battery-quarter" style="font-size:0.85rem;color:var(--dark-pink);"></i><% } %>
+                                            <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">DAYA BATERAI</small>
+                                        </div>
+                                        <div id="device-battery-container" class="fw-bold" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                                            <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
+                                        </div>
+                                    </div>
+
+                                    <small id="device-battery-label" style="display:none;"></small>
                                 </div>
                             </div>
 
-                            <div class="d-flex align-items-end gap-3 mb-4">
-                                <div id="device-battery-container" class="battery-indicator" style="color: <%= currentDevice.status === 'online' ? ((currentDevice.battery !== null && currentDevice.battery > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999' %>;">
-                                    <i class="fas fa-battery-half"></i> 
-                                    <span id="device-battery-text">
-                                    <% if (currentDevice.battery !== null && currentDevice.battery !== undefined && currentDevice.battery !== '') { %>
-                                        <%= currentDevice.battery %>%
-                                    <% } else { %>
-                                        --
-                                    <% } %>
-                                    </span>
-                                </div>
-                                <small class="text-muted mb-2" id="device-battery-label">
-                                    <% if (currentDevice.battery !== null && currentDevice.battery !== undefined && currentDevice.battery !== '') { %>
-                                        Status Daya Perangkat
-                                    <% } else { %>
-                                        Belum ada data dari broker
-                                    <% } %>
-                                </small>
-                            </div>
+                            <div class="flex-grow-1"></div>
 
                         </div>
                     </div>
 
                     <div class="col-lg-7">
-                        <div class="dashboard-card">
+                        <div class="dashboard-card d-flex flex-column">
                             <div class="d-flex justify-content-between align-items-center mb-4">
                                 <div>
                                     <h5 class="fw-bold mb-0">Aktivitas Scan (Live)</h5>
@@ -276,7 +274,7 @@
                                 <span class="badge bg-light text-dark border"><%= currentList.length %> Scan</span>
                             </div>
 
-                            <div style="max-height: 400px; overflow-y: auto;">
+                            <div style="flex:1 1 0;min-height:0;overflow-y:auto;">
                                 <table class="table uid-table align-middle border-0">
                                     <tbody id="tabel-antrean-body">
                                         <% if (currentList.length === 0) { %>
@@ -739,6 +737,18 @@
     <script>
       const CURRENT_CLASS = '<%= currentClass || "" %>';
 
+      function applySelectColorAdmin(sel) {
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt) return;
+        sel.style.backgroundColor = opt.dataset.bg || '';
+        sel.style.color = opt.dataset.fg || '';
+        sel.style.fontWeight = '700';
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        const sel = document.getElementById('device-select-admin');
+        if (sel) applySelectColorAdmin(sel);
+      });
+
       function openAddModal() {
           document.getElementById('rfidInputAdd').value = '';
           document.getElementById('addModalTitle').innerText = 'Tambah Mahasiswa Baru';
@@ -956,23 +966,33 @@
                     if(bgCard) bgCard.style.backgroundColor = isOnline ? '#e8f5e9' : '#ffebee';
 
                     const statusContainer = document.querySelector('#device-status-container');
-                    if(statusContainer) {
-                        let badgeHtml = isOnline 
-                            ? `<span class="badge bg-success text-white badge-custom shadow-sm"><i class="fas fa-wifi me-1"></i> ONLINE</span>` 
-                            : `<span class="badge bg-danger text-white badge-custom shadow-sm"><i class="fas fa-wifi-slash me-1"></i> OFFLINE</span>`;
-                        statusContainer.innerHTML = `${badgeHtml} <small class="text-muted font-monospace">${dev.id}</small>`;
+                    if (statusContainer) {
+                        const dotColor = isOnline ? '#2e7d32' : '#c62828';
+                        const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
+                        statusContainer.innerHTML = `
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                                <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
+                            </div>
+                            <div class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</div>`;
                     }
 
                     const batContainer = document.querySelector('#device-battery-container');
                     const batText = document.querySelector('#device-battery-text');
                     const batLabel = document.querySelector('#device-battery-label');
-                    
-                    if (batContainer && batText && batLabel) {
+
+                    if (batContainer && batText) {
                         let batVal = dev.battery;
                         let hasBat = (batVal !== null && batVal !== undefined && batVal !== '');
                         batText.innerText = hasBat ? `${batVal}%` : '--';
-                        batLabel.innerText = hasBat ? 'Status Daya Perangkat' : 'Belum ada data dari broker';
-                        batContainer.style.color = isOnline ? ((hasBat && batVal > 20) ? 'var(--dark-pink)' : '#dc3545') : '#999';
+                        if (batLabel) batLabel.innerText = hasBat ? 'Status Daya Perangkat' : 'Belum ada data dari broker';
+                        let batColor = '#999';
+                        if (isOnline) {
+                            if (hasBat && batVal > 75) batColor = '#43a047';
+                            else if (hasBat && batVal > 30) batColor = '#f9a825';
+                            else batColor = '#dc3545';
+                        }
+                        batContainer.style.color = batColor;
                     }
                 }
             } catch (err) {
