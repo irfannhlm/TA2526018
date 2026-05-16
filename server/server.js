@@ -951,6 +951,7 @@ app.get("/api/realtime-logs", async (req, res) => {
         for (const a of relevantAnswers) {
           formatted.push({
             id: a.answer_id,
+            question_id: q.question_id,
             date_obj: q.created_at ? new Date(q.created_at).toISOString() : null,
             name: a.students?.name,
             nim: a.students?.nim,
@@ -964,6 +965,7 @@ app.get("/api/realtime-logs", async (req, res) => {
       } else {
         formatted.push({
           id: null,
+          question_id: q.question_id,
           date_obj: q.created_at ? new Date(q.created_at).toISOString() : null,
           name: null,
           nim: null,
@@ -1663,6 +1665,7 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
           for (const a of relevantAnswers) {
             filteredLogs.push({
               id: a.answer_id,
+              question_id: q.question_id,
               date_obj: q.created_at,
               name: a.students?.name,
               nim: a.students?.nim,
@@ -1676,6 +1679,7 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
         } else {
           filteredLogs.push({
             id: null,
+            question_id: q.question_id,
             date_obj: q.created_at,
             name: null,
             nim: null,

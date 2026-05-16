@@ -1145,13 +1145,14 @@
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         let html = '';
         let lastDate = '';
-        let lastQuestion = '';
+        let lastQuestionId = null;
         logs.forEach(log => {
           const logDate = new Date(log.date_obj);
           const currentDate = logDate.toLocaleDateString('id-ID', options);
           const currentQuestion = log.question === '[SILENT]' ? '' : (log.question || '');
+          const currentQuestionId = log.question_id ?? null;
           const dateClass = 'date-group-' + currentDate.replace(/[^a-zA-Z0-9]/g, '');
-          const questionClass = dateClass + '-q-' + currentQuestion.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+          const questionClass = dateClass + '-q-' + (currentQuestionId !== null ? currentQuestionId : currentQuestion.substring(0, 10).replace(/[^a-zA-Z0-9]/g, ''));
           const silenceLabel = formatDurasi(log.duration_answer);
 
           if (currentDate !== lastDate) {
@@ -1163,18 +1164,20 @@
               </div>
             </div>`;
             lastDate = currentDate;
-            lastQuestion = '';
+            lastQuestionId = null;
           }
 
-          if (currentQuestion !== lastQuestion) {
+          if (currentQuestionId !== lastQuestionId) {
             const qAudio = log.question_audio_url || '';
             const isSilentQuestion = log.question === '[SILENT]';
             const questionLabel = isSilentQuestion
               ? `<span style="font-style:italic;color:#aaa;"><i class="fas fa-microphone-slash me-2"></i>Tidak ada suara terdeteksi</span>`
               : `<span><i class="fas fa-question-circle me-2"></i> ${currentQuestion || 'Sesi Tanpa Pertanyaan'}</span>`;
-            const audioHtml = isSilentQuestion ? '' : (qAudio
+            const audioHtml = qAudio
               ? `<audio controls src="${qAudio}" style="width:100%;height:32px;border-radius:20px;opacity:0.85;margin-top:8px;background-color:#fce4ec;" onclick="event.stopPropagation()"></audio>`
-              : `<div class="text-muted mt-2" style="font-size:11px;"><i class="fas fa-microphone-slash me-1"></i> Audio pertanyaan belum tersedia</div>`);
+              : `<button class="btn btn-sm w-100 rounded-pill py-1 mt-2" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;font-weight:600;pointer-events:none;" disabled onclick="event.stopPropagation()">
+                  <i class="fas fa-microphone-slash me-2"></i> Audio pertanyaan belum tersedia
+                </button>`;
 
             html += `
             <div class="question-header-row ${dateClass} mb-1 ms-3" onclick="toggleGroup(this, '${questionClass}')" style="cursor:pointer;">
@@ -1186,7 +1189,7 @@
                 ${audioHtml}
               </div>
             </div>`;
-            lastQuestion = currentQuestion;
+            lastQuestionId = currentQuestionId;
           }
 
           if (log.id === null || log.id === undefined) {
