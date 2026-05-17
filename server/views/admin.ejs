@@ -84,11 +84,54 @@
         }
         
         ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #fff0f5; } ::-webkit-scrollbar-thumb { background: #ffb6c1; border-radius: 10px; }
+
+        /* ===== RESPONSIVE ===== */
+        .menu-toggle { display: none; }
+        .sidebar-overlay { display: none; }
+
+        /* Tablet & mobile: sidebar jadi drawer */
+        @media (max-width: 991px) {
+            .menu-toggle {
+                display: flex; align-items: center; justify-content: center;
+                position: fixed; top: 14px; left: 14px; z-index: 998;
+                width: 46px; height: 46px; border-radius: 14px; border: none;
+                background: linear-gradient(135deg, #ff80ab, #d81b60); color: #fff;
+                font-size: 1.15rem; box-shadow: 0 6px 18px rgba(216,27,96,0.35); cursor: pointer;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                box-shadow: 0 0 40px rgba(0,0,0,0.18);
+            }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-overlay {
+                position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+                z-index: 999; opacity: 0; transition: opacity 0.3s ease;
+            }
+            .sidebar-overlay.show { display: block; opacity: 1; }
+            .main-content { margin-left: 0; padding: 78px 26px 32px; }
+            .page-header { flex-wrap: wrap; gap: 14px; }
+            .header-title { font-size: 1.55rem; }
+        }
+
+        /* Mobile kecil */
+        @media (max-width: 575px) {
+            .main-content { padding: 74px 14px 24px; }
+            .header-title { font-size: 1.25rem; }
+            .dashboard-card { padding: 18px; border-radius: 18px; }
+            .page-header .d-flex.gap-2 { width: 100%; flex-wrap: wrap; }
+            .page-header .btn { flex: 1 1 auto; }
+        }
     </style>
 </head>
 <body>
-    
-    <div class="sidebar">
+
+    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Buka menu">
+        <i class="fas fa-bars"></i>
+    </button>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <div class="sidebar" id="sidebar">
         <div class="brand-title">
             <img src="/images/logo.png" alt="Logo Aplikasi" class="logo-img">
         </div>
@@ -138,7 +181,7 @@
             <!-- ====== TAB: MONITORING LIVE ====== -->
             <div class="tab-pane fade" id="v-pills-dashboard">
                 <% if (currentClass) { %>
-                <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+                <div class="page-header d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
                     <div>
                         <h1 class="header-title mb-2">Panel Admin</h1>
                         <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -294,7 +337,7 @@
 
             <!-- ====== TAB: MANAJEMEN KELAS ====== -->
             <div class="tab-pane fade" id="v-pills-classes">
-                <div class="d-flex justify-content-between align-items-start mb-4">
+                <div class="page-header d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Kelas</h1>
                     </div>
@@ -362,7 +405,7 @@
 
             <!-- ====== TAB: MANAJEMEN AKUN ====== -->
             <div class="tab-pane fade" id="v-pills-accounts">
-                <div class="d-flex justify-content-between align-items-start mb-4">
+                <div class="page-header d-flex justify-content-between align-items-start mb-4">
                     <div>
                         <h1 class="header-title">Manajemen Akun</h1>
                     </div>
@@ -692,6 +735,25 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       const CURRENT_CLASS = '<%= currentClass || "" %>';
+
+      // ===== Sidebar drawer (tablet & mobile) =====
+      function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const ov = document.getElementById('sidebarOverlay');
+        const opened = sb.classList.toggle('open');
+        ov.classList.toggle('show', opened);
+      }
+      function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('show');
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('#v-pills-tab .nav-link').forEach(btn => {
+          btn.addEventListener('click', () => {
+            if (window.innerWidth <= 991) closeSidebar();
+          });
+        });
+      });
 
       function applySelectColorAdmin(sel) {
         const opt = sel.options[sel.selectedIndex];
