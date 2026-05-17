@@ -186,24 +186,23 @@
                   <div class="d-flex align-items-stretch">
 
                     <div id="device-status-container" class="flex-grow-1">
-                      <div class="d-flex align-items-center gap-2 mb-1">
-                        <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                      <div class="mb-1">
                         <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
                       </div>
-                      <div class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></div>
+                      <div class="d-flex align-items-center gap-2">
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                        <span class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></span>
+                      </div>
                     </div>
 
                     <div style="width:1px;background:rgba(0,0,0,0.1);margin:0 15px;"></div>
 
                     <div class="flex-grow-1">
-                      <div class="d-flex align-items-center gap-2 mb-1">
-                        <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %><i class="fas fa-battery-full" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                        <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %><i class="fas fa-battery-three-quarters" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                        <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %><i class="fas fa-battery-half" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                        <% } else { %><i class="fas fa-battery-quarter" style="font-size:0.85rem;color:var(--dark-pink);"></i><% } %>
+                      <div class="mb-1">
                         <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">DAYA BATERAI</small>
                       </div>
-                      <div id="device-battery-container" class="fw-bold" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                      <div id="device-battery-container" class="fw-bold d-flex align-items-center gap-2" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                        <i id="device-battery-icon" class="fas <%= currentDevice.battery !== null && currentDevice.battery > 80 ? 'fa-battery-full' : (currentDevice.battery !== null && currentDevice.battery > 50 ? 'fa-battery-three-quarters' : (currentDevice.battery !== null && currentDevice.battery > 20 ? 'fa-battery-half' : (currentDevice.battery !== null ? 'fa-battery-quarter' : 'fa-battery-empty'))) %>" style="font-size:1.1rem;"></i>
                         <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
                       </div>
                     </div>
@@ -373,6 +372,13 @@
             const avgDiamGlobal = totalDurations.length > 0
               ? (totalDurations.reduce((a,b) => a+b, 0) / totalDurations.length).toFixed(2)
               : null;
+
+            // Ringkasan penilaian satu kelas (nyambung dengan penilaian di Riwayat)
+            const gradedLogs = logs.filter(l => l.id !== null && l.nilai !== null && l.nilai !== undefined);
+            const totalGraded = gradedLogs.length;
+            const kelasAvgNilai = totalGraded > 0
+              ? Math.round(gradedLogs.reduce((a, l) => a + Number(l.nilai), 0) / totalGraded)
+              : null;
           %>
 
           <!-- Kartu: Paling Aktif + Belum Bicara -->
@@ -462,7 +468,7 @@
           <div class="dashboard-card mb-4">
             <div class="mb-3">
               <h6 class="fw-bold mb-1" style="color:var(--dark-pink)"><i class="fas fa-table me-2"></i>Detail Per Mahasiswa</h6>
-              <small class="text-muted">Total bicara: <strong style="color:var(--dark-pink);"><%= totalBicara %></strong> giliran &bull; Rata-rata: <strong style="color:#8e24aa;"><%= rataRata %>x</strong> per mahasiswa aktif</small>
+              <small class="text-muted">Total bicara: <strong style="color:var(--dark-pink);"><%= totalBicara %></strong> giliran &bull; Rata-rata: <strong style="color:#8e24aa;"><%= rataRata %>x</strong> per mahasiswa aktif &bull; Sudah dinilai: <strong style="color:<%= totalGraded === totalBicara && totalBicara > 0 ? '#2e7d32' : '#e65100' %>;"><%= totalGraded %>/<%= totalBicara %></strong> jawaban<% if (kelasAvgNilai !== null) { %> &bull; Rata-rata nilai kelas: <strong style="color:<%= kelasAvgNilai >= 80 ? '#2e7d32' : (kelasAvgNilai >= 60 ? '#f57f17' : '#c62828') %>;"><%= kelasAvgNilai %>/100</strong><% } %></small>
             </div>
             <div class="table-responsive">
               <table class="table align-middle" style="font-size:0.87rem;">
@@ -473,6 +479,8 @@
                     <th class="border-0 text-center" style="color:var(--dark-pink)">Total Bicara</th>
                     <th class="border-0 text-center" style="color:var(--dark-pink)">vs Rata-rata</th>
                     <th class="border-0 text-center" style="color:var(--dark-pink)">Porsi</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">Rata-rata Nilai</th>
+                    <th class="border-0 text-center" style="color:var(--dark-pink)">Penilaian</th>
                     <th class="border-0 rounded-end" style="color:var(--dark-pink)">Status</th>
                   </tr>
                 </thead>
@@ -487,6 +495,24 @@
                       : s.count >= 3
                       ? '<span class="badge rounded-pill px-3" style="background:#e8f5e9;color:#2e7d32;font-size:0.75rem;">Aktif</span>'
                       : '<span class="badge rounded-pill px-3" style="background:#fff8e1;color:#f57f17;font-size:0.75rem;">Cukup</span>';
+
+                    const avgNilai = (s.avgNilai === null || s.avgNilai === undefined) ? null : s.avgNilai;
+                    const gradedCount = s.gradedCount || 0;
+                    const answeredCount = s.count || 0;
+                    const nilaiColor = avgNilai === null ? '#bbb'
+                      : avgNilai >= 80 ? '#2e7d32'
+                      : avgNilai >= 60 ? '#f57f17'
+                      : '#c62828';
+                    let nilaiBadge;
+                    if (answeredCount === 0) {
+                      nilaiBadge = '<span class="text-muted" style="font-size:0.78rem;">—</span>';
+                    } else if (gradedCount === 0) {
+                      nilaiBadge = '<span class="badge rounded-pill px-3" style="background:#fff3e0;color:#e65100;font-size:0.75rem;"><i class="fas fa-hourglass-half me-1"></i>Belum dinilai</span>';
+                    } else if (gradedCount < answeredCount) {
+                      nilaiBadge = '<span class="badge rounded-pill px-3" style="background:#fff8e1;color:#f57f17;font-size:0.75rem;"><i class="fas fa-circle-half-stroke me-1"></i>Sebagian ' + gradedCount + '/' + answeredCount + '</span>';
+                    } else {
+                      nilaiBadge = '<span class="badge rounded-pill px-3" style="background:#e8f5e9;color:#2e7d32;font-size:0.75rem;"><i class="fas fa-check-circle me-1"></i>Lengkap ' + gradedCount + '/' + answeredCount + '</span>';
+                    }
                   %>
                   <tr style="border-bottom:1px solid #fce4ec;">
                     <td class="ps-3 text-muted"><%= i+1 %></td>
@@ -508,6 +534,14 @@
                     <td class="text-center">
                       <span class="fw-semibold text-dark"><%= porsi %>%</span>
                     </td>
+                    <td class="text-center">
+                      <% if (avgNilai === null) { %>
+                        <span class="text-muted" style="font-size:0.8rem;">—</span>
+                      <% } else { %>
+                        <span class="fw-bold" style="font-size:1rem;color:<%= nilaiColor %>;"><%= avgNilai %></span><span class="text-muted" style="font-size:0.7rem;">/100</span>
+                      <% } %>
+                    </td>
+                    <td class="text-center"><%- nilaiBadge %></td>
                     <td><%- statusBadge %></td>
                   </tr>
                   <% }) %>
@@ -1259,16 +1293,19 @@
               const dotColor = isOnline ? '#2e7d32' : '#c62828';
               const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
               statusContainer.innerHTML = `
-                <div class="d-flex align-items-center gap-2 mb-1">
-                  <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                <div class="mb-1">
                   <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
                 </div>
-                <div class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</div>`;
+                <div class="d-flex align-items-center gap-2">
+                  <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                  <span class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</span>
+                </div>`;
             }
 
             const batContainer = document.querySelector('#device-battery-container');
             const batText = document.querySelector('#device-battery-text');
             const batLabel = document.querySelector('#device-battery-label');
+            const batIcon = document.querySelector('#device-battery-icon');
             if (batContainer && batText && batLabel) {
               let batVal = dev.battery;
               let hasBat = (batVal !== null && batVal !== undefined && batVal !== '');
@@ -1281,6 +1318,16 @@
                 else batColor = '#dc3545';
               }
               batContainer.style.color = batColor;
+              if (batIcon) {
+                let ic = 'fa-battery-empty';
+                if (hasBat) {
+                  if (batVal > 80) ic = 'fa-battery-full';
+                  else if (batVal > 50) ic = 'fa-battery-three-quarters';
+                  else if (batVal > 20) ic = 'fa-battery-half';
+                  else ic = 'fa-battery-quarter';
+                }
+                batIcon.className = 'fas ' + ic;
+              }
             }
           }
 
@@ -1299,6 +1346,33 @@
       function formatDurasi(detik) {
         if (detik === null || detik === undefined) return null;
         return detik + 's';
+      }
+
+      function normNilai(v) {
+        if (v === null || v === undefined || v === '') return null;
+        const n = parseInt(v, 10);
+        return isNaN(n) ? null : n;
+      }
+
+      function nilaiBadgeHTML(v) {
+        return v !== null
+          ? `<span class="badge rounded-pill px-2 py-1" style="background:#e8f5e9;color:#2e7d32;font-size:10px;" title="Sudah dinilai"><i class="fas fa-check-circle me-1"></i>Nilai ${v}/100</span>`
+          : `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Belum dinilai"><i class="fas fa-hourglass-half me-1"></i>Belum dinilai</span>`;
+      }
+
+      // Warna baris penilaian dibedakan jelas: hijau = sudah dinilai, oranye = belum
+      const NILAI_THEME = {
+        graded:    { bg: '#e6f4ea', border: '#9ccc9f', accent: '#1b5e20' },
+        notGraded: { bg: '#fff3e0', border: '#ffb74d', accent: '#e65100' },
+      };
+      function nilaiRowStyle(v) {
+        const t = v !== null ? NILAI_THEME.graded : NILAI_THEME.notGraded;
+        return `background:${t.bg};border:1px solid ${t.border};border-left:5px solid ${t.accent};`;
+      }
+      function nilaiStatusHTML(v) {
+        return v !== null
+          ? '<span style="color:#1b5e20;"><i class="fas fa-check-circle me-1"></i>Sudah dinilai</span>'
+          : '<span style="color:#e65100;"><i class="fas fa-hourglass-half me-1"></i>Belum dinilai</span>';
       }
 
       function escAttr(str) {
@@ -1386,6 +1460,7 @@
             </div>`;
           } else {
             const isSilentAnswer = log.transcript === '[SILENT]';
+            const nilaiVal = normNilai(log.nilai);
             html += `
           <div class="${dateClass} ${questionClass} log-entry ms-5 mb-2" style="position:relative;">
             <div style="position:absolute;left:-20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#ffb6c1,#fce4ec);border-radius:2px;"></div>
@@ -1402,6 +1477,7 @@
                   </div>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                  <span id="nilai-badge-${log.id}">${nilaiBadgeHTML(nilaiVal)}</span>
                   ${silenceLabel ? `<span class="badge rounded-pill px-2 py-1" style="background:#fff3e0;color:#e65100;font-size:10px;" title="Waktu diam sebelum menjawab"><i class="fas fa-hourglass-start me-1"></i>${silenceLabel} diam</span>` : ''}
                   <div class="kelola-actions" style="display:none;gap:4px;">
                     <button class="btn btn-sm rounded-circle" style="width:28px;height:28px;padding:0;background:#e3f2fd;color:#1565c0;" title="Edit jawaban"
@@ -1432,6 +1508,18 @@
                 : `<button class="btn btn-sm w-100 rounded-pill py-1" style="font-size:0.8rem;background:#fce4ec;color:#c2185b;" disabled>
                     <i class="fas fa-cloud-download-alt me-2"></i> Audio belum tersedia
                   </button>`}
+              <div id="nilai-row-${log.id}" class="d-flex align-items-center gap-2 mt-3 px-3 py-2 rounded-3 flex-wrap" style="${nilaiRowStyle(nilaiVal)}">
+                <i class="fas fa-award nilai-accent" style="color:${nilaiVal !== null ? NILAI_THEME.graded.accent : NILAI_THEME.notGraded.accent};"></i>
+                <span class="fw-semibold nilai-accent" style="font-size:0.82rem;color:${nilaiVal !== null ? NILAI_THEME.graded.accent : NILAI_THEME.notGraded.accent};">Penilaian</span>
+                <input type="number" min="1" max="100" value="${nilaiVal !== null ? nilaiVal : ''}" placeholder="1–100"
+                  id="nilai-input-${log.id}" class="form-control form-control-sm"
+                  style="width:88px;border:1px solid #c9c9c9;border-radius:20px;text-align:center;font-weight:700;color:#333;background:#fff;"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();simpanNilai('${log.id}');}" />
+                <button class="btn btn-sm rounded-pill px-3 fw-semibold text-white" style="background:var(--dark-pink);font-size:0.78rem;" onclick="simpanNilai('${log.id}')">
+                  <i class="fas fa-floppy-disk me-1"></i> Simpan Nilai
+                </button>
+                <span id="nilai-status-${log.id}" class="ms-auto" style="font-size:0.74rem;font-weight:700;">${nilaiStatusHTML(nilaiVal)}</span>
+              </div>
             </div>
           </div>`;
           }
@@ -1535,6 +1623,43 @@
           Swal.fire({ icon: 'success', title: 'Tersimpan', text: 'Transkrip berhasil diperbarui.', timer: 1800, showConfirmButton: false });
         } catch {
           Swal.fire({ icon: 'error', title: 'Gagal', text: 'Gagal menyimpan perubahan.' });
+        }
+      }
+
+      async function simpanNilai(id) {
+        const input = document.getElementById('nilai-input-' + id);
+        const badgeEl = document.getElementById('nilai-badge-' + id);
+        const statusEl = document.getElementById('nilai-status-' + id);
+        if (!input) return;
+        const raw = input.value.trim();
+        let num = null;
+        if (raw !== '') {
+          num = parseInt(raw, 10);
+          if (isNaN(num) || num < 1 || num > 100) {
+            Swal.fire({ icon: 'warning', title: 'Nilai tidak valid', text: 'Masukkan angka antara 1 sampai 100, atau kosongkan untuk membatalkan nilai.' });
+            input.focus();
+            return;
+          }
+        }
+        try {
+          const res = await fetch(`/dosen/answer/${id}/nilai`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nilai: raw === '' ? null : num })
+          });
+          if (!res.ok) throw new Error();
+          input.value = num !== null ? num : '';
+          if (badgeEl) badgeEl.innerHTML = nilaiBadgeHTML(num);
+          if (statusEl) statusEl.innerHTML = nilaiStatusHTML(num);
+          const rowEl = document.getElementById('nilai-row-' + id);
+          if (rowEl) {
+            rowEl.setAttribute('style', nilaiRowStyle(num));
+            const accent = num !== null ? NILAI_THEME.graded.accent : NILAI_THEME.notGraded.accent;
+            rowEl.querySelectorAll('.nilai-accent').forEach(el => { el.style.color = accent; });
+          }
+          Swal.fire({ icon: 'success', title: num !== null ? 'Nilai tersimpan' : 'Nilai dibatalkan', timer: 1400, showConfirmButton: false });
+        } catch {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: 'Gagal menyimpan nilai.' });
         }
       }
 

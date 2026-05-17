@@ -934,7 +934,7 @@ app.get("/api/realtime-logs", async (req, res) => {
         transcript_text,
         created_at,
         audio_file_path,
-        answers(answer_id, transcript_text, audio_file_path, duration_answer, student_id, students(name,nim))
+        answers(answer_id, transcript_text, audio_file_path, duration_answer, nilai, student_id, students(name,nim))
       `,
       )
       .eq("class_id", classData.class_id)
@@ -961,6 +961,7 @@ app.get("/api/realtime-logs", async (req, res) => {
             transcript: a.transcript_text,
             audio_url: a.audio_file_path,
             duration_answer: a.duration_answer,
+            nilai: a.nilai ?? null,
           });
         }
       } else {
@@ -1654,7 +1655,7 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
       const { data: questions } = await supabase
         .from("questions")
         .select(
-          "question_id, transcript_text, created_at, audio_file_path, answers(answer_id, transcript_text, audio_file_path, duration_answer, student_id, students(name,nim))",
+          "question_id, transcript_text, created_at, audio_file_path, answers(answer_id, transcript_text, audio_file_path, duration_answer, nilai, student_id, students(name,nim))",
         )
         .eq("class_id", classId);
 
@@ -1675,6 +1676,7 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
               transcript: a.transcript_text,
               audio_url: a.audio_file_path,
               duration_answer: a.duration_answer,
+              nilai: a.nilai ?? null,
             });
           }
         } else {
@@ -1694,11 +1696,28 @@ app.get("/dosen", requireRole("dosen", "admin"), async (req, res) => {
       }
     }
 
-    let stats = studentsInClass.map((s) => ({
-      name: s.name,
-      nim: s.nim,
-      count: filteredLogs.filter((l) => l.nim === s.nim).length,
-    }));
+    let stats = studentsInClass.map((s) => {
+      const sLogs = filteredLogs.filter(
+        (l) => l.nim === s.nim && l.id !== null,
+      );
+      const graded = sLogs.filter(
+        (l) => l.nilai !== null && l.nilai !== undefined,
+      );
+      const avgNilai =
+        graded.length > 0
+          ? Math.round(
+              graded.reduce((sum, l) => sum + Number(l.nilai), 0) /
+                graded.length,
+            )
+          : null;
+      return {
+        name: s.name,
+        nim: s.nim,
+        count: sLogs.length,
+        gradedCount: graded.length,
+        avgNilai,
+      };
+    });
     stats.sort((a, b) => b.count - a.count);
 
     filteredLogs.sort((a, b) => {
@@ -1931,6 +1950,33 @@ app.delete("/dosen/answer/:id", requireRole("dosen", "admin"), async (req, res) 
     res.status(500).json({ error: "Gagal menghapus jawaban." });
   }
 });
+
+// Penilaian manual dosen (1-100), kosong = batalkan nilai
+app.patch(
+  "/dosen/answer/:id/nilai",
+  requireRole("dosen", "admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      let { nilai } = req.body;
+      if (nilai === "" || nilai === null || nilai === undefined) {
+        nilai = null;
+      } else {
+        nilai = parseInt(nilai, 10);
+        if (isNaN(nilai) || nilai < 1 || nilai > 100) {
+          return res
+            .status(400)
+            .json({ error: "Nilai harus berupa angka antara 1 dan 100." });
+        }
+      }
+      await sbUpdate("answers", { answer_id: parseInt(id) }, { nilai });
+      res.json({ ok: true, nilai });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Gagal menyimpan nilai." });
+    }
+  },
+);
 
 app.patch("/dosen/question/:id", requireRole("dosen", "admin"), async (req, res) => {
   try {

@@ -129,6 +129,8 @@
         
         <%
             let activeClassName = currentClass || '—';
+            const activeClassRec = (classes || []).find(c => c.name === currentClass);
+            const activeLecturer = activeClassRec?.lecturer || null;
         %>
 
         <div class="tab-content" id="v-pills-tabContent">
@@ -136,14 +138,25 @@
             <!-- ====== TAB: MONITORING LIVE ====== -->
             <div class="tab-pane fade" id="v-pills-dashboard">
                 <% if (currentClass) { %>
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
                     <div>
-                        <h1 class="header-title">
-                            Panel Admin
-                            <span class="class-badge"><%= activeClassName %></span>
-                        </h1>
+                        <h1 class="header-title mb-2">Panel Admin</h1>
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <span style="background:#fce4ec;color:#c2185b;padding:10px 22px;border-radius:25px;font-size:1rem;font-weight:700;letter-spacing:0.3px;">
+                                <i class="fas fa-chalkboard me-2"></i> <%= activeClassName %>
+                            </span>
+                            <% if (activeLecturer) { %>
+                            <span style="background:#f3e5f5;color:#7b1fa2;padding:10px 22px;border-radius:25px;font-size:1rem;font-weight:600;">
+                                <i class="fas fa-user-tie me-2"></i> <%= activeLecturer %>
+                            </span>
+                            <% } else { %>
+                            <span style="background:#f5f5f5;color:#9e9e9e;padding:10px 22px;border-radius:25px;font-size:1rem;font-weight:500;font-style:italic;">
+                                <i class="fas fa-user-slash me-2"></i> Dosen belum diatur
+                            </span>
+                            <% } %>
+                        </div>
                     </div>
-                    
+
                     <div class="d-flex gap-2">
                         <a href="/pilih-kelas?role=admin" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold">
                             <i class="fas fa-exchange-alt me-2"></i> Ganti Kelas
@@ -183,24 +196,23 @@
                                 <div class="d-flex align-items-stretch">
 
                                     <div id="device-status-container" class="flex-grow-1">
-                                        <div class="d-flex align-items-center gap-2 mb-1">
-                                            <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                                        <div class="mb-1">
                                             <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
                                         </div>
-                                        <div class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;display:inline-block;"></span>
+                                            <span class="fw-bold" style="font-size:1.05rem;color:<%= currentDevice.status === 'online' ? '#2e7d32' : '#c62828' %>;"><%= currentDevice.status === 'online' ? 'ONLINE' : 'OFFLINE' %></span>
+                                        </div>
                                     </div>
 
                                     <div style="width:1px;background:rgba(0,0,0,0.1);margin:0 15px;"></div>
 
                                     <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center gap-2 mb-1">
-                                            <% if(currentDevice.battery !== null && currentDevice.battery > 80) { %><i class="fas fa-battery-full" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                                            <% } else if (currentDevice.battery !== null && currentDevice.battery > 50) { %><i class="fas fa-battery-three-quarters" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                                            <% } else if (currentDevice.battery !== null && currentDevice.battery > 20) { %><i class="fas fa-battery-half" style="font-size:0.85rem;color:var(--dark-pink);"></i>
-                                            <% } else { %><i class="fas fa-battery-quarter" style="font-size:0.85rem;color:var(--dark-pink);"></i><% } %>
+                                        <div class="mb-1">
                                             <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">DAYA BATERAI</small>
                                         </div>
-                                        <div id="device-battery-container" class="fw-bold" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                                        <div id="device-battery-container" class="fw-bold d-flex align-items-center gap-2" style="font-size:1.3rem;color:<%= currentDevice.status !== 'online' ? '#999' : (currentDevice.battery !== null && currentDevice.battery > 75 ? '#43a047' : (currentDevice.battery !== null && currentDevice.battery > 30 ? '#f9a825' : '#dc3545')) %>;">
+                                            <i id="device-battery-icon" class="fas <%= currentDevice.battery !== null && currentDevice.battery > 80 ? 'fa-battery-full' : (currentDevice.battery !== null && currentDevice.battery > 50 ? 'fa-battery-three-quarters' : (currentDevice.battery !== null && currentDevice.battery > 20 ? 'fa-battery-half' : (currentDevice.battery !== null ? 'fa-battery-quarter' : 'fa-battery-empty'))) %>" style="font-size:1.1rem;"></i>
                                             <span id="device-battery-text"><%= currentDevice.status === 'online' && currentDevice.battery !== null ? currentDevice.battery + '%' : '--' %></span>
                                         </div>
                                     </div>
@@ -918,16 +930,19 @@
                         const dotColor = isOnline ? '#2e7d32' : '#c62828';
                         const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
                         statusContainer.innerHTML = `
-                            <div class="d-flex align-items-center gap-2 mb-1">
-                                <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                            <div class="mb-1">
                                 <small style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#888;">STATUS ALAT</small>
                             </div>
-                            <div class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</div>`;
+                            <div class="d-flex align-items-center gap-2">
+                                <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${dotColor};display:inline-block;"></span>
+                                <span class="fw-bold" style="font-size:1.05rem;color:${dotColor};">${statusText}</span>
+                            </div>`;
                     }
 
                     const batContainer = document.querySelector('#device-battery-container');
                     const batText = document.querySelector('#device-battery-text');
                     const batLabel = document.querySelector('#device-battery-label');
+                    const batIcon = document.querySelector('#device-battery-icon');
 
                     if (batContainer && batText) {
                         let batVal = dev.battery;
@@ -941,6 +956,16 @@
                             else batColor = '#dc3545';
                         }
                         batContainer.style.color = batColor;
+                        if (batIcon) {
+                            let ic = 'fa-battery-empty';
+                            if (hasBat) {
+                                if (batVal > 80) ic = 'fa-battery-full';
+                                else if (batVal > 50) ic = 'fa-battery-three-quarters';
+                                else if (batVal > 20) ic = 'fa-battery-half';
+                                else ic = 'fa-battery-quarter';
+                            }
+                            batIcon.className = 'fas ' + ic;
+                        }
                     }
                 }
             } catch (err) {
