@@ -14,6 +14,7 @@ const {
 const bcrypt = require("bcrypt");
 const SALT_ROUNDS = 10;
 const session = require("express-session");
+const MemoryStore = require("memorystore")(session);
 
 // ================= KONFIGURASI SUPABASE =================
 const supabaseUrl = process.env.SUPABASE_URL.replace(
@@ -123,6 +124,9 @@ app.use(
     secret: process.env.SESSION_SECRET || "catchnote-secret-key",
     resave: false,
     saveUninitialized: false,
+    store: new MemoryStore({
+      checkPeriod: 86400000, // bersihkan sesi kedaluwarsa tiap 24 jam
+    }),
     cookie: {
       httpOnly: true,
       maxAge: 8 * 60 * 60 * 1000,
@@ -173,7 +177,16 @@ let sessionData = {
   status: "stopped",
   mode: "dosen_rec",
   maxTime: 5,
+  threshold: "normal",
   scannedList: [],
+};
+
+// Nilai ambang kebisingan (hardcode) — dikirim ke alat seperti set_timer
+const THRESHOLD_VALUES = {
+  hening: 175,
+  normal: 300,
+  agak_bising: 400,
+  sangat_bising: 750,
 };
 
 let scanCounter = 0;
@@ -1793,7 +1806,7 @@ app.post(
   "/dosen/update-settings",
   requireRole("dosen", "admin"),
   (req, res) => {
-    const { status, mode, timer, current_class } = req.body;
+    const { status, mode, timer, threshold, current_class } = req.body;
     if (status) sessionData.status = status;
     if (mode) sessionData.mode = mode;
     if (timer) {
@@ -1805,6 +1818,17 @@ app.post(
       mqttClient.publish("kelas/alat/perintah", payload, (err) => {
         if (err) console.error("❌ Gagal mengirim timer ke MQTT:", err);
         else console.log("✅ Berhasil mengirim timer ke MQTT:", payload);
+      });
+    }
+    if (threshold && THRESHOLD_VALUES[threshold] !== undefined) {
+      sessionData.threshold = threshold;
+      const payload = JSON.stringify({
+        perintah: "set_threshold",
+        nilai: THRESHOLD_VALUES[threshold],
+      });
+      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
+        if (err) console.error("❌ Gagal mengirim threshold ke MQTT:", err);
+        else console.log("✅ Berhasil mengirim threshold ke MQTT:", payload);
       });
     }
     res.redirect(`/dosen?kelas=${current_class}`);

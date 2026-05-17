@@ -144,6 +144,12 @@
         #logTable .ms-5 { margin-left: 1.75rem !important; }
         #logTable .ms-3 { margin-left: 0.5rem !important; }
       }
+
+      /* ===== Sudut pop-up konsisten (modal & SweetAlert) ===== */
+      .modal-content,
+      .swal2-popup {
+        border-radius: 20px !important;
+      }
     </style>
   </head>
   <body>
@@ -263,7 +269,7 @@
 
                 <div id="wrapper-sync-uid" class="mt-3">
                   <button type="button" id="btn-sync-uid" onclick="confirmSyncUid()" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-bold border-2 w-100" <%= currentDevice.status !== 'online' ? 'disabled title="Perangkat offline"' : '' %>>
-                    <i class="fas fa-satellite-dish me-1"></i> Sinkron ke Alat
+                    <i class="fas fa-satellite-dish me-1"></i> Sinkron Peserta ke Alat
                   </button>
                 </div>
 
@@ -278,6 +284,32 @@
                       <span class="input-group-text border-0 bg-transparent ps-3"><i class="fas fa-clock text-secondary"></i></span>
                       <input type="number" id="timer-input" name="timer" class="form-control border-0 bg-transparent" min="1" value="<%= session.maxTime %>" <%= currentDevice.status !== 'online' ? 'disabled' : '' %> />
                       <button id="btn-set-alat" class="btn btn-link text-decoration-none text-dark fw-bold pe-3" <%= currentDevice.status !== 'online' ? 'disabled' : '' %>>SET KE ALAT</button>
+                    </div>
+                  </div>
+                </form>
+
+                <form action="/dosen/update-settings" method="POST" class="mt-3">
+                  <input type="hidden" name="current_class" value="<%= currentClass %>">
+                  <input type="hidden" name="current_device_id" value="<%= currentDevice.id %>">
+                  <div class="mb-0">
+                    <label class="small text-muted fw-bold mb-2">AMBANG KEBISINGAN RUANGAN</label>
+                    <%
+                      const thresholdOpts = [
+                        { key: 'hening',        label: 'Hening',        emoji: '🔇', color: '#00897b' },
+                        { key: 'normal',        label: 'Normal',        emoji: '🔉', color: '#2e7d32' },
+                        { key: 'agak_bising',   label: 'Agak Bising',   emoji: '🔊', color: '#f57f17' },
+                        { key: 'sangat_bising', label: 'Sangat Bising', emoji: '📢', color: '#c62828' },
+                      ];
+                      const activeThresholdOpt =
+                        thresholdOpts.find(o => o.key === session.threshold) || thresholdOpts[1];
+                    %>
+                    <div class="input-group bg-light rounded-pill overflow-hidden border">
+                      <span class="input-group-text border-0 bg-transparent ps-3"><i class="fas fa-volume-high" style="color:<%= activeThresholdOpt.color %>;"></i></span>
+                      <select id="threshold-select" name="threshold" class="form-select border-0 bg-transparent fw-bold" onchange="this.form.submit()" style="color:<%= activeThresholdOpt.color %>;" <%= currentDevice.status !== 'online' ? 'disabled' : '' %>>
+                        <% thresholdOpts.forEach(o => { %>
+                        <option value="<%= o.key %>" style="color:<%= o.color %>;font-weight:600;background:#fff;" <%= session.threshold === o.key ? 'selected' : '' %>><%= o.emoji %>  <%= o.label %></option>
+                        <% }) %>
+                      </select>
                     </div>
                   </div>
                 </form>
@@ -1348,11 +1380,13 @@
             const btnSyncAudio = document.getElementById('btn-sync-audio');
             const btnSetAlat = document.getElementById('btn-set-alat');
             const timerInput = document.getElementById('timer-input');
+            const thresholdSelect = document.getElementById('threshold-select');
 
             if (btnSyncUid) { btnSyncUid.disabled = !isOnline; btnSyncUid.title = isOnline ? '' : 'Perangkat offline'; }
             if (btnSyncAudio) { btnSyncAudio.disabled = !isOnline; btnSyncAudio.title = isOnline ? '' : 'Perangkat offline'; }
             if (btnSetAlat) { btnSetAlat.disabled = !isOnline; }
             if (timerInput) { timerInput.disabled = !isOnline; }
+            if (thresholdSelect) { thresholdSelect.disabled = !isOnline; }
 
             const bgCard = document.querySelector('#device-card-bg');
             if (bgCard) bgCard.style.backgroundColor = isOnline ? '#e8f5e9' : '#ffebee';
