@@ -129,6 +129,13 @@
         .swal2-popup {
             border-radius: 20px !important;
         }
+
+        /* ===== Tombol Scan RFID (abu-abu saat offline, hijau saat online) ===== */
+        .scan-rfid-btn { font-size: 0.78rem; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+        .scan-rfid-btn.scan-on { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .scan-rfid-btn.scan-on:hover { background: #d6efd9; }
+        .scan-rfid-btn.scan-off { background: #f1f1f1; color: #9e9e9e; border: 1px solid #dddddd; cursor: not-allowed; }
+        .scan-rfid-btn:disabled { opacity: 1; }
     </style>
 </head>
 <body>
@@ -546,12 +553,11 @@
                                   <% if (!rfidEmpty) { %>
                                     <span class="font-monospace"><%= s.rfid_uid %></span>
                                   <% } else { %>
-                                    <span class="badge rounded-pill px-2 py-1 me-2" style="background:#fff3e0;color:#e65100;font-size:0.7rem;">RFID kosong</span>
                                     <button type="button"
-                                      class="scan-rfid-btn btn btn-sm rounded-pill px-3 fw-semibold align-items-center gap-1"
-                                      style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:0.75rem;display:<%= anyDeviceOnline ? 'inline-flex' : 'none' %>;"
-                                      onclick="startRfidScan('<%= s.student_id %>', '<%= s.name %>')">
-                                      <i class="fas fa-wifi"></i> Tunggu Scan
+                                      class="scan-rfid-btn btn btn-sm rounded-pill px-3 fw-semibold d-inline-flex align-items-center gap-1 <%= anyDeviceOnline ? 'scan-on' : 'scan-off' %>"
+                                      onclick="startRfidScan('<%= s.student_id %>', '<%= s.name %>')"
+                                      <%= anyDeviceOnline ? '' : 'disabled' %>>
+                                      <i class="fas fa-wifi"></i> Scan
                                     </button>
                                   <% } %>
                                 </td>
@@ -631,23 +637,32 @@
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
-          <form action="/admin/add-to-class" method="POST">
+          <form action="/admin/add-to-class" method="POST" id="addFromClassForm" onsubmit="return validateAddFromClass()">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
-            
-            <div class="mb-4">
-                <label class="small text-muted fw-bold">PILIH MAHASISWA</label>
-                <select name="student_id" class="form-select bg-light border-0 rounded-3 py-2" required>
-                    <option value="" disabled selected>Pilih mahasiswa...</option>
-                    <% if (studentsNotInClass && studentsNotInClass.length > 0) { %>
-                        <% studentsNotInClass.forEach(s => { %>
-                        <option value="<%= s.student_id %>"><%= s.name %> (<%= s.nim %>)<% if(s.kelas) { %> — <%= s.kelas %><% } %></option>
-                        <% }) %>
-                    <% } else { %>
-                        <option disabled>Tidak ada mahasiswa dari kelas lain</option>
-                    <% } %>
+
+            <div class="mb-3">
+                <label class="small text-muted fw-bold">PILIH KELAS ASAL</label>
+                <select id="srcClassSelect" class="form-select bg-light border-0 rounded-3 py-2" onchange="renderStudentChecklist()">
+                    <option value="" selected disabled>Pilih kelas...</option>
                 </select>
+            </div>
+
+            <div id="checklistWrap" class="mb-3" style="display:none;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="small text-muted fw-bold mb-0">PILIH MAHASISWA</label>
+                    <div class="form-check m-0">
+                        <input class="form-check-input" type="checkbox" id="checkAllStudents" onchange="toggleAllStudents(this)">
+                        <label class="form-check-label small fw-semibold" for="checkAllStudents">Pilih semua</label>
+                    </div>
+                </div>
+                <div id="studentChecklist" class="rounded-3 p-2" style="max-height:260px;overflow:auto;background:#faf7f9;border:1px solid #f0e0e8;"></div>
                 <small class="text-muted mt-1 d-block">Hanya menampilkan mahasiswa yang belum ada di kelas ini.</small>
             </div>
+
+            <div id="noOtherStudents" class="text-muted text-center py-3" style="display:none;">
+                <i class="fas fa-users-slash me-1"></i> Tidak ada mahasiswa dari kelas lain.
+            </div>
+
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
                 <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
@@ -804,6 +819,67 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       const CURRENT_CLASS = '<%= currentClass || "" %>';
+
+      // ===== Tambah mahasiswa dari kelas lain (per kelas + checklist) =====
+      const STUDENTS_NOT_IN_CLASS = <%- JSON.stringify(studentsNotInClass || []) %>;
+
+      function escHtml(str) {
+        return String(str == null ? '' : str)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const sel = document.getElementById('srcClassSelect');
+        const none = document.getElementById('noOtherStudents');
+        if (!sel) return;
+        const classes = [...new Set(STUDENTS_NOT_IN_CLASS.map(s => s.kelas || '-'))].sort();
+        if (classes.length === 0) {
+          if (sel.parentElement) sel.parentElement.style.display = 'none';
+          if (none) none.style.display = 'block';
+          return;
+        }
+        classes.forEach(c => {
+          const cnt = STUDENTS_NOT_IN_CLASS.filter(s => (s.kelas || '-') === c).length;
+          const o = document.createElement('option');
+          o.value = c;
+          o.textContent = `${c} (${cnt} mahasiswa)`;
+          sel.appendChild(o);
+        });
+      });
+
+      function renderStudentChecklist() {
+        const sel = document.getElementById('srcClassSelect');
+        const box = document.getElementById('studentChecklist');
+        const wrap = document.getElementById('checklistWrap');
+        const checkAll = document.getElementById('checkAllStudents');
+        if (!sel || !box || !wrap) return;
+        const kelas = sel.value;
+        const list = STUDENTS_NOT_IN_CLASS
+          .filter(s => (s.kelas || '-') === kelas)
+          .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        box.innerHTML = list.map(s => `
+          <label class="d-flex align-items-center gap-2 px-2 py-2 rounded-2" style="cursor:pointer;">
+            <input class="form-check-input m-0 stu-check" type="checkbox" name="student_id" value="${s.student_id}">
+            <span><span class="fw-semibold">${escHtml(s.name)}</span> <span class="text-muted small">${escHtml(s.nim || '')}</span></span>
+          </label>`).join('');
+        if (checkAll) checkAll.checked = false;
+        wrap.style.display = 'block';
+      }
+
+      function toggleAllStudents(master) {
+        document.querySelectorAll('#studentChecklist .stu-check')
+          .forEach(cb => { cb.checked = master.checked; });
+      }
+
+      function validateAddFromClass() {
+        const checked = document.querySelectorAll('#studentChecklist .stu-check:checked');
+        if (checked.length === 0) {
+          Swal.fire({ icon: 'warning', title: 'Belum ada yang dipilih', text: 'Pilih minimal satu mahasiswa untuk ditambahkan.' });
+          return false;
+        }
+        return true;
+      }
 
       // ===== Sidebar drawer (tablet & mobile) =====
       function toggleSidebar() {
@@ -1214,7 +1290,9 @@
 
                     const anyDeviceOnline = data.devices.some(d => d.status === 'online');
                     document.querySelectorAll('.scan-rfid-btn').forEach(b => {
-                        b.style.display = anyDeviceOnline ? 'inline-flex' : 'none';
+                        b.disabled = !anyDeviceOnline;
+                        b.classList.toggle('scan-on', anyDeviceOnline);
+                        b.classList.toggle('scan-off', !anyDeviceOnline);
                     });
 
                     const bgCard = document.querySelector('#device-card-bg');

@@ -487,17 +487,25 @@ router.post(
     const clsRows = await sbSelect("classes", { class_name: current_class });
     if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
     const classId = clsRows[0].class_id;
-    const existing = await sbSelect("class_students", {
-      student_id: toInt(student_id),
-      class_id: classId,
-    });
-    if (existing.length === 0) {
-      await sbInsert("class_students", {
-        student_id: toInt(student_id),
+
+    // Bisa banyak (checklist) atau satu — normalkan jadi array id.
+    const ids = (Array.isArray(student_id) ? student_id : [student_id])
+      .map((v) => toInt(v))
+      .filter((v) => v !== null);
+
+    for (const sid of ids) {
+      const existing = await sbSelect("class_students", {
+        student_id: sid,
         class_id: classId,
       });
+      if (existing.length === 0) {
+        await sbInsert("class_students", {
+          student_id: sid,
+          class_id: classId,
+        });
+      }
     }
-    res.redirect(`/admin?kelas=${current_class}`);
+    res.redirect(`/admin?kelas=${encodeURIComponent(current_class)}`);
   }),
 );
 
