@@ -213,9 +213,23 @@
                         <button class="btn btn-white bg-white text-dark border rounded-pill px-3 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#listModal">
                             <i class="fas fa-list me-2"></i> List Mahasiswa
                         </button>
-                        <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold" style="background: var(--dark-pink);" data-bs-toggle="modal" data-bs-target="#addFromClassModal">
-                            <i class="fas fa-user-plus me-2"></i> Tambah Mahasiswa
-                        </button>
+                        <div class="dropdown">
+                            <button class="btn text-white rounded-pill px-4 py-2 shadow-sm fw-bold dropdown-toggle" style="background: var(--dark-pink);" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user-plus me-2"></i> Tambah Mahasiswa
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 mt-2 p-2">
+                                <li>
+                                    <button type="button" class="dropdown-item rounded-3 py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#addFromClassModal">
+                                        <i class="fas fa-people-arrows me-2" style="color: var(--dark-pink);"></i> Dari Kelas Lain
+                                    </button>
+                                </li>
+                                <li>
+                                    <button type="button" class="dropdown-item rounded-3 py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#importCsvModal">
+                                        <i class="fas fa-file-csv me-2" style="color: var(--dark-pink);"></i> Import CSV
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -500,7 +514,14 @@
                         <h5 class="modal-title fw-bold">Database Kelas <%= currentClass %></h5>
                         <p class="text-muted small mb-0">Total <%= students.length %> Mahasiswa</p>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="/admin/export-csv?kelas=<%= encodeURIComponent(currentClass || '') %>"
+                           class="btn btn-sm rounded-pill fw-semibold d-inline-flex align-items-center gap-2"
+                           style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:0.8rem;">
+                            <i class="fas fa-file-export"></i> Export CSV
+                        </a>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
                 </div>
                 
                 <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
@@ -514,11 +535,25 @@
                             </tr>
                         </thead>
                         <tbody>
+                            <% const anyDeviceOnline = (devices || []).some(d => d.status === 'online'); %>
                             <% students.forEach(s => { %>
+                            <% const rfidEmpty = !s.rfid_uid || !String(s.rfid_uid).trim(); %>
                             <tr>
                                 <td class="fw-bold"><%= s.name %></td>
                                 <td><%= s.nim %></td>
-                                <td class="font-monospace"><%= s.rfid_uid %></td>
+                                <td>
+                                  <% if (!rfidEmpty) { %>
+                                    <span class="font-monospace"><%= s.rfid_uid %></span>
+                                  <% } else { %>
+                                    <span class="badge rounded-pill px-2 py-1 me-2" style="background:#fff3e0;color:#e65100;font-size:0.7rem;">RFID kosong</span>
+                                    <button type="button"
+                                      class="scan-rfid-btn btn btn-sm rounded-pill px-3 fw-semibold align-items-center gap-1"
+                                      style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:0.75rem;display:<%= anyDeviceOnline ? 'inline-flex' : 'none' %>;"
+                                      onclick="startRfidScan('<%= s.student_id %>', '<%= s.name %>')">
+                                      <i class="fas fa-wifi"></i> Tunggu Scan
+                                    </button>
+                                  <% } %>
+                                </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2">
                                         <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="openEditModal('<%= s.student_id %>', '<%= s.name %>', '<%= s.nim %>', '<%= s.rfid_uid %>')">
@@ -616,6 +651,55 @@
                 <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
                 <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
                     <i class="fas fa-user-plus me-2"></i>Tambahkan
+                </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== MODAL: IMPORT MAHASISWA DARI CSV ====== -->
+    <div class="modal fade" id="importCsvModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="modal-title fw-bold">Import Mahasiswa dari CSV</h5>
+                <p class="text-muted small mb-0">Tambahkan banyak mahasiswa ke <strong><%= currentClass %></strong> sekaligus.</p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form action="/admin/import-csv" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="current_class" value="<%= currentClass %>">
+
+            <div class="rounded-3 p-3 mb-3" style="background:#fff0f6;border:1px solid #f5d0e0;">
+              <div class="fw-semibold mb-1" style="color:var(--dark-pink);font-size:0.85rem;">
+                <i class="fas fa-circle-info me-1"></i> Format file
+              </div>
+              <div class="text-muted" style="font-size:0.8rem;">
+                File <strong>.csv</strong> berisi kolom <strong>nama</strong> dan <strong>nim</strong>
+                (boleh pakai baris header). Kolom <strong>rfid</strong> bersifat
+                <strong>opsional</strong> &mdash; kalau dikosongkan, RFID bisa diisi nanti
+                lewat tombol <em>Tunggu Scan</em> di List Mahasiswa.
+              </div>
+              <div class="mt-2 font-monospace small bg-white rounded-2 p-2 text-secondary">
+                nama,nim,rfid<br>Budi Santoso,13220001,A1B2C3D4<br>Siti Aminah,13220002,
+              </div>
+              <a href="/template-mahasiswa.csv" download
+                 class="btn btn-sm rounded-pill mt-3 fw-semibold d-inline-flex align-items-center gap-2"
+                 style="background:#fff;color:var(--dark-pink);border:1px solid #f5d0e0;font-size:0.78rem;">
+                <i class="fas fa-download"></i> Unduh Template CSV
+              </a>
+            </div>
+
+            <div class="mb-4">
+                <label class="small text-muted fw-bold">FILE CSV</label>
+                <input type="file" name="file" accept=".csv,text/csv" class="form-control bg-light border-0 rounded-3" required />
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
+                    <i class="fas fa-file-import me-2"></i>Import
                 </button>
             </div>
           </form>
@@ -801,6 +885,80 @@
         setTimeout(() => {
             new bootstrap.Modal(document.getElementById("editModal")).show();
         }, 300);
+      }
+
+      // ===== Tunggu scan kartu RFID untuk mahasiswa yang RFID-nya kosong =====
+      let __rfidScanTimer = null;
+      let __rfidScanActive = false;
+
+      async function startRfidScan(studentId, name) {
+        if (__rfidScanActive) return;
+        __rfidScanActive = true;
+
+        const listModalEl = document.getElementById('listModal');
+        const listModal = bootstrap.Modal.getInstance(listModalEl);
+        if (listModal) listModal.hide();
+
+        let baseline = 0;
+        try {
+          const r = await fetch('/admin/last-scan?since=0', { cache: 'no-store' });
+          const j = await r.json();
+          baseline = j.counter || 0;
+        } catch (e) { /* lanjut dengan baseline 0 */ }
+
+        let cancelled = false;
+
+        function stopPoll() {
+          __rfidScanActive = false;
+          if (__rfidScanTimer) { clearInterval(__rfidScanTimer); __rfidScanTimer = null; }
+        }
+
+        Swal.fire({
+          title: 'Menunggu Scan Kartu',
+          html: `Tempelkan kartu RFID untuk <strong>${name}</strong> ke alat...`,
+          icon: 'info',
+          showConfirmButton: false,
+          showCancelButton: true,
+          cancelButtonText: 'Batal',
+          cancelButtonColor: '#888',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading()
+        }).then((res) => {
+          if (res.dismiss === Swal.DismissReason.cancel) {
+            cancelled = true;
+            stopPoll();
+          }
+        });
+
+        __rfidScanTimer = setInterval(async () => {
+          if (cancelled) return;
+          try {
+            const r = await fetch('/admin/last-scan?since=' + baseline, { cache: 'no-store' });
+            const j = await r.json();
+            if (j.scan && j.scan.uid) {
+              stopPoll();
+              const uid = j.scan.uid;
+              const ar = await fetch('/admin/assign-rfid', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ student_id: studentId, uid })
+              });
+              const aj = await ar.json().catch(() => ({}));
+              if (ar.ok && aj.ok) {
+                await Swal.fire({
+                  icon: 'success',
+                  title: 'RFID Tersimpan',
+                  html: `Kartu <span class="font-monospace">${uid}</span> dipasang untuk <strong>${name}</strong>.`,
+                  timer: 1800,
+                  showConfirmButton: false
+                });
+                location.reload();
+              } else {
+                await Swal.fire({ icon: 'error', title: 'Gagal', text: aj.message || 'Gagal menyimpan RFID.' });
+              }
+            }
+          } catch (e) { /* diam, coba lagi di interval berikutnya */ }
+        }, 1500);
       }
 
       function openEditClassModal(id, name, code, lecturer, lecturerUserId) {
@@ -989,7 +1147,12 @@
                     const currentDeviceId = urlParams.get('device') || String(data.devices[0].id);
                     const dev = data.devices.find(d => String(d.id) === String(currentDeviceId)) || data.devices[0];
                     const isOnline = dev.status === 'online';
-                    
+
+                    const anyDeviceOnline = data.devices.some(d => d.status === 'online');
+                    document.querySelectorAll('.scan-rfid-btn').forEach(b => {
+                        b.style.display = anyDeviceOnline ? 'inline-flex' : 'none';
+                    });
+
                     const bgCard = document.querySelector('#device-card-bg');
                     if(bgCard) bgCard.style.backgroundColor = isOnline ? '#e8f5e9' : '#ffebee';
 

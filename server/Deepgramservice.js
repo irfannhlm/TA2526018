@@ -21,10 +21,10 @@ async function transcribeAudio(audioUrl) {
       { url: audioUrl },
       {
         model: "nova-2",
-        language: "id",          // Bahasa Indonesia
+        language: "id", // Bahasa Indonesia
         smart_format: true,
         punctuate: true,
-      }
+      },
     );
 
     if (error) {
@@ -35,9 +35,10 @@ async function transcribeAudio(audioUrl) {
     const transcript =
       result?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
 
-    console.log(`✅ [Deepgram] Hasil: "${transcript.substring(0, 80)}${transcript.length > 80 ? "..." : ""}"`);
+    console.log(
+      `✅ [Deepgram] Hasil: "${transcript.substring(0, 80)}${transcript.length > 80 ? "..." : ""}"`,
+    );
     return transcript;
-
   } catch (err) {
     console.error("❌ [Deepgram] Exception:", err.message);
     return "";
@@ -59,14 +60,23 @@ async function transcribeAnswer(sbUpdate, answerId, audioUrl) {
   const textToSave = transcript || "[SILENT]";
 
   if (!transcript) {
-    console.log(`🔇 [Deepgram] answers.id=${answerId} → tidak ada suara, ditandai [SILENT]`);
+    console.log(
+      `🔇 [Deepgram] answers.id=${answerId} → tidak ada suara, ditandai [SILENT]`,
+    );
   }
 
   try {
-    await sbUpdate("answers", { answer_id: answerId }, { transcript_text: textToSave });
+    await sbUpdate(
+      "answers",
+      { answer_id: answerId },
+      { transcript_text: textToSave },
+    );
     console.log(`✅ [Deepgram] answers.id=${answerId} → transcript disimpan`);
   } catch (err) {
-    console.error(`❌ [Deepgram] Gagal simpan transcript answers.id=${answerId}:`, err.message);
+    console.error(
+      `❌ [Deepgram] Gagal simpan transcript answers.id=${answerId}:`,
+      err.message,
+    );
   }
 }
 
@@ -85,14 +95,25 @@ async function transcribeQuestion(sbUpdate, questionId, audioUrl) {
   const textToSave = transcript || "[SILENT]";
 
   if (!transcript) {
-    console.log(`🔇 [Deepgram] questions.id=${questionId} → tidak ada suara, ditandai [SILENT]`);
+    console.log(
+      `🔇 [Deepgram] questions.id=${questionId} → tidak ada suara, ditandai [SILENT]`,
+    );
   }
 
   try {
-    await sbUpdate("questions", { question_id: questionId }, { transcript_text: textToSave });
-    console.log(`✅ [Deepgram] questions.id=${questionId} → transcript disimpan`);
+    await sbUpdate(
+      "questions",
+      { question_id: questionId },
+      { transcript_text: textToSave },
+    );
+    console.log(
+      `✅ [Deepgram] questions.id=${questionId} → transcript disimpan`,
+    );
   } catch (err) {
-    console.error(`❌ [Deepgram] Gagal simpan transcript questions.id=${questionId}:`, err.message);
+    console.error(
+      `❌ [Deepgram] Gagal simpan transcript questions.id=${questionId}:`,
+      err.message,
+    );
   }
 }
 
@@ -121,7 +142,9 @@ async function sweepUntranscribed(supabase, sbUpdate) {
     if (error) throw error;
 
     if (answers && answers.length > 0) {
-      console.log(`📋 [Deepgram Sweep] Ditemukan ${answers.length} answers belum ada transcript`);
+      console.log(
+        `📋 [Deepgram Sweep] Ditemukan ${answers.length} answers belum ada transcript`,
+      );
       for (const row of answers) {
         await transcribeAnswer(sbUpdate, row.answer_id, row.audio_file_path);
         // Jeda kecil agar tidak membanjiri API
@@ -147,9 +170,15 @@ async function sweepUntranscribed(supabase, sbUpdate) {
     if (error) throw error;
 
     if (questions && questions.length > 0) {
-      console.log(`📋 [Deepgram Sweep] Ditemukan ${questions.length} questions belum ada transcript`);
+      console.log(
+        `📋 [Deepgram Sweep] Ditemukan ${questions.length} questions belum ada transcript`,
+      );
       for (const row of questions) {
-        await transcribeQuestion(sbUpdate, row.question_id, row.audio_file_path);
+        await transcribeQuestion(
+          sbUpdate,
+          row.question_id,
+          row.audio_file_path,
+        );
         await sleep(500);
       }
     } else {

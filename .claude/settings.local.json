@@ -4,7 +4,12 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\Documents\\\\sem7\\\\TA1NIS\\\\TA2526018\" -Force)",
       "Bash(Select-Object Name, PSIsContainer, LastWriteTime)",
       "Bash(Format-Table -AutoSize)",
-      "Bash(git -C \"c:\\\\Users\\\\User\\\\Documents\\\\sem7\\\\TA1NIS\\\\TA2526018\" log --oneline -15)"
+      "Bash(git -C \"c:\\\\Users\\\\User\\\\Documents\\\\sem7\\\\TA1NIS\\\\TA2526018\" log --oneline -15)",
+      "Bash(npm --version)",
+      "Bash(node -e \"console.log\\('fetch:', typeof fetch, '| node:test:', !!require\\('node:test'\\)\\)\")",
+      "Bash(node -c server.js)",
+      "Bash(npm test *)",
+      "Bash(npx prettier *)"
     ]
   }
 }

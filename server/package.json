@@ -3,13 +3,19 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "start": "node server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "CatchNote — server dokumentasi diskusi kelas (Express + Supabase + MQTT + Deepgram)",
   "dependencies": {
     "@deepgram/sdk": "^3.13.0",
     "@supabase/supabase-js": "^2.105.3",
@@ -18,9 +24,17 @@
     "dotenv": "^17.4.2",
     "ejs": "^3.1.10",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
+    "helmet": "^8.1.0",
     "memorystore": "^1.6.8",
     "mqtt": "^5.15.1",
-    "multer": "^2.1.1"
+    "multer": "^2.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3"
   }
 }

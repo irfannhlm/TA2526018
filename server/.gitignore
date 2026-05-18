@@ -1,2 +1,10 @@
 node_modules/
 .env
+
+# File audio sementara hasil upload ESP32 (jangan di-commit, jaga foldernya saja)
+temp_audio/*
+!temp_audio/.gitkeep
+
+# Rekaman hasil unggah (jangan di-commit, jaga foldernya saja)
+public/recordings/*
+!public/recordings/.gitkeep

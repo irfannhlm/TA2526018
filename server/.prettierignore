@@ -1,0 +1,5 @@
+node_modules/
+public/
+temp_audio/
+views/
+package-lock.json
