@@ -529,93 +529,162 @@ router.post(
   }),
 );
 
-// IMPORT MAHASISWA DARI CSV / XLSX (nama, nim, rfid opsional;
-// header bisa di baris mana saja, kolom ekstra diabaikan)
+// Baca file upload (CSV/XLSX) -> array { nama, nim, rfid } valid &
+// unik per-NIM dalam file. Lempar error bila file tak terbaca.
+async function bacaFileMahasiswa(file) {
+  const fname = (file.originalname || "").toLowerCase();
+  const mime = file.mimetype || "";
+  const isXlsx =
+    fname.endsWith(".xlsx") ||
+    fname.endsWith(".xlsm") ||
+    mime.includes("spreadsheetml") ||
+    mime.includes("excel");
+  const grid = isXlsx
+    ? await rowsFromXlsx(file.buffer)
+    : rowsFromCsv(file.buffer.toString("utf8"));
+
+  const seen = new Set();
+  const out = [];
+  for (const r of extractStudents(grid)) {
+    const nama = String(r.nama || "").trim();
+    const nim = String(r.nim || "").trim();
+    const rfid = String(r.rfid || "").trim();
+    if (!nama || !nim) continue;
+    if (seen.has(nim)) continue; // dobel di dalam file -> ambil yang pertama
+    seen.add(nim);
+    out.push({ nama, nim, rfid });
+  }
+  return out;
+}
+
+// RFID boleh dipakai bila tidak kosong & belum dipakai mahasiswa lain.
+async function rfidUsable(rfidRaw, selfStudentId) {
+  if (!rfidRaw) return null;
+  const used = await sbSelect("students", { rfid_uid: rfidRaw });
+  const bentrok = used.some((s) => s.student_id !== selfStudentId);
+  return bentrok ? null : rfidRaw;
+}
+
+// LANGKAH 1: PREVIEW — deteksi mana yang baru & mana yang sudah ada
 router.post(
-  "/admin/import-csv",
+  "/admin/import-preview",
   requireRole("admin"),
   uploadMemory.single("file"),
   asyncHandler(async (req, res) => {
     const { current_class } = req.body;
     if (!req.file || !req.file.buffer) {
-      return res.redirect(
-        `/admin?kelas=${encodeURIComponent(current_class || "")}&csv=nofile`,
-      );
+      return res.status(400).json({ ok: false, message: "File tidak ada." });
+    }
+    const clsRows = await sbSelect("classes", { class_name: current_class });
+    if (clsRows.length === 0) {
+      return res
+        .status(404)
+        .json({ ok: false, message: "Kelas tidak ditemukan." });
     }
 
-    const clsRows = await sbSelect("classes", { class_name: current_class });
-    if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
-    const classId = clsRows[0].class_id;
-
-    const fname = (req.file.originalname || "").toLowerCase();
-    const mime = req.file.mimetype || "";
-    const isXlsx =
-      fname.endsWith(".xlsx") ||
-      fname.endsWith(".xlsm") ||
-      mime.includes("spreadsheetml") ||
-      mime.includes("excel");
-
-    let grid;
+    let rows;
     try {
-      grid = isXlsx
-        ? await rowsFromXlsx(req.file.buffer)
-        : rowsFromCsv(req.file.buffer.toString("utf8"));
+      rows = await bacaFileMahasiswa(req.file);
     } catch (e) {
       console.error("❌ [import] Gagal baca file:", e.message);
-      return res.redirect(
-        `/admin?kelas=${encodeURIComponent(current_class)}&csv=badfile`,
-      );
+      return res.status(400).json({
+        ok: false,
+        message: "File tidak bisa dibaca. Pastikan format CSV/XLSX benar.",
+      });
     }
 
-    const rows = extractStudents(grid);
-    let added = 0;
-    let linked = 0;
-    let skipped = 0;
-    const batchRfids = new Set();
-
+    const dups = [];
     for (const r of rows) {
-      const name = r.nama;
-      const nim = r.nim;
-      if (!name || !nim) {
+      const existing = await sbSelect("students", { nim: r.nim });
+      if (existing.length > 0) {
+        dups.push({
+          nama: r.nama,
+          nim: r.nim,
+          existingName: existing[0].name,
+        });
+      }
+    }
+
+    res.json({ ok: true, total: rows.length, rows, dups });
+  }),
+);
+
+// LANGKAH 2: COMMIT — jalankan import dgn keputusan duplikat
+router.post(
+  "/admin/import-commit",
+  requireRole("admin"),
+  asyncHandler(async (req, res) => {
+    const { current_class, rows, dupMode } = req.body;
+    const mode = dupMode === "replace" ? "replace" : "skip";
+
+    const clsRows = await sbSelect("classes", { class_name: current_class });
+    if (clsRows.length === 0) {
+      return res
+        .status(404)
+        .json({ ok: false, message: "Kelas tidak ditemukan." });
+    }
+    const classId = clsRows[0].class_id;
+
+    let added = 0;
+    let replaced = 0;
+    let skipped = 0;
+    const seen = new Set();
+
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const name = String(r.nama || "").trim();
+      const nim = String(r.nim || "").trim();
+      const rfidRaw = String(r.rfid || "").trim();
+      if (!name || !nim || seen.has(nim)) {
         skipped++;
         continue;
       }
+      seen.add(nim);
 
-      // RFID opsional: hanya dipakai bila ada & belum dipakai siapa pun
-      // (di DB maupun di baris CSV sebelumnya) supaya tidak bentrok.
-      let rfidToUse = null;
-      const rfidRaw = (r.rfid || "").trim();
-      if (rfidRaw && !batchRfids.has(rfidRaw)) {
-        const dup = await sbSelect("students", { rfid_uid: rfidRaw });
-        if (dup.length === 0) {
-          rfidToUse = rfidRaw;
-          batchRfids.add(rfidRaw);
-        }
-      }
-
+      let studentId = null;
       const existing = await sbSelect("students", { nim });
-      let studentId;
+
       if (existing.length > 0) {
-        studentId = existing[0].student_id;
-        // Isi RFID hanya bila mahasiswa belum punya & CSV menyediakan.
-        const cur = existing[0].rfid_uid;
-        if (rfidToUse && (!cur || !String(cur).trim())) {
-          await sbUpdate(
-            "students",
-            { student_id: studentId },
-            { rfid_uid: rfidToUse },
-          );
+        if (mode !== "replace") {
+          skipped++;
+          continue; // duplikat & user pilih SKIP
         }
-        linked++;
+        // REPLACE: timpa data mahasiswa yang sudah ada
+        studentId = existing[0].student_id;
+        const updates = { name };
+        const rfidOk = await rfidUsable(rfidRaw, studentId);
+        if (rfidOk) updates.rfid_uid = rfidOk;
+        await sbUpdate("students", { student_id: studentId }, updates);
+        replaced++;
       } else {
-        const created = await sbInsert("students", {
-          name,
-          nim,
-          rfid_uid: rfidToUse,
-        });
-        studentId = created.student_id;
-        added++;
+        const rfidOk = await rfidUsable(rfidRaw, null);
+        try {
+          const created = await sbInsert("students", {
+            name,
+            nim,
+            rfid_uid: rfidOk,
+          });
+          studentId = created.student_id;
+          added++;
+        } catch (e) {
+          const again = await sbSelect("students", { nim });
+          if (again.length > 0 && mode === "replace") {
+            studentId = again[0].student_id;
+            await sbUpdate(
+              "students",
+              { student_id: studentId },
+              { name },
+            );
+            replaced++;
+          } else {
+            console.error(
+              `❌ [import] Gagal simpan NIM ${nim}: ${e.message}`,
+            );
+            skipped++;
+            continue;
+          }
+        }
       }
+
       const link = await sbSelect("class_students", {
         student_id: studentId,
         class_id: classId,
@@ -628,11 +697,7 @@ router.post(
       }
     }
 
-    res.redirect(
-      `/admin?kelas=${encodeURIComponent(
-        current_class,
-      )}&csv=ok&added=${added}&linked=${linked}&skipped=${skipped}`,
-    );
+    res.json({ ok: true, added, replaced, skipped });
   }),
 );
 

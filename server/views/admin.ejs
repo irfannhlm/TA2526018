@@ -670,16 +670,14 @@
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
-          <form action="/admin/import-csv" method="POST" enctype="multipart/form-data">
-            <input type="hidden" name="current_class" value="<%= currentClass %>">
-
+          <form id="importForm" onsubmit="return false;">
             <div class="mb-4">
                 <label class="small text-muted fw-bold">FILE CSV / XLSX</label>
-                <input type="file" name="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="form-control bg-light border-0 rounded-3" required />
+                <input type="file" id="importFileInput" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="form-control bg-light border-0 rounded-3" required />
             </div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
+                <button type="button" id="importSubmitBtn" onclick="submitImport()" class="btn flex-grow-1 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">
                     <i class="fas fa-file-import me-2"></i>Import
                 </button>
             </div>
@@ -940,6 +938,91 @@
             }
           } catch (e) { /* diam, coba lagi di interval berikutnya */ }
         }, 1500);
+      }
+
+      // ===== Import mahasiswa: preview -> konfirmasi duplikat -> commit =====
+      async function commitImport(rows, dupMode) {
+        const res = await fetch('/admin/import-commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_class: CURRENT_CLASS, rows, dupMode })
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.ok) throw new Error(j.message || 'Gagal commit import.');
+        return j;
+      }
+
+      async function submitImport() {
+        const input = document.getElementById('importFileInput');
+        if (!input || !input.files || input.files.length === 0) {
+          Swal.fire({ icon: 'warning', title: 'Pilih file dulu', text: 'Pilih file CSV / XLSX terlebih dahulu.' });
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+        fd.append('current_class', CURRENT_CLASS);
+
+        const importModalEl = document.getElementById('importCsvModal');
+        const importModal = bootstrap.Modal.getInstance(importModalEl);
+
+        Swal.fire({ title: 'Membaca file...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        let preview;
+        try {
+          const res = await fetch('/admin/import-preview', { method: 'POST', body: fd });
+          preview = await res.json().catch(() => ({}));
+          if (!res.ok || !preview.ok) throw new Error(preview.message || 'Gagal membaca file.');
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: e.message || 'Gagal membaca file.' });
+          return;
+        }
+
+        const rows = preview.rows || [];
+        const dups = preview.dups || [];
+        if (rows.length === 0) {
+          Swal.fire({ icon: 'info', title: 'Tidak ada data', text: 'Tidak ada baris mahasiswa yang valid pada file.' });
+          return;
+        }
+
+        let dupMode = 'skip';
+        if (dups.length > 0) {
+          const listHtml = dups.slice(0, 12).map(d =>
+            `<li><strong>${d.nim}</strong> — ${d.nama}${d.existingName && d.existingName !== d.nama ? ` <span style="color:#888;">(di DB: ${d.existingName})</span>` : ''}</li>`
+          ).join('');
+          const more = dups.length > 12 ? `<div class="text-muted small mt-1">…dan ${dups.length - 12} lainnya</div>` : '';
+          const r = await Swal.fire({
+            icon: 'question',
+            title: `${dups.length} NIM sudah terdaftar`,
+            html: `<div style="text-align:left;font-size:0.9rem;">Mahasiswa berikut sudah ada di database:</div>
+                   <ul style="text-align:left;font-size:0.85rem;max-height:200px;overflow:auto;margin-top:8px;">${listHtml}</ul>${more}
+                   <div class="mt-2" style="font-size:0.85rem;"><strong>Replace</strong> = timpa data lama dengan data file ini. <strong>Skip</strong> = biarkan data lama (tidak diubah).</div>`,
+            showDenyButton: true,
+            showCancelButton: true,
+            confirmButtonText: 'Replace',
+            denyButtonText: 'Skip',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#d81b60',
+            denyButtonColor: '#6c757d'
+          });
+          if (r.isDismissed && r.dismiss === Swal.DismissReason.cancel) return;
+          dupMode = r.isConfirmed ? 'replace' : 'skip';
+        }
+
+        Swal.fire({ title: 'Mengimpor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+          const j = await commitImport(rows, dupMode);
+          if (importModal) importModal.hide();
+          await Swal.fire({
+            icon: 'success',
+            title: 'Import Selesai',
+            html: `Ditambahkan: <strong>${j.added}</strong><br>Di-replace: <strong>${j.replaced}</strong><br>Dilewati: <strong>${j.skipped}</strong>`,
+            confirmButtonColor: '#d81b60'
+          });
+          location.reload();
+        } catch (e) {
+          Swal.fire({ icon: 'error', title: 'Gagal', text: e.message || 'Gagal mengimpor data.' });
+        }
       }
 
       function openEditClassModal(id, name, code, lecturer, lecturerUserId) {
