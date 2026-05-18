@@ -43,8 +43,9 @@
         .logo-img { max-width: 100%; max-height: 75px; object-fit: contain; }
 
         .nav-pills .nav-link {
-            color: var(--text-muted); font-weight: 500; border-radius: 15px; padding: 12px 20px; margin-bottom: 10px; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px;
+            color: var(--text-muted); font-weight: 500; border-radius: 15px; padding: 12px 20px; margin-bottom: 10px; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px; justify-content: flex-start; text-align: left;
         }
+        .nav-pills .nav-link i { width: 22px; text-align: center; flex-shrink: 0; }
         .nav-pills .nav-link:hover { background-color: rgba(255, 128, 171, 0.1); color: var(--dark-pink); }
         .nav-pills .nav-link.active { background: linear-gradient(135deg, #ff80ab, #f06292); color: white; box-shadow: 0 8px 20px rgba(240, 98, 146, 0.4); }
 
@@ -189,8 +190,8 @@
                 <% if (currentClass) { %>
                 <div class="page-header d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
                     <div>
-                        <h1 class="header-title mb-2">Panel Admin</h1>
-                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <h1 class="header-title">Dashboard</h1>
+                        <div class="d-flex align-items-center gap-3 flex-wrap mt-2">
                             <span style="background:#fce4ec;color:#c2185b;padding:10px 22px;border-radius:25px;font-size:1rem;font-weight:700;letter-spacing:0.3px;">
                                 <i class="fas fa-chalkboard me-2"></i> <%= activeClassName %>
                             </span>
@@ -225,7 +226,7 @@
                                 </li>
                                 <li>
                                     <button type="button" class="dropdown-item rounded-3 py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#importCsvModal">
-                                        <i class="fas fa-file-csv me-2" style="color: var(--dark-pink);"></i> Import CSV
+                                        <i class="fas fa-file-csv me-2" style="color: var(--dark-pink);"></i> Import CSV / Excel
                                     </button>
                                 </li>
                             </ul>
@@ -357,7 +358,7 @@
 
             <!-- ====== TAB: MANAJEMEN KELAS ====== -->
             <div class="tab-pane fade" id="v-pills-classes">
-                <div class="page-header d-flex justify-content-between align-items-start mb-4">
+                <div class="page-header d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
                     <div>
                         <h1 class="header-title">Manajemen Kelas</h1>
                     </div>
@@ -425,7 +426,7 @@
 
             <!-- ====== TAB: MANAJEMEN AKUN ====== -->
             <div class="tab-pane fade" id="v-pills-accounts">
-                <div class="page-header d-flex justify-content-between align-items-start mb-4">
+                <div class="page-header d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
                     <div>
                         <h1 class="header-title">Manajemen Akun</h1>
                     </div>
@@ -516,8 +517,8 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <a href="/admin/export-csv?kelas=<%= encodeURIComponent(currentClass || '') %>"
-                           class="btn btn-sm rounded-pill fw-semibold d-inline-flex align-items-center gap-2"
-                           style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:0.8rem;">
+                           class="btn rounded-pill fw-semibold d-inline-flex align-items-center gap-2 px-3 py-2"
+                           style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:1rem;">
                             <i class="fas fa-file-export"></i> Export CSV
                         </a>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -664,7 +665,7 @@
         <div class="modal-content border-0 rounded-4 p-4">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h5 class="modal-title fw-bold">Import Mahasiswa dari CSV</h5>
+                <h5 class="modal-title fw-bold">Import Mahasiswa (CSV / Excel)</h5>
                 <p class="text-muted small mb-0">Tambahkan banyak mahasiswa ke <strong><%= currentClass %></strong> sekaligus.</p>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -672,29 +673,9 @@
           <form action="/admin/import-csv" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="current_class" value="<%= currentClass %>">
 
-            <div class="rounded-3 p-3 mb-3" style="background:#fff0f6;border:1px solid #f5d0e0;">
-              <div class="fw-semibold mb-1" style="color:var(--dark-pink);font-size:0.85rem;">
-                <i class="fas fa-circle-info me-1"></i> Format file
-              </div>
-              <div class="text-muted" style="font-size:0.8rem;">
-                File <strong>.csv</strong> berisi kolom <strong>nama</strong> dan <strong>nim</strong>
-                (boleh pakai baris header). Kolom <strong>rfid</strong> bersifat
-                <strong>opsional</strong> &mdash; kalau dikosongkan, RFID bisa diisi nanti
-                lewat tombol <em>Tunggu Scan</em> di List Mahasiswa.
-              </div>
-              <div class="mt-2 font-monospace small bg-white rounded-2 p-2 text-secondary">
-                nama,nim,rfid<br>Budi Santoso,13220001,A1B2C3D4<br>Siti Aminah,13220002,
-              </div>
-              <a href="/template-mahasiswa.csv" download
-                 class="btn btn-sm rounded-pill mt-3 fw-semibold d-inline-flex align-items-center gap-2"
-                 style="background:#fff;color:var(--dark-pink);border:1px solid #f5d0e0;font-size:0.78rem;">
-                <i class="fas fa-download"></i> Unduh Template CSV
-              </a>
-            </div>
-
             <div class="mb-4">
-                <label class="small text-muted fw-bold">FILE CSV</label>
-                <input type="file" name="file" accept=".csv,text/csv" class="form-control bg-light border-0 rounded-3" required />
+                <label class="small text-muted fw-bold">FILE CSV / XLSX</label>
+                <input type="file" name="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="form-control bg-light border-0 rounded-3" required />
             </div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>

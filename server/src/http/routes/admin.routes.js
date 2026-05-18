@@ -32,76 +32,119 @@ const asyncHandler = require("../../lib/asyncHandler");
 
 const router = express.Router();
 
-// Parser CSV sederhana: dukung pemisah "," atau ";", field berkutip,
-// dan deteksi baris header (kolom "nama"/"name", "nim", "rfid").
-// Kolom rfid opsional. Kembalikan array { nama, nim, rfid }.
-function parseStudentCsv(text) {
-  const lines = (text || "")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lines.length === 0) return [];
-
-  const splitLine = (line) => {
-    const out = [];
-    let cur = "";
-    let inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (inQuote) {
-        if (c === '"') {
-          if (line[i + 1] === '"') {
-            cur += '"';
-            i++;
-          } else inQuote = false;
-        } else cur += c;
-      } else if (c === '"') {
-        inQuote = true;
-      } else if (c === "," || c === ";") {
-        out.push(cur);
-        cur = "";
-      } else {
-        cur += c;
-      }
+// Pecah satu baris CSV (dukung pemisah "," / ";" & field berkutip).
+function splitCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuote) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else inQuote = false;
+      } else cur += c;
+    } else if (c === '"') {
+      inQuote = true;
+    } else if (c === "," || c === ";") {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += c;
     }
-    out.push(cur);
-    return out.map((s) => s.trim());
-  };
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+// CSV teks -> array 2D (baris x sel).
+function rowsFromCsv(text) {
+  return (text || "")
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length > 0)
+    .map((l) => splitCsvLine(l));
+}
+
+// Ubah nilai sel ExcelJS (bisa objek rich-text/formula/hyperlink) -> string.
+function cellToStr(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    if (Array.isArray(v.richText))
+      return v.richText.map((t) => t.text).join("");
+    if (v.text !== undefined && v.text !== null) return String(v.text);
+    if (v.result !== undefined && v.result !== null)
+      return String(v.result);
+    if (v instanceof Date) return v.toISOString();
+    return "";
+  }
+  return String(v);
+}
+
+// File XLSX (buffer) -> array 2D (baris x sel).
+async function rowsFromXlsx(buffer) {
+  const ExcelJS = require("exceljs");
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.worksheets[0];
+  if (!ws) return [];
+  const rows = [];
+  ws.eachRow({ includeEmpty: true }, (row) => {
+    const vals = row.values || []; // index 0 tidak dipakai (1-based)
+    const arr = [];
+    for (let i = 1; i < vals.length; i++) arr.push(cellToStr(vals[i]).trim());
+    rows.push(arr);
+  });
+  return rows;
+}
+
+// Dari array 2D, cari baris header (ada sel mirip "nama" DAN "nim"),
+// lewati baris preamble di atasnya, lalu ambil { nama, nim, rfid }.
+// rfid opsional. Kalau tak ada header sama sekali -> anggap tanpa
+// header (kolom 0=nama, 1=nim, 2=rfid) demi kompatibilitas CSV lama.
+function extractStudents(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const isNama = (c) => c.includes("nama") || c === "name";
+  const isNim = (c) => c.includes("nim");
+  const isRfid = (c) => c.includes("rfid");
+
+  let headerIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const cells = (rows[i] || []).map((c) =>
+      String(c == null ? "" : c).trim().toLowerCase(),
+    );
+    if (cells.some(isNama) && cells.some(isNim)) {
+      headerIdx = i;
+      break;
+    }
+  }
 
   let namaIdx = 0;
   let nimIdx = 1;
-  let rfidIdx = 2;
+  let rfidIdx = -1;
   let startIdx = 0;
-  const firstCells = splitLine(lines[0]).map((c) => c.toLowerCase());
-  const looksHeader = firstCells.some(
-    (c) =>
-      c.includes("nama") ||
-      c === "name" ||
-      c.includes("nim") ||
-      c.includes("rfid"),
-  );
-  if (looksHeader) {
-    startIdx = 1;
-    const ni = firstCells.findIndex(
-      (c) => c.includes("nama") || c === "name",
+  if (headerIdx !== -1) {
+    const h = (rows[headerIdx] || []).map((c) =>
+      String(c == null ? "" : c).trim().toLowerCase(),
     );
-    const mi = firstCells.findIndex((c) => c.includes("nim"));
-    const ri = firstCells.findIndex((c) => c.includes("rfid"));
-    if (ni !== -1) namaIdx = ni;
-    if (mi !== -1) nimIdx = mi;
-    rfidIdx = ri; // -1 jika tidak ada kolom rfid
+    namaIdx = h.findIndex(isNama);
+    nimIdx = h.findIndex(isNim);
+    rfidIdx = h.findIndex(isRfid);
+    startIdx = headerIdx + 1;
   }
 
-  const rows = [];
-  for (let i = startIdx; i < lines.length; i++) {
-    const cells = splitLine(lines[i]);
-    const nama = (cells[namaIdx] || "").trim();
-    const nim = (cells[nimIdx] || "").trim();
-    const rfid =
-      rfidIdx >= 0 ? (cells[rfidIdx] || "").trim() : "";
-    if (nama || nim) rows.push({ nama, nim, rfid });
+  const out = [];
+  for (let i = startIdx; i < rows.length; i++) {
+    const cells = rows[i] || [];
+    const get = (idx) =>
+      idx >= 0 && cells[idx] != null ? String(cells[idx]).trim() : "";
+    const nama = get(namaIdx);
+    const nim = get(nimIdx);
+    const rfid = rfidIdx >= 0 ? get(rfidIdx) : "";
+    if (nama || nim) out.push({ nama, nim, rfid });
   }
-  return rows;
+  return out;
 }
 
 // ================= ADMIN ROUTE =================
@@ -486,7 +529,8 @@ router.post(
   }),
 );
 
-// IMPORT MAHASISWA DARI CSV (nama, nim, rfid opsional)
+// IMPORT MAHASISWA DARI CSV / XLSX (nama, nim, rfid opsional;
+// header bisa di baris mana saja, kolom ekstra diabaikan)
 router.post(
   "/admin/import-csv",
   requireRole("admin"),
@@ -503,7 +547,27 @@ router.post(
     if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
     const classId = clsRows[0].class_id;
 
-    const rows = parseStudentCsv(req.file.buffer.toString("utf8"));
+    const fname = (req.file.originalname || "").toLowerCase();
+    const mime = req.file.mimetype || "";
+    const isXlsx =
+      fname.endsWith(".xlsx") ||
+      fname.endsWith(".xlsm") ||
+      mime.includes("spreadsheetml") ||
+      mime.includes("excel");
+
+    let grid;
+    try {
+      grid = isXlsx
+        ? await rowsFromXlsx(req.file.buffer)
+        : rowsFromCsv(req.file.buffer.toString("utf8"));
+    } catch (e) {
+      console.error("❌ [import] Gagal baca file:", e.message);
+      return res.redirect(
+        `/admin?kelas=${encodeURIComponent(current_class)}&csv=badfile`,
+      );
+    }
+
+    const rows = extractStudents(grid);
     let added = 0;
     let linked = 0;
     let skipped = 0;
