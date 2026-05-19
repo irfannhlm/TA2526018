@@ -325,6 +325,9 @@
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-light text-dark border" id="badge-peserta-count"><%= currentList.length %> Peserta</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 fw-semibold" onclick="confirmClearScansDosen()">
+                      <i class="fas fa-trash-alt me-1"></i> Hapus Semua
+                    </button>
                     <button class="btn text-white rounded-pill px-3 shadow-sm fw-bold" style="background: var(--dark-pink); border: none" data-bs-toggle="modal" data-bs-target="#addUidModal">
                       <i class="fas fa-plus me-1"></i> Tambah
                     </button>
@@ -1767,6 +1770,23 @@
         }
       }
 
+      function confirmClearScansDosen() {
+        Swal.fire({
+          title: 'Hapus Semua Peserta?',
+          text: 'Seluruh daftar peserta blacklist di sesi ini akan dikosongkan.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#c62828',
+          cancelButtonColor: '#888888',
+          confirmButtonText: 'Ya, Hapus Semua',
+          cancelButtonText: 'Batal'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            document.getElementById('clearScansFormDosen').submit();
+          }
+        });
+      }
+
       async function confirmDeleteAnswer(id) {
         const result = await Swal.fire({
           title: 'Hapus jawaban ini?',
@@ -1902,6 +1922,12 @@
       checkDuplicateQueue();
 
     </script>
+
+    <!-- Form hapus semua peserta blacklist (hidden, dipanggil via JS) -->
+    <form id="clearScansFormDosen" action="/dosen/manage-uid" method="POST" style="display:none;">
+      <input type="hidden" name="current_class" value="<%= currentClass %>">
+      <input type="hidden" name="action" value="delete_all">
+    </form>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>

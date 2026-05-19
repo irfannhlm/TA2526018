@@ -433,7 +433,9 @@ router.post(
   requireRole("admin"),
   asyncHandler(async (req, res) => {
     const { action, uid, entry_id, current_class } = req.body;
-    if (action === "delete") {
+    if (action === "delete_all") {
+      state.sessionData.scannedList = [];
+    } else if (action === "delete") {
       if (entry_id) {
         const idx = state.sessionData.scannedList.findIndex(
           (item) => item.id === parseInt(entry_id),
@@ -518,6 +520,34 @@ router.post(
 
     await sbDelete("students", { student_id: toInt(id) });
     res.redirect(`/admin?kelas=${current_class}`);
+  }),
+);
+
+// HAPUS SEMUA ANGGOTA KELAS
+// mode "class"    -> hanya keluarkan dari kelas ini (data tetap ada)
+// mode "database" -> hapus permanen record mahasiswa (default)
+router.post(
+  "/admin/delete-all-students",
+  requireRole("admin"),
+  asyncHandler(async (req, res) => {
+    const { current_class, mode } = req.body;
+
+    const clsRows = await sbSelect("classes", { class_name: current_class });
+    if (clsRows.length === 0) return res.send("Kelas tidak ditemukan");
+    const classId = clsRows[0].class_id;
+
+    const csRows = await sbSelect(
+      "class_students",
+      { class_id: classId },
+      "student_id",
+    );
+    const studentIds = csRows.map((r) => r.student_id);
+
+    await sbDelete("class_students", { class_id: classId });
+    if (mode !== "class" && studentIds.length > 0) {
+      await sbDelete("students", { student_id: studentIds });
+    }
+    res.redirect(`/admin?kelas=${encodeURIComponent(current_class)}`);
   }),
 );
 

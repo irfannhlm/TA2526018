@@ -303,7 +303,12 @@
                                 <div>
                                     <h5 class="fw-bold mb-0">Aktivitas Scan</h5>
                                 </div>
-                                <span class="badge bg-light text-dark border"><%= currentList.length %> Scan</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-light text-dark border"><%= currentList.length %> Scan</span>
+                                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 fw-semibold" onclick="confirmClearScans()">
+                                        <i class="fas fa-trash-alt me-1"></i> Hapus Semua
+                                    </button>
+                                </div>
                             </div>
 
                             <div style="flex:1 1 0;min-height:0;overflow-y:auto;">
@@ -528,6 +533,13 @@
                            style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:1rem;">
                             <i class="fas fa-file-export"></i> Export CSV
                         </a>
+                        <% if (students.length > 0) { %>
+                        <button type="button" onclick="confirmClearStudents()"
+                           class="btn rounded-pill fw-semibold d-inline-flex align-items-center gap-2 px-3 py-2"
+                           style="background:#ffebee;color:#c62828;border:1px solid #ef9a9a;font-size:1rem;">
+                            <i class="fas fa-trash-alt"></i> Hapus Semua Anggota
+                        </button>
+                        <% } %>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                 </div>
@@ -594,6 +606,18 @@
 
     <!-- Form reset semua data (hidden, dipanggil via JS) -->
     <form id="resetAllForm" action="/admin/reset-all" method="POST" style="display:none;">
+    </form>
+
+    <!-- Form hapus semua aktivitas scan (hidden, dipanggil via JS) -->
+    <form id="clearScansForm" action="/admin/manage-uid" method="POST" style="display:none;">
+        <input type="hidden" name="current_class" value="<%= currentClass %>">
+        <input type="hidden" name="action" value="delete_all">
+    </form>
+
+    <!-- Form hapus semua anggota kelas (hidden, dipanggil via JS) -->
+    <form id="clearStudentsForm" action="/admin/delete-all-students" method="POST" style="display:none;">
+        <input type="hidden" name="current_class" value="<%= currentClass %>">
+        <input type="hidden" name="mode" id="clearStudentsMode" value="database">
     </form>
 
     <!-- ====== MODAL: TAMBAH MAHASISWA BARU (dari scan) ====== -->
@@ -702,6 +726,7 @@
     </div>
 
     <!-- ====== MODAL: EDIT MAHASISWA ====== -->
+    <% const anyDeviceOnlineEdit = (devices || []).some(d => d.status === 'online'); %>
     <div class="modal fade" id="editModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-4">
@@ -722,7 +747,15 @@
             </div>
             <div class="mb-4">
                 <label class="small text-muted fw-bold">RFID TAG</label>
-                <input type="text" name="rfid" id="editRfid" class="form-control bg-light border-0 rounded-3" required />
+                <div class="input-group">
+                    <input type="text" name="rfid" id="editRfid" class="form-control bg-light border-0" required />
+                    <button type="button" id="editScanBtn" onclick="scanRfidIntoInput()"
+                      class="scan-rfid-btn btn fw-semibold d-inline-flex align-items-center gap-1 <%= anyDeviceOnlineEdit ? 'scan-on' : 'scan-off' %>"
+                      <%= anyDeviceOnlineEdit ? '' : 'disabled' %>>
+                      <i class="fas fa-wifi"></i> Scan Ulang
+                    </button>
+                </div>
+                <small class="text-muted mt-1 d-block">Klik <strong>Scan Ulang</strong> lalu tempelkan kartu baru ke alat. Tekan <strong>Update Data</strong> untuk menyimpan.</small>
             </div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
@@ -1101,6 +1134,66 @@
         }
       }
 
+      // ===== Scan ulang RFID di modal Edit Mahasiswa (isi input, belum simpan) =====
+      let __editScanTimer = null;
+      let __editScanActive = false;
+
+      async function scanRfidIntoInput() {
+        if (__editScanActive) return;
+        __editScanActive = true;
+
+        let baseline = 0;
+        try {
+          const r = await fetch('/admin/last-scan?since=0', { cache: 'no-store' });
+          const j = await r.json();
+          baseline = j.counter || 0;
+        } catch (e) { /* lanjut dengan baseline 0 */ }
+
+        let cancelled = false;
+        function stopPoll() {
+          __editScanActive = false;
+          if (__editScanTimer) { clearInterval(__editScanTimer); __editScanTimer = null; }
+        }
+
+        Swal.fire({
+          title: 'Menunggu Scan Kartu',
+          html: 'Tempelkan kartu RFID <strong>baru</strong> ke alat...',
+          icon: 'info',
+          showConfirmButton: false,
+          showCancelButton: true,
+          cancelButtonText: 'Batal',
+          cancelButtonColor: '#888',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading()
+        }).then((res) => {
+          if (res.dismiss === Swal.DismissReason.cancel) {
+            cancelled = true;
+            stopPoll();
+          }
+        });
+
+        __editScanTimer = setInterval(async () => {
+          if (cancelled) return;
+          try {
+            const r = await fetch('/admin/last-scan?since=' + baseline, { cache: 'no-store' });
+            const j = await r.json();
+            if (j.scan && j.scan.uid) {
+              stopPoll();
+              const uid = j.scan.uid;
+              const inp = document.getElementById('editRfid');
+              if (inp) inp.value = uid;
+              await Swal.fire({
+                icon: 'success',
+                title: 'Kartu Terbaca',
+                html: `UID: <span class="font-monospace">${uid}</span><br><small class="text-muted">Tekan <strong>Update Data</strong> untuk menyimpan.</small>`,
+                timer: 2200,
+                showConfirmButton: false
+              });
+            }
+          } catch (e) { /* diam, coba lagi di interval berikutnya */ }
+        }, 1500);
+      }
+
       function openEditClassModal(id, name, code, lecturer, lecturerUserId) {
           document.getElementById("editClassId").value = id;
           document.getElementById("editClassName").value = name;
@@ -1158,6 +1251,73 @@
       }
 
       // Konfirmasi reset semua data (ganti semester)
+      function submitClearStudents(mode) {
+          document.getElementById('clearStudentsMode').value = mode;
+          document.getElementById('clearStudentsForm').submit();
+      }
+
+      function confirmClearStudents() {
+          Swal.fire({
+              title: 'Hapus Semua Anggota Kelas',
+              html: `Pilih cara menghapus <strong><%= students.length %> mahasiswa</strong> dari kelas <strong><%= currentClass %></strong>:<br><br>
+                     <div style="text-align:left;font-size:0.86rem;line-height:1.5;">
+                       <div class="mb-2"><strong>Hapus dari Kelas Saja</strong><br><span class="text-muted">Mahasiswa dikeluarkan dari kelas ini. Data &amp; RFID-nya tetap ada di database dan kelas lain.</span></div>
+                       <div><strong>Hapus dari Database</strong><br><span class="text-muted">Record mahasiswa dihapus permanen dari seluruh sistem. Tidak bisa dibatalkan.</span></div>
+                     </div>`,
+              icon: 'warning',
+              showDenyButton: true,
+              showCancelButton: true,
+              confirmButtonText: 'Hapus dari Kelas Saja',
+              denyButtonText: 'Hapus dari Database',
+              cancelButtonText: 'Batal',
+              confirmButtonColor: '#d81b60',
+              denyButtonColor: '#d32f2f',
+              cancelButtonColor: '#888888'
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  submitClearStudents('class');
+              } else if (result.isDenied) {
+                  Swal.fire({
+                      title: 'Yakin Hapus dari Database?',
+                      html: `<strong><%= students.length %> mahasiswa</strong> akan dihapus <strong>permanen</strong> dari seluruh sistem.<br><br><small class="text-danger">⚠️ Aksi ini TIDAK BISA dibatalkan.</small>`,
+                      icon: 'warning',
+                      showCancelButton: true,
+                      confirmButtonColor: '#d32f2f',
+                      cancelButtonColor: '#888888',
+                      confirmButtonText: 'Ya, Hapus Permanen',
+                      cancelButtonText: 'Batal',
+                      input: 'text',
+                      inputPlaceholder: 'Ketik "HAPUS" untuk konfirmasi',
+                      inputAttributes: { autocomplete: 'off' },
+                      preConfirm: (value) => {
+                          if (value !== 'HAPUS') {
+                              Swal.showValidationMessage('Ketik "HAPUS" (huruf kapital) untuk konfirmasi');
+                          }
+                      }
+                  }).then((r2) => {
+                      if (r2.isConfirmed) submitClearStudents('database');
+                  });
+              }
+          });
+      }
+
+      function confirmClearScans() {
+          Swal.fire({
+              title: 'Hapus Semua Aktivitas Scan?',
+              text: 'Seluruh daftar scan di sesi ini akan dikosongkan.',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d32f2f',
+              cancelButtonColor: '#888888',
+              confirmButtonText: 'Ya, Hapus Semua',
+              cancelButtonText: 'Batal'
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  document.getElementById('clearScansForm').submit();
+              }
+          });
+      }
+
       function confirmResetAll() {
           Swal.fire({
               title: 'Ganti Semester?',

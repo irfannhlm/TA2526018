@@ -469,7 +469,9 @@ router.post(
     const { action, uid, entry_id, student_id, target_date, current_class } =
       req.body;
 
-    if (action === "delete") {
+    if (action === "delete_all") {
+      state.sessionData.scannedList = [];
+    } else if (action === "delete") {
       if (entry_id) {
         const idx = state.sessionData.scannedList.findIndex(
           (item) => item.id === parseInt(entry_id),
