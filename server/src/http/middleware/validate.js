@@ -60,14 +60,19 @@ function validate(schemas) {
       const result = schema.safeParse(req[key]);
       if (!result.success) {
         const msg = pickMessage(result.error);
-        if (req.path.startsWith("/api/")) {
+        // Hanya navigasi form browser sungguhan (Accept: text/html) yang
+        // di-redirect balik + popup. Request AJAX/fetch & /api/* tetap JSON
+        // supaya handler sisi-klien tidak ikut ter-redirect ke HTML.
+        const isHtmlNav =
+          !req.path.startsWith("/api/") &&
+          (req.headers.accept || "").includes("text/html");
+        if (!isHtmlNav) {
           return res.status(400).json({ error: msg });
         }
-        // Page route: render halaman error bertema (bukan teks mentah)
-        // supaya tidak muncul "layar putih" dengan tulisan di pojok.
-        return res
-          .status(400)
-          .render("error", { title: "Input Tidak Valid", message: msg });
+        // Simpan pesan ke session, lalu kembali ke halaman asal. Popup
+        // SweetAlert akan muncul di sana (lihat res.locals.flashError).
+        if (req.session) req.session.flashError = msg;
+        return res.redirect(req.get("Referer") || "/");
       }
       // Merge hasil parse (coerced) di atas nilai asli — field yang
       // divalidasi ter-coerce, field lain (tidak di-skema) tetap utuh.

@@ -279,6 +279,13 @@ router.post(
         nilai: THRESHOLD_VALUES[threshold],
       });
     }
+    // Popup konfirmasi "terkirim" hanya untuk pengiriman ke alat (timer /
+    // ambang kebisingan), bukan perubahan status/mode sesi.
+    if (req.session && (timer || threshold)) {
+      req.session.flashSuccess = timer
+        ? "Durasi bicara berhasil dikirim ke alat."
+        : "Ambang kebisingan ruangan berhasil dikirim ke alat.";
+    }
     res.redirect(`/dosen?kelas=${current_class}`);
   }),
 );

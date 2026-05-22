@@ -656,6 +656,7 @@
     </form>
 
     <!-- ====== MODAL: TAMBAH MAHASISWA BARU (dari scan) ====== -->
+    <% const anyDeviceOnlineAdd = (devices || []).some(d => d.status === 'online'); %>
     <div class="modal fade" id="addModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 p-4">
@@ -678,7 +679,15 @@
             </div>
             <div class="mb-4">
                 <label class="small text-muted fw-bold">RFID TAG</label>
-                <input type="text" name="rfid" id="rfidInputAdd" class="form-control bg-light border-0 rounded-3" placeholder="Menunggu tap dari alat..." required />
+                <div class="input-group">
+                    <input type="text" name="rfid" id="rfidInputAdd" class="form-control bg-light border-0" placeholder="Tap kartu / klik Scan..." readonly required />
+                    <button type="button" id="addScanBtn" onclick="scanRfidIntoInput('rfidInputAdd')"
+                      class="scan-rfid-btn btn fw-semibold d-inline-flex align-items-center gap-1 <%= anyDeviceOnlineAdd ? 'scan-on' : 'scan-off' %>"
+                      <%= anyDeviceOnlineAdd ? '' : 'disabled' %>>
+                      <i class="fas fa-wifi"></i> Scan
+                    </button>
+                </div>
+                <small class="text-muted mt-1 d-block">UID tidak bisa diketik manual. Klik <strong>Scan</strong> lalu tempelkan kartu ke alat.</small>
             </div>
             <button type="submit" class="btn w-100 text-white fw-bold rounded-pill py-2" style="background: var(--dark-pink);">Simpan ke Database</button>
           </form>
@@ -786,7 +795,7 @@
             <div class="mb-4">
                 <label class="small text-muted fw-bold">RFID TAG</label>
                 <div class="input-group">
-                    <input type="text" name="rfid" id="editRfid" class="form-control bg-light border-0" required />
+                    <input type="text" name="rfid" id="editRfid" class="form-control bg-light border-0" placeholder="Klik Scan Ulang..." readonly required />
                     <button type="button" id="editScanBtn" onclick="scanRfidIntoInput()"
                       class="scan-rfid-btn btn fw-semibold d-inline-flex align-items-center gap-1 <%= anyDeviceOnlineEdit ? 'scan-on' : 'scan-off' %>"
                       <%= anyDeviceOnlineEdit ? '' : 'disabled' %>>
@@ -1178,7 +1187,7 @@
       let __editScanTimer = null;
       let __editScanActive = false;
 
-      async function scanRfidIntoInput() {
+      async function scanRfidIntoInput(targetId = 'editRfid') {
         if (__editScanActive) return;
         __editScanActive = true;
 
@@ -1220,12 +1229,12 @@
             if (j.scan && j.scan.uid) {
               stopPoll();
               const uid = j.scan.uid;
-              const inp = document.getElementById('editRfid');
+              const inp = document.getElementById(targetId);
               if (inp) inp.value = uid;
               await Swal.fire({
                 icon: 'success',
                 title: 'Kartu Terbaca',
-                html: `UID: <span class="font-monospace">${uid}</span><br><small class="text-muted">Tekan <strong>Update Data</strong> untuk menyimpan.</small>`,
+                html: `UID: <span class="font-monospace">${uid}</span><br><small class="text-muted">Tekan tombol <strong>Simpan</strong> untuk menyimpan.</small>`,
                 timer: 2200,
                 showConfirmButton: false
               });
@@ -1574,5 +1583,15 @@
         setInterval(updateData, 2000);
     </script>
 
+    <% if (typeof flashError !== 'undefined' && flashError) { %>
+    <script>
+      Swal.fire({
+        icon: 'error',
+        title: 'Input Tidak Valid',
+        text: <%- JSON.stringify(flashError) %>,
+        confirmButtonColor: '#d81b60',
+      });
+    </script>
+    <% } %>
 </body>
 </html>

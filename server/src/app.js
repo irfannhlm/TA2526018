@@ -59,6 +59,20 @@ app.use(
   }),
 );
 
+// ================= FLASH MESSAGE (1x tampil) =================
+// Ambil pesan error yang disimpan oleh middleware validate (saat redirect
+// balik), taruh di res.locals supaya tiap view EJS bisa memunculkannya
+// sebagai popup, lalu hapus agar tidak muncul lagi di refresh berikutnya.
+app.use((req, res, next) => {
+  res.locals.flashError = (req.session && req.session.flashError) || null;
+  res.locals.flashSuccess = (req.session && req.session.flashSuccess) || null;
+  if (req.session) {
+    delete req.session.flashError;
+    delete req.session.flashSuccess;
+  }
+  next();
+});
+
 // ================= CSRF (double-submit cookie) =================
 app.use(require("./http/middleware/csrf").csrfMiddleware);
 
