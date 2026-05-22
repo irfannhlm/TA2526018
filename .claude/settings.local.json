@@ -31,7 +31,9 @@
       "Bash(grep -vE \"✅ Supabase|Backend|Subscribe|System Startup|Berhasil terhubung|MQTT Error|^📩|^$\")",
       "Bash(rm -f scripts/verify-csrf-login.js)",
       "Bash(rmdir scripts *)",
-      "Bash(node -c src/data/baseRepo.js)"
+      "Bash(node -c src/data/baseRepo.js)",
+      "Bash(node -e \"console.log\\('zod', require\\('zod/package.json'\\).version\\)\")",
+      "Bash(node -e \"const {z}=require\\('zod'\\); const r=z.object\\({password:z.string\\(\\).min\\(8\\),role:z.enum\\(['a','b']\\)}\\).safeParse\\({password:'x'}\\); console.log\\(JSON.stringify\\(r.error.issues,null,2\\)\\)\")"
     ]
   }
 }

@@ -6,11 +6,50 @@
 // (sudah ter-coerce). Pada gagal: balasan 400 JSON utk /api/*, plain
 // text utk page route, berisi pesan singkat.
 
+// Label field dalam bahasa Indonesia untuk pesan yang ramah dibaca.
+const FIELD_LABEL = {
+  username: "Username",
+  password: "Password",
+  name: "Nama",
+  nim: "NIM",
+  rfid: "RFID",
+  role: "Role",
+  code: "Kode kelas",
+  lecturer: "Nama dosen",
+  current_class: "Kelas",
+  kelas: "Kelas",
+};
+
+// Terjemahkan satu issue zod -> kalimat Indonesia yang ramah.
+function friendlyIssue(issue) {
+  const field = issue.path && issue.path.length ? issue.path[0] : null;
+  const label = (field && FIELD_LABEL[field]) || "Input";
+  switch (issue.code) {
+    case "too_small":
+      if (issue.origin === "string") {
+        return issue.minimum <= 1
+          ? `${label} wajib diisi.`
+          : `${label} minimal ${issue.minimum} karakter.`;
+      }
+      return `${label} terlalu kecil.`;
+    case "too_big":
+      if (issue.origin === "string")
+        return `${label} maksimal ${issue.maximum} karakter.`;
+      return `${label} terlalu besar.`;
+    case "invalid_type":
+      return `${label} wajib diisi.`;
+    case "invalid_value":
+    case "invalid_enum_value":
+      return `${label} tidak valid.`;
+    default:
+      return `${label} tidak valid.`;
+  }
+}
+
 function pickMessage(err) {
   const first = err.issues && err.issues[0];
   if (!first) return "Input tidak valid.";
-  const path = first.path && first.path.length ? first.path.join(".") : "input";
-  return `${path}: ${first.message}`;
+  return friendlyIssue(first);
 }
 
 function validate(schemas) {
@@ -24,7 +63,11 @@ function validate(schemas) {
         if (req.path.startsWith("/api/")) {
           return res.status(400).json({ error: msg });
         }
-        return res.status(400).send(msg);
+        // Page route: render halaman error bertema (bukan teks mentah)
+        // supaya tidak muncul "layar putih" dengan tulisan di pojok.
+        return res
+          .status(400)
+          .render("error", { title: "Input Tidak Valid", message: msg });
       }
       // Merge hasil parse (coerced) di atas nilai asli — field yang
       // divalidasi ter-coerce, field lain (tidak di-skema) tetap utuh.

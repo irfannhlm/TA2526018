@@ -17,8 +17,22 @@ function errorHandler(err, req, res, next) {
     (req.headers.accept || "").includes("application/json");
 
   res.status(500);
-  if (wantsJson) res.json({ error: "Terjadi kesalahan server." });
-  else res.send("Terjadi kesalahan server.");
+  if (wantsJson) {
+    res.json({ error: "Terjadi kesalahan server." });
+  } else {
+    res.render(
+      "error",
+      {
+        title: "Terjadi Kesalahan",
+        message: "Maaf, terjadi kesalahan di server. Silakan coba lagi.",
+      },
+      (renderErr, html) => {
+        // Fallback ke teks bila view gagal dirender, agar tidak crash.
+        if (renderErr) return res.send("Terjadi kesalahan server.");
+        res.send(html);
+      },
+    );
+  }
 }
 
 module.exports = errorHandler;
