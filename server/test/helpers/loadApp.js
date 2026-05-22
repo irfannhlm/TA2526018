@@ -68,6 +68,9 @@ async function loadApp(opts = {}) {
   process.env.SUPABASE_KEY = "test-key";
   process.env.SESSION_SECRET = "test-secret";
   process.env.DEEPGRAM_KEY = "test-deepgram";
+  // Aktifkan jalur "test" di middleware (mis. bypass CSRF) tanpa
+  // mengubah perilaku produksi.
+  process.env.NODE_ENV = "test";
 
   const supabase = new FakeSupabase();
   if (typeof opts.seed === "function") opts.seed(supabase);

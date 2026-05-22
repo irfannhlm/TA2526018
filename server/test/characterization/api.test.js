@@ -136,6 +136,50 @@ test("/api/duplicate-resolve replace (txt_dsn) -> update date_id + ACK", async (
   }
 });
 
+test("Persistensi: duplicate_queue dari DB muncul di /api/duplicate-queue", async () => {
+  // Simulasi "setelah restart": item sudah ada di tabel (bukan RAM).
+  const ctx = await loadApp({
+    seed(sb) {
+      seedAdmin(sb);
+      sb.seed("duplicate_queue", [
+        {
+          qid: 5,
+          file: "DSN_2_1.txt",
+          tipe: "txt_dsn",
+          target_kelas: "K1",
+          payload: { no_pertanyaan: 1 },
+          resolved_at: null,
+        },
+      ]);
+    },
+  });
+  try {
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const res = await ctx.request("GET", "/api/duplicate-queue", { cookie });
+    const { pending } = res.json();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].qid, 5);
+    assert.equal(pending[0].tipe, "txt_dsn");
+    assert.equal(pending[0].no_pertanyaan, 1); // dari payload jsonb
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("Validasi: /api/duplicate-resolve action invalid -> 400", async () => {
+  const ctx = await loadApp({ seed: seedAdmin });
+  try {
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const res = await ctx.request("POST", "/api/duplicate-resolve", {
+      cookie,
+      body: { qid: 1, action: "ngawur" },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("/api/sd-sync-keputusan ulangi/batalkan/invalid", async () => {
   const ctx = await loadApp({ seed: seedAdmin });
   try {

@@ -24,10 +24,8 @@ const state = {
     berhasil: 0,
     updatedAt: Date.now(),
   },
-
-  // ----- ANTRIAN DUPLIKAT -----
-  duplicateQueue: [],
-  duplicateQueueCounter: 0,
+  // Antrian duplikat kini persisten di Supabase (lihat
+  // src/data/duplicateQueue.repo.js), tidak lagi di RAM.
 };
 
 module.exports = { state };

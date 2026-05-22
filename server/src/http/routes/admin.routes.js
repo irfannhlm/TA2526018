@@ -24,11 +24,25 @@ const { simpanAudioKeDB } = require("../../services/audio.service");
 const { uploadToSupabaseStorage } = require("../../services/storage.service");
 const { upload, uploadTemp, uploadMemory } = require("../middleware/upload");
 const { requireLogin, requireRole } = require("../middleware/auth");
+const { ROLES } = require("../../lib/constants");
 const {
   transcribeAnswer,
   transcribeQuestion,
 } = require("../../../Deepgramservice");
 const asyncHandler = require("../../lib/asyncHandler");
+const { validate } = require("../middleware/validate");
+const {
+  addClassSchema,
+  editClassSchema,
+  deleteClassSchema,
+  deleteStudentSchema,
+  editStudentSchema,
+  addStudentSchema: adminAddStudentSchema,
+  addToClassSchema,
+  addUserSchema,
+  deleteUserSchema,
+  manageUidSchema: adminManageUidSchema,
+} = require("../schemas/admin.schemas");
 
 const router = express.Router();
 
@@ -74,8 +88,7 @@ function cellToStr(v) {
     if (Array.isArray(v.richText))
       return v.richText.map((t) => t.text).join("");
     if (v.text !== undefined && v.text !== null) return String(v.text);
-    if (v.result !== undefined && v.result !== null)
-      return String(v.result);
+    if (v.result !== undefined && v.result !== null) return String(v.result);
     if (v instanceof Date) return v.toISOString();
     return "";
   }
@@ -112,7 +125,9 @@ function extractStudents(rows) {
   let headerIdx = -1;
   for (let i = 0; i < rows.length; i++) {
     const cells = (rows[i] || []).map((c) =>
-      String(c == null ? "" : c).trim().toLowerCase(),
+      String(c == null ? "" : c)
+        .trim()
+        .toLowerCase(),
     );
     if (cells.some(isNama) && cells.some(isNim)) {
       headerIdx = i;
@@ -126,7 +141,9 @@ function extractStudents(rows) {
   let startIdx = 0;
   if (headerIdx !== -1) {
     const h = (rows[headerIdx] || []).map((c) =>
-      String(c == null ? "" : c).trim().toLowerCase(),
+      String(c == null ? "" : c)
+        .trim()
+        .toLowerCase(),
     );
     namaIdx = h.findIndex(isNama);
     nimIdx = h.findIndex(isNim);
@@ -150,7 +167,7 @@ function extractStudents(rows) {
 // ================= ADMIN ROUTE =================
 router.get(
   "/admin",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const { username } = req.session.user;
     const currentClass = req.query.kelas || null;
@@ -336,7 +353,8 @@ router.get(
 // TAMBAH KELAS
 router.post(
   "/admin/add-class",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: addClassSchema }),
   asyncHandler(async (req, res) => {
     const { name, code, lecturer, lecturer_user_id, current_class } = req.body;
 
@@ -356,7 +374,8 @@ router.post(
 // EDIT KELAS
 router.post(
   "/admin/edit-class",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: editClassSchema }),
   asyncHandler(async (req, res) => {
     const { id, name, code, lecturer, lecturer_user_id, current_class } =
       req.body;
@@ -381,7 +400,8 @@ router.post(
 // HAPUS KELAS
 router.post(
   "/admin/delete-class",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: deleteClassSchema }),
   asyncHandler(async (req, res) => {
     const { id, current_class } = req.body;
 
@@ -415,7 +435,7 @@ router.post(
 // RESET ALL DATA
 router.post(
   "/admin/reset-all",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     await supabase.from("answers").delete().neq("answer_id", 0);
     await supabase.from("questions").delete().neq("question_id", 0);
@@ -430,7 +450,8 @@ router.post(
 // HAPUS ENTRI RFID (admin)
 router.post(
   "/admin/manage-uid",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: adminManageUidSchema }),
   asyncHandler(async (req, res) => {
     const { action, uid, entry_id, current_class } = req.body;
     if (action === "delete_all") {
@@ -458,7 +479,8 @@ router.post(
 // TAMBAH MAHASISWA BARU
 router.post(
   "/admin/add",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: adminAddStudentSchema }),
   asyncHandler(async (req, res) => {
     const { name, nim, rfid, kelas, current_class } = req.body;
     const targetClass = kelas || current_class;
@@ -482,7 +504,8 @@ router.post(
 // TAMBAH MAHASISWA DARI KELAS LAIN
 router.post(
   "/admin/add-to-class",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: addToClassSchema }),
   asyncHandler(async (req, res) => {
     const { student_id, current_class } = req.body;
 
@@ -512,14 +535,30 @@ router.post(
 );
 
 // HAPUS MAHASISWA
+// mode "class"    -> keluarkan dari kelas ini saja (record tetap ada)
+// mode "database" -> hapus permanen record mahasiswa (default)
 router.post(
   "/admin/delete",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: deleteStudentSchema }),
   asyncHandler(async (req, res) => {
-    const { id, current_class } = req.body;
+    const { id, current_class, mode } = req.body;
+    const studentId = toInt(id);
 
-    await sbDelete("students", { student_id: toInt(id) });
-    res.redirect(`/admin?kelas=${current_class}`);
+    if (mode === "class") {
+      const clsRows = await sbSelect("classes", {
+        class_name: current_class,
+      });
+      if (clsRows.length > 0) {
+        await sbDelete("class_students", {
+          student_id: studentId,
+          class_id: clsRows[0].class_id,
+        });
+      }
+    } else {
+      await sbDelete("students", { student_id: studentId });
+    }
+    res.redirect(`/admin?kelas=${encodeURIComponent(current_class)}`);
   }),
 );
 
@@ -528,7 +567,7 @@ router.post(
 // mode "database" -> hapus permanen record mahasiswa (default)
 router.post(
   "/admin/delete-all-students",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const { current_class, mode } = req.body;
 
@@ -554,7 +593,8 @@ router.post(
 // EDIT MAHASISWA
 router.post(
   "/admin/edit",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: editStudentSchema }),
   asyncHandler(async (req, res) => {
     const { id, name, nim, rfid, current_class } = req.body;
 
@@ -606,7 +646,7 @@ async function rfidUsable(rfidRaw, selfStudentId) {
 // LANGKAH 1: PREVIEW — deteksi mana yang baru & mana yang sudah ada
 router.post(
   "/admin/import-preview",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   uploadMemory.single("file"),
   asyncHandler(async (req, res) => {
     const { current_class } = req.body;
@@ -650,7 +690,7 @@ router.post(
 // LANGKAH 2: COMMIT — jalankan import dgn keputusan duplikat
 router.post(
   "/admin/import-commit",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const { current_class, rows, dupMode } = req.body;
     const mode = dupMode === "replace" ? "replace" : "skip";
@@ -707,16 +747,10 @@ router.post(
           const again = await sbSelect("students", { nim });
           if (again.length > 0 && mode === "replace") {
             studentId = again[0].student_id;
-            await sbUpdate(
-              "students",
-              { student_id: studentId },
-              { name },
-            );
+            await sbUpdate("students", { student_id: studentId }, { name });
             replaced++;
           } else {
-            console.error(
-              `❌ [import] Gagal simpan NIM ${nim}: ${e.message}`,
-            );
+            console.error(`❌ [import] Gagal simpan NIM ${nim}: ${e.message}`);
             skipped++;
             continue;
           }
@@ -742,7 +776,7 @@ router.post(
 // EXPORT MAHASISWA KELAS INI KE CSV (nama, nim, rfid)
 router.get(
   "/admin/export-csv",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const currentClass = req.query.kelas || "";
     const clsRows = await sbSelect("classes", { class_name: currentClass });
@@ -772,8 +806,7 @@ router.get(
     }
 
     const safeName =
-      (currentClass || "kelas").replace(/[^a-zA-Z0-9_-]+/g, "_") ||
-      "kelas";
+      (currentClass || "kelas").replace(/[^a-zA-Z0-9_-]+/g, "_") || "kelas";
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
@@ -786,14 +819,12 @@ router.get(
 // POLLING: scan kartu terbaru sejak id tertentu (untuk assign RFID)
 router.get(
   "/admin/last-scan",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const since = parseInt(req.query.since || "0", 10) || 0;
     const baru = state.sessionData.scannedList.filter((s) => s.id > since);
     const scan =
-      baru.length > 0
-        ? baru.reduce((a, b) => (a.id > b.id ? a : b))
-        : null;
+      baru.length > 0 ? baru.reduce((a, b) => (a.id > b.id ? a : b)) : null;
     res.json({
       counter: state.scanCounter,
       scan: scan ? { id: scan.id, uid: scan.uid } : null,
@@ -804,7 +835,7 @@ router.get(
 // ASSIGN UID HASIL SCAN KE MAHASISWA (RFID yang tadinya kosong)
 router.post(
   "/admin/assign-rfid",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const { student_id, uid } = req.body;
     const sid = toInt(student_id);
@@ -831,7 +862,8 @@ router.post(
 // TAMBAH USER
 router.post(
   "/admin/add-user",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: addUserSchema }),
   asyncHandler(async (req, res) => {
     const { username, password, role, current_class } = req.body;
 
@@ -844,7 +876,8 @@ router.post(
 // HAPUS USER
 router.post(
   "/admin/delete-user",
-  requireRole("admin"),
+  requireRole(ROLES.ADMIN),
+  validate({ body: deleteUserSchema }),
   asyncHandler(async (req, res) => {
     const { id, current_class } = req.body;
     console.log("🗑️ [delete-user] req.body:", req.body);

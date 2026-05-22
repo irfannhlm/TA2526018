@@ -19,7 +19,9 @@ class FakeMqttClient extends EventEmitter {
     if (typeof cb === "function") cb(null);
     return this;
   }
-  publish(topic, payload, cb) {
+  publish(topic, payload, optsOrCb, maybeCb) {
+    // Dukung kedua bentuk: publish(t,p,cb) & publish(t,p,opts,cb).
+    const cb = typeof optsOrCb === "function" ? optsOrCb : maybeCb;
     this.published.push({ topic, payload: String(payload) });
     if (typeof cb === "function") cb(null);
     return this;

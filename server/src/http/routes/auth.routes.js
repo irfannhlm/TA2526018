@@ -18,6 +18,7 @@ const {
   THRESHOLD_VALUES,
   STORAGE_BUCKET,
   SALT_ROUNDS,
+  ROLES,
 } = require("../../lib/constants");
 const { parseNamaFile } = require("../../lib/fileName");
 const { simpanAudioKeDB } = require("../../services/audio.service");
@@ -78,7 +79,7 @@ router.post(
       role: user.role,
     };
 
-    const redirectTo = user.role === "admin" ? "/admin" : "/pilih-kelas";
+    const redirectTo = user.role === ROLES.ADMIN ? "/admin" : "/pilih-kelas";
     return res.redirect(redirectTo);
   }),
 );

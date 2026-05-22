@@ -5,6 +5,8 @@
 // (Deepgram sweep) & HTTP server, plus graceful shutdown. Saat di-require
 // dari test, app dipakai tanpa listen.
 
+const fs = require("fs");
+const path = require("path");
 const { app } = require("./src/app");
 const { supabase } = require("./src/config/supabase");
 const { sbUpdate } = require("./src/data/baseRepo");
@@ -14,6 +16,29 @@ const { sweepUntranscribed } = require("./Deepgramservice");
 let sweepTimeout = null;
 let sweepInterval = null;
 let httpServer = null;
+
+// Bersihkan file sementara di temp_audio/ yang lebih tua dari 24 jam
+// (sisa upload yang gagal/crash di tengah jalan).
+function cleanupTempAudio() {
+  const dir = path.join(__dirname, "temp_audio");
+  const maxAgeMs = 24 * 60 * 60 * 1000;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name === ".gitkeep") continue;
+      const p = path.join(dir, name);
+      try {
+        const st = fs.statSync(p);
+        if (st.isFile() && Date.now() - st.mtimeMs > maxAgeMs) {
+          fs.unlinkSync(p);
+        }
+      } catch (_) {
+        /* abaikan file yang gagal dibaca */
+      }
+    }
+  } catch (_) {
+    /* folder belum ada — abaikan */
+  }
+}
 
 // ================= DEEPGRAM AUTO-SWEEP =================
 // Sweep pertama 10 detik setelah server nyala, lalu tiap 5 menit.
@@ -64,6 +89,7 @@ function shutdown(signal) {
 if (require.main === module) {
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  cleanupTempAudio();
   startBackgroundJobs();
   startServer();
 }

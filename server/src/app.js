@@ -21,6 +21,10 @@ const { createMessageHandler } = require("./mqtt/messageHandler");
 const app = express();
 const ROOT = path.join(__dirname, ".."); // folder server/
 
+// Hormati X-Forwarded-* dari reverse proxy (Render/Railway/Nginx) supaya
+// cookie `secure` bekerja di produksi.
+app.set("trust proxy", 1);
+
 // ================= KEAMANAN (HELMET) =================
 // CSP dimatikan karena view EJS lama memakai script/style inline;
 // proteksi header lain (X-Frame-Options, noSniff, dll.) tetap aktif.
@@ -31,6 +35,7 @@ app.set("view engine", "ejs");
 app.set("views", path.join(ROOT, "views"));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(require("cookie-parser")(env.SESSION_SECRET));
 app.use(express.static(path.join(ROOT, "public")));
 
 // ================= SESSION =================
@@ -38,16 +43,24 @@ app.use(
   session({
     secret: env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: false,
+    // true: pengunjung anonim (halaman login) tetap dapat cookie sesi,
+    // sehingga sessionID stabil dari render form sampai submit. Ini
+    // SYARAT agar token CSRF (yang terikat sessionID) valid saat login.
+    saveUninitialized: true,
     store: new MemoryStore({
       checkPeriod: 86400000, // bersihkan sesi kedaluwarsa tiap 24 jam
     }),
     cookie: {
       httpOnly: true,
       maxAge: 8 * 60 * 60 * 1000,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
     },
   }),
 );
+
+// ================= CSRF (double-submit cookie) =================
+app.use(require("./http/middleware/csrf").csrfMiddleware);
 
 // ================= CEK KONEKSI SUPABASE =================
 (async () => {

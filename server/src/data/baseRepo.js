@@ -10,6 +10,7 @@ async function sbSelect(table, filters = {}, columns = "*", extra = {}) {
   let q = supabase.from(table).select(columns);
   for (const [col, val] of Object.entries(filters)) {
     if (Array.isArray(val)) q = q.in(col, val);
+    else if (val === null) q = q.is(col, null);
     else q = q.eq(col, val);
   }
   if (extra.order)
@@ -38,6 +39,7 @@ async function sbUpdate(table, filters, updates) {
   } else {
     for (const [col, val] of entries) {
       if (Array.isArray(val)) q = q.in(col, val);
+      else if (val === null) q = q.is(col, null);
       else q = q.eq(col, val);
     }
   }
@@ -50,6 +52,7 @@ async function sbDelete(table, filters) {
   let q = supabase.from(table).delete();
   for (const [col, val] of Object.entries(filters)) {
     if (Array.isArray(val)) q = q.in(col, val);
+    else if (val === null) q = q.is(col, null);
     else q = q.eq(col, val);
   }
   const { error } = await q;

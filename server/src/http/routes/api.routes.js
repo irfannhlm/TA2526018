@@ -12,7 +12,6 @@ const {
 } = require("../../data/baseRepo");
 const { supabase } = require("../../config/supabase");
 const { state } = require("../../state");
-const { mqttClient } = require("../../config/mqtt");
 const { toInt } = require("../../lib/utils");
 const {
   THRESHOLD_VALUES,
@@ -29,6 +28,19 @@ const {
   transcribeQuestion,
 } = require("../../../Deepgramservice");
 const asyncHandler = require("../../lib/asyncHandler");
+const { validate } = require("../middleware/validate");
+const { publishCommand } = require("../../mqtt/publisher");
+const {
+  pushPending,
+  listPending,
+  resolve,
+} = require("../../data/duplicateQueue.repo");
+const {
+  uploadAudioSdSchema,
+  uploadAudioSchema,
+  duplicateResolveSchema,
+  sdSyncKeputusanSchema,
+} = require("../schemas/api.schemas");
 
 const router = express.Router();
 
@@ -204,8 +216,8 @@ router.post(
 router.get(
   "/api/duplicate-queue",
   requireLogin,
-  asyncHandler((req, res) => {
-    const pending = state.duplicateQueue.filter((d) => !d.resolvedAt);
+  asyncHandler(async (req, res) => {
+    const pending = await listPending();
     res.json({ pending });
   }),
 );
@@ -214,18 +226,16 @@ router.get(
 router.post(
   "/api/duplicate-resolve",
   requireLogin,
+  validate({ body: duplicateResolveSchema }),
   asyncHandler(async (req, res) => {
     const { qid, action } = req.body; // action: "replace" | "skip"
-    const item = state.duplicateQueue.find(
-      (d) => d.qid === parseInt(qid) && !d.resolvedAt,
-    );
+    // resolve() menandai item resolved secara atomik (hindari double-resolve).
+    const item = await resolve(parseInt(qid));
 
     if (!item)
       return res
         .status(404)
         .json({ ok: false, message: "Item tidak ditemukan." });
-
-    item.resolvedAt = Date.now();
 
     if (action === "skip") {
       // Buang file temp jika ada
@@ -233,10 +243,7 @@ router.post(
         fs.unlinkSync(item.tempPath);
       // ACK ke ESP agar lanjut kirim file berikutnya (untuk tipe TXT)
       if (item.tipe !== "wav") {
-        mqttClient.publish(
-          "kelas/alat/perintah",
-          JSON.stringify({ perintah: "ack_file", file: item.file }),
-        );
+        await publishCommand({ perintah: "ack_file", file: item.file });
       }
       console.log(`🗑️ [DUPLIKAT] SKIP: ${item.file}`);
       return res.json({ ok: true, action: "skip" });
@@ -258,10 +265,7 @@ router.post(
         { question_id: item.existingId },
         { date_id: item.tanggal },
       );
-      mqttClient.publish(
-        "kelas/alat/perintah",
-        JSON.stringify({ perintah: "ack_file", file: item.file }),
-      );
+      await publishCommand({ perintah: "ack_file", file: item.file });
       console.log(
         `🔄 [DUPLIKAT] REPLACE TXT DSN: ${item.file} → date_id="${item.tanggal}"`,
       );
@@ -277,10 +281,7 @@ router.post(
           class_id: item.classId,
         },
       );
-      mqttClient.publish(
-        "kelas/alat/perintah",
-        JSON.stringify({ perintah: "ack_file", file: item.file }),
-      );
+      await publishCommand({ perintah: "ack_file", file: item.file });
       console.log(`🔄 [DUPLIKAT] REPLACE TXT MHS: ${item.file}`);
     }
 
@@ -291,39 +292,36 @@ router.post(
 // ================= API KONTROL SD SYNC =================
 router.post(
   "/api/sd-sync-keputusan",
-  asyncHandler((req, res) => {
+  validate({ body: sdSyncKeputusanSchema }),
+  asyncHandler(async (req, res) => {
     const { keputusan } = req.body;
     if (keputusan === "ulangi") {
-      const payload = JSON.stringify({ perintah: "ack_file", file: "" });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err)
-          return res
-            .status(500)
-            .json({ success: false, message: "Gagal kirim perintah." });
-        console.log("🔄 [SD SYNC] Server memilih: ULANGI / LANJUT");
-        res.json({ success: true, message: "ESP diperintahkan melanjutkan." });
+      const ok = await publishCommand({ perintah: "ack_file", file: "" });
+      if (!ok)
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal kirim perintah." });
+      console.log("🔄 [SD SYNC] Server memilih: ULANGI / LANJUT");
+      return res.json({
+        success: true,
+        message: "ESP diperintahkan melanjutkan.",
       });
-    } else if (keputusan === "batalkan") {
-      const payload = JSON.stringify({ perintah: "batalkan_sync" });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err)
-          return res
-            .status(500)
-            .json({ success: false, message: "Gagal kirim perintah." });
-        console.log("🛑 [SD SYNC] Server memilih: BATALKAN");
-        res.json({ success: true, message: "Sinkronisasi dibatalkan." });
-      });
-    } else {
-      res
-        .status(400)
-        .json({ success: false, message: "Keputusan tidak valid." });
     }
+    // keputusan === "batalkan" (dijamin oleh skema validasi)
+    const ok = await publishCommand({ perintah: "batalkan_sync" });
+    if (!ok)
+      return res
+        .status(500)
+        .json({ success: false, message: "Gagal kirim perintah." });
+    console.log("🛑 [SD SYNC] Server memilih: BATALKAN");
+    res.json({ success: true, message: "Sinkronisasi dibatalkan." });
   }),
 );
 
 router.post(
   "/api/upload-audio",
   upload.single("audio"),
+  validate({ body: uploadAudioSchema }),
   asyncHandler(async (req, res) => {
     const { log_id } = req.body;
     if (!req.file) return res.status(400).send("Tidak ada file yang diunggah.");
@@ -344,6 +342,7 @@ router.post(
 router.post(
   "/api/upload-audio-sd",
   uploadTemp.single("audio"),
+  validate({ body: uploadAudioSdSchema }),
   asyncHandler(async (req, res) => {
     const tempPath = req.file?.path;
     const namaFile = req.body.nama_file || req.file?.originalname || "";
@@ -384,10 +383,7 @@ router.post(
       const classes = await sbSelect("classes", { class_name: targetKelas });
       const classId = classes.length > 0 ? classes[0].class_id : null;
 
-      state.duplicateQueueCounter++;
-      const qid = state.duplicateQueueCounter;
-      state.duplicateQueue.push({
-        qid,
+      const qid = await pushPending({
         file: namaFile,
         tipe: "wav",
         target_kelas: targetKelas,
@@ -396,7 +392,6 @@ router.post(
         classId,
         info,
         existingPreview: `File audio: ${namaFile} | Kelas: ${targetKelas}`,
-        resolvedAt: null,
       });
       console.log(
         `⏸️ [WAV] Duplikat ditahan — menunggu keputusan user. qid=${qid}`,

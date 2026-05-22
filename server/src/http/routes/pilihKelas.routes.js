@@ -24,6 +24,7 @@ const { simpanAudioKeDB } = require("../../services/audio.service");
 const { uploadToSupabaseStorage } = require("../../services/storage.service");
 const { upload, uploadTemp } = require("../middleware/upload");
 const { requireLogin, requireRole } = require("../middleware/auth");
+const { ROLES } = require("../../lib/constants");
 const {
   transcribeAnswer,
   transcribeQuestion,

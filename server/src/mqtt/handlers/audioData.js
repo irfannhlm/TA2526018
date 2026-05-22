@@ -2,11 +2,13 @@
 
 // Topik: kelas/alat/audio_data — data TXT dari SD Card ESP32 (DSN/MHS),
 // termasuk cek duplikat (ditahan di antrian) & ACK ke alat.
-// Logika sama persis dengan blok lama di server.js (behavior-preserving).
+// ACK dikirim via publishCommand (QoS 1) supaya tidak hilang.
 // `return;` di sini setara `return` dari callback handler lama.
+const { publishCommand } = require("../publisher");
+const { pushPending } = require("../../data/duplicateQueue.repo");
+
 module.exports = async function audioData(payload, ctx) {
-  const { sbSelect, sbInsert, sbUpdate, parseNamaFile, mqttClient, state } =
-    ctx;
+  const { sbSelect, sbInsert, sbUpdate, parseNamaFile } = ctx;
 
   const {
     file,
@@ -25,10 +27,7 @@ module.exports = async function audioData(payload, ctx) {
   const info = parseNamaFile(file);
   if (!info) {
     console.warn(`⚠️ Format nama file tidak dikenal: ${file}`);
-    mqttClient.publish(
-      "kelas/alat/perintah",
-      JSON.stringify({ perintah: "ack_file", file }),
-    );
+    publishCommand({ perintah: "ack_file", file });
     return;
   }
 
@@ -38,10 +37,7 @@ module.exports = async function audioData(payload, ctx) {
 
     if (!classId) {
       console.warn(`⚠️ Kelas "${target_kelas}" tidak ditemukan di database.`);
-      mqttClient.publish(
-        "kelas/alat/perintah",
-        JSON.stringify({ perintah: "ack_file", file }),
-      );
+      publishCommand({ perintah: "ack_file", file });
       return;
     }
 
@@ -81,20 +77,14 @@ module.exports = async function audioData(payload, ctx) {
         console.warn(
           `⚠️ [DSN TXT] Field 'no_pertanyaan' tidak valid di payload: ${no_pertanyaan}`,
         );
-        mqttClient.publish(
-          "kelas/alat/perintah",
-          JSON.stringify({ perintah: "ack_file", file }),
-        );
+        publishCommand({ perintah: "ack_file", file });
         return;
       }
       if (!parsedTanggal) {
         console.warn(
           `⚠️ [DSN TXT] Field 'tanggal' kosong atau tidak ada di payload`,
         );
-        mqttClient.publish(
-          "kelas/alat/perintah",
-          JSON.stringify({ perintah: "ack_file", file }),
-        );
+        publishCommand({ perintah: "ack_file", file });
         return;
       }
       if (numberQ !== info.no_pertanyaan) {
@@ -110,9 +100,7 @@ module.exports = async function audioData(payload, ctx) {
 
       // CEK DUPLIKAT: hanya jika date_id sudah terisi sebelumnya
       if (existing.length > 0 && existing[0].date_id) {
-        state.duplicateQueueCounter++;
-        state.duplicateQueue.push({
-          qid: state.duplicateQueueCounter,
+        const qid = await pushPending({
           file,
           tipe: "txt_dsn",
           target_kelas,
@@ -120,10 +108,9 @@ module.exports = async function audioData(payload, ctx) {
           tanggal: parsedTanggal,
           existingId: existing[0].question_id,
           existingPreview: `Pertanyaan #${numberQ} | Tanggal lama: ${existing[0].date_id} → baru: ${parsedTanggal}`,
-          resolvedAt: null,
         });
         console.log(
-          `⏸️ [TXT DSN] Duplikat ditahan — menunggu keputusan user. qid=${state.duplicateQueueCounter}`,
+          `⏸️ [TXT DSN] Duplikat ditahan — menunggu keputusan user. qid=${qid}`,
         );
         return; // Tahan, tidak ACK
       }
@@ -192,9 +179,7 @@ module.exports = async function audioData(payload, ctx) {
         aRows.length > 0 &&
         (aRows[0].student_id || aRows[0].duration_answer)
       ) {
-        state.duplicateQueueCounter++;
-        state.duplicateQueue.push({
-          qid: state.duplicateQueueCounter,
+        const qid = await pushPending({
           file,
           tipe: "txt_mhs",
           target_kelas,
@@ -206,10 +191,9 @@ module.exports = async function audioData(payload, ctx) {
           studentId: student ? student.student_id : null,
           existingAnswerId: aRows[0].answer_id,
           existingPreview: `Q${info.no_pertanyaan} A${info.no_jawaban} | ${student?.name || uid}`,
-          resolvedAt: null,
         });
         console.log(
-          `⏸️ [TXT MHS] Duplikat ditahan — menunggu keputusan user. qid=${state.duplicateQueueCounter}`,
+          `⏸️ [TXT MHS] Duplikat ditahan — menunggu keputusan user. qid=${qid}`,
         );
         return; // Tahan, tidak ACK
       }
@@ -244,11 +228,7 @@ module.exports = async function audioData(payload, ctx) {
     }
 
     // ACK ke ESP hanya jika tidak duplikat
-    const ackPayload = JSON.stringify({ perintah: "ack_file", file });
-    mqttClient.publish("kelas/alat/perintah", ackPayload, (err) => {
-      if (err) console.error("❌ Gagal kirim ACK:", err);
-      else console.log(`📤 ACK dikirim untuk file: ${file}`);
-    });
+    await publishCommand({ perintah: "ack_file", file });
   } catch (dbErr) {
     console.error("❌ [SD SYNC TXT] Gagal simpan ke database:", dbErr.message);
   }

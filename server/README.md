@@ -74,17 +74,36 @@ yang menjawab seragam (500 JSON untuk `/api/*`, selainnya teks).
 
 ### Keamanan
 
-`helmet` (CSP dimatikan karena view EJS lama pakai skrip inline),
-rate-limit pada `/login`, validasi input `/login` dengan `zod`,
-sesi `httpOnly`, password `bcrypt`. Catatan: `MemoryStore` sesi
-tidak untuk produksi (hilang saat restart) — ganti store bila deploy.
+- `helmet` (CSP dimatikan karena view EJS lama pakai skrip inline).
+- **CSRF** (double-submit cookie, `csrf-csrf`) untuk semua form
+  admin/dosen; endpoint ESP32 (`/api/upload-audio*`) dikecualikan.
+- Cookie sesi `httpOnly` + `sameSite=lax` + `secure` (di produksi),
+  `trust proxy` aktif.
+- Rate-limit pada `/login`; validasi input semua endpoint mutasi &
+  upload dengan `zod`.
+- **Otorisasi kepemilikan**: dosen hanya bisa ubah/hapus data kelas
+  yang dia ampu (admin bypass).
+- Password `bcrypt` (min 8 karakter saat pembuatan user).
+- MQTT perintah dikirim QoS 1 (`src/mqtt/publisher.js`) agar tidak
+  hilang. Kredensial broker via ENV.
+
+Catatan: `MemoryStore` sesi tidak untuk produksi (hilang saat restart)
+— ganti store bila deploy.
+
+## Migrasi database
+
+Sebelum menjalankan versi ini, jalankan SQL di Supabase Studio:
+[docs/sql/duplicate_queue.sql](docs/sql/duplicate_queue.sql) — tabel
+`duplicate_queue` (antrian duplikat kini persisten, bukan di RAM, agar
+tidak hilang saat server restart).
 
 ## Test
 
-43 _characterization test_ mengunci perilaku (auth, MQTT, upload, API,
-mutasi admin/dosen) dengan **semua dependency di-mock** (tanpa jaringan).
-Detail & batasan: [test/README.md](test/README.md).
+47 _characterization test_ mengunci perilaku (auth, MQTT, upload, API,
+mutasi admin/dosen, CSRF-bypass, ownership, validasi) dengan **semua
+dependency di-mock** (tanpa jaringan). Detail & batasan:
+[test/README.md](test/README.md).
 
 ```bash
-npm test   # 43 passed
+npm test   # 47 passed
 ```

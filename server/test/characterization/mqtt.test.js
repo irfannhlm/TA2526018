@@ -125,6 +125,42 @@ test("MQTT audio_data DSN duplikat: ditahan di queue, TANPA ACK", async () => {
   }
 });
 
+test("MQTT audio_data: file duplikat sama dikirim 2x -> tetap 1 antrian", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedBase(sb);
+      sb.seed("questions", [
+        {
+          question_id: 99,
+          class_id: 10,
+          number_q: 1,
+          date_id: "2026-01-01",
+          transcript_text: "",
+        },
+      ]);
+    },
+  });
+  try {
+    const payload = {
+      file: "DSN_2_1.txt",
+      target_kelas: "K1",
+      no_pertanyaan: 1,
+      tanggal: "13-05-2026",
+      uid: "DOSEN",
+    };
+    await ctx.mqtt.deliver("kelas/alat/audio_data", payload);
+    await ctx.mqtt.deliver("kelas/alat/audio_data", payload); // kiriman ulang
+
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const { pending } = (
+      await ctx.request("GET", "/api/duplicate-queue", { cookie })
+    ).json();
+    assert.equal(pending.length, 1, "tidak boleh menggandakan antrian");
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("MQTT audio_data MHS baru: insert answer + ACK", async () => {
   const ctx = await loadApp({
     seed(sb) {

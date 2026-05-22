@@ -9,7 +9,29 @@
       "Bash(node -e \"console.log\\('fetch:', typeof fetch, '| node:test:', !!require\\('node:test'\\)\\)\")",
       "Bash(node -c server.js)",
       "Bash(npm test *)",
-      "Bash(npx prettier *)"
+      "Bash(npx prettier *)",
+      "Bash(node -e \"const {doubleCsrf}=require\\('csrf-csrf'\\); const r=doubleCsrf\\({getSecret:\\(\\)=>'x',getSessionIdentifier:\\(req\\)=>'x'}\\); console.log\\(Object.keys\\(r\\)\\);\")",
+      "Bash(npm install *)",
+      "Bash(node -c src/app.js)",
+      "Bash(node -c src/http/middleware/csrf.js)",
+      "Bash(node -e ' *)",
+      "Bash(node -c src/http/routes/dosen.routes.js)",
+      "Bash(node -c src/http/middleware/ownership.js)",
+      "Bash(node -c test/characterization/routes.test.js)",
+      "Bash(node -c src/http/routes/api.routes.js)",
+      "Bash(node -c src/http/routes/admin.routes.js)",
+      "Bash(node -c src/mqtt/handlers/audioData.js)",
+      "Bash(node -c src/config/mqtt.js)",
+      "Bash(node -c src/mqtt/messageHandler.js)",
+      "Bash(grep -n 'const { mqttClient } = require\\(\"../../config/mqtt\"\\);' src/http/routes/api.routes.js src/http/routes/dosen.routes.js)",
+      "Bash(node -c src/http/routes/__TRACKED_VAR__.routes.js)",
+      "Bash(node -c src/data/duplicateQueue.repo.js)",
+      "Bash(npx eslint *)",
+      "Bash(node scripts/verify-csrf-login.js)",
+      "Bash(grep -vE \"✅ Supabase|Backend|Subscribe|System Startup|Berhasil terhubung|MQTT Error|^📩|^$\")",
+      "Bash(rm -f scripts/verify-csrf-login.js)",
+      "Bash(rmdir scripts *)",
+      "Bash(node -c src/data/baseRepo.js)"
     ]
   }
 }

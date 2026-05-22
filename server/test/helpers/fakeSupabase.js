@@ -23,6 +23,7 @@ const TABLE_PK = {
   devices: "device_id",
   users: "user_id",
   class_students: "class_student_id",
+  duplicate_queue: "qid",
 };
 
 function clone(v) {
@@ -74,6 +75,10 @@ class QueryBuilder {
     this._filters.push({ type: "neq", col, val });
     return this;
   }
+  is(col, val) {
+    this._filters.push({ type: "is", col, val });
+    return this;
+  }
   not(col, op, val) {
     this._filters.push({ type: "not", col, op, val });
     return this;
@@ -116,9 +121,13 @@ class QueryBuilder {
       const cell = row[f.col];
       switch (f.type) {
         case "eq":
-          return cell == f.val;
+          // Mirip PostgREST: .eq(col, null) TIDAK cocok dgn NULL
+          // (harus pakai .is). Memaksa kode pakai filter yang benar.
+          return f.val === null ? false : cell == f.val;
         case "neq":
           return cell != f.val;
+        case "is":
+          return f.val === null ? cell == null : cell === f.val;
         case "in":
           return Array.isArray(f.val) && f.val.some((v) => v == cell);
         case "gte":

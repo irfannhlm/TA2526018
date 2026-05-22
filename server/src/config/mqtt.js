@@ -9,6 +9,7 @@
 
 const mqtt = require("mqtt");
 const { MQTT } = require("./env");
+const TOPICS = require("../lib/topics");
 
 const mqttClient = mqtt.connect({
   host: MQTT.host,
@@ -24,12 +25,7 @@ const mqttClient = mqtt.connect({
 mqttClient.on("connect", () => {
   console.log("✅ Backend terhubung ke HiveMQ Cloud!");
   mqttClient.subscribe(
-    [
-      "kelas/alat/rfid",
-      "kelas/alat/status",
-      "kelas/alat/audio_data",
-      "kelas/alat/sync_status",
-    ],
+    [TOPICS.RFID, TOPICS.STATUS, TOPICS.AUDIO_DATA, TOPICS.SYNC_STATUS],
     (err) => {
       if (!err)
         console.log(

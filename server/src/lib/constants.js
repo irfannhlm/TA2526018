@@ -12,6 +12,7 @@ const TABLE_PK = {
   devices: "device_id",
   users: "user_id",
   class_students: "class_student_id",
+  duplicate_queue: "qid",
 };
 
 // Nilai ambang kebisingan (dikirim ke alat seperti set_timer).
@@ -28,4 +29,13 @@ const STORAGE_BUCKET = "audio-catchnote";
 // Cost factor bcrypt (sama dengan nilai lama di server.js).
 const SALT_ROUNDS = 10;
 
-module.exports = { TABLE_PK, THRESHOLD_VALUES, STORAGE_BUCKET, SALT_ROUNDS };
+// Peran pengguna.
+const ROLES = { ADMIN: "admin", DOSEN: "dosen" };
+
+module.exports = {
+  TABLE_PK,
+  THRESHOLD_VALUES,
+  STORAGE_BUCKET,
+  SALT_ROUNDS,
+  ROLES,
+};

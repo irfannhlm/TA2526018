@@ -12,7 +12,6 @@ const {
 } = require("../../data/baseRepo");
 const { supabase } = require("../../config/supabase");
 const { state } = require("../../state");
-const { mqttClient } = require("../../config/mqtt");
 const { toInt } = require("../../lib/utils");
 const {
   THRESHOLD_VALUES,
@@ -24,18 +23,37 @@ const { simpanAudioKeDB } = require("../../services/audio.service");
 const { uploadToSupabaseStorage } = require("../../services/storage.service");
 const { upload, uploadTemp } = require("../middleware/upload");
 const { requireLogin, requireRole } = require("../middleware/auth");
+const { ROLES } = require("../../lib/constants");
+const {
+  requireOwnsAnswer,
+  requireOwnsQuestion,
+} = require("../middleware/ownership");
 const {
   transcribeAnswer,
   transcribeQuestion,
 } = require("../../../Deepgramservice");
 const asyncHandler = require("../../lib/asyncHandler");
+const { publishCommand } = require("../../mqtt/publisher");
+const { validate } = require("../middleware/validate");
+const {
+  nilaiSchema,
+  answerPatchSchema,
+  questionPatchSchema,
+  editLogSchema,
+  updateSettingsSchema,
+  syncUidSchema,
+  requestAudioSchema,
+  requestSyncSchema,
+  addStudentSchema,
+  manageUidSchema,
+} = require("../schemas/dosen.schemas");
 
 const router = express.Router();
 
 // ================= DOSEN ROUTE =================
 router.get(
   "/dosen",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
   asyncHandler(async (req, res) => {
     const { username } = req.session.user;
     const currentClass = req.query.kelas;
@@ -214,7 +232,8 @@ router.get(
 // DOSEN: DAFTARKAN MAHASISWA BARU
 router.post(
   "/dosen/add-student",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: addStudentSchema }),
   asyncHandler(async (req, res) => {
     const { name, nim, rfid, kelas, current_class } = req.body;
     const targetClass = kelas || current_class;
@@ -240,31 +259,24 @@ router.post(
 
 router.post(
   "/dosen/update-settings",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: updateSettingsSchema }),
   asyncHandler((req, res) => {
     const { status, mode, timer, threshold, current_class } = req.body;
     if (status) state.sessionData.status = status;
     if (mode) state.sessionData.mode = mode;
     if (timer) {
       state.sessionData.maxTime = parseInt(timer);
-      const payload = JSON.stringify({
+      publishCommand({
         perintah: "set_timer",
         durasi_detik: state.sessionData.maxTime,
-      });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err) console.error("❌ Gagal mengirim timer ke MQTT:", err);
-        else console.log("✅ Berhasil mengirim timer ke MQTT:", payload);
       });
     }
     if (threshold && THRESHOLD_VALUES[threshold] !== undefined) {
       state.sessionData.threshold = threshold;
-      const payload = JSON.stringify({
+      publishCommand({
         perintah: "set_threshold",
         nilai: THRESHOLD_VALUES[threshold],
-      });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err) console.error("❌ Gagal mengirim threshold ke MQTT:", err);
-        else console.log("✅ Berhasil mengirim threshold ke MQTT:", payload);
       });
     }
     res.redirect(`/dosen?kelas=${current_class}`);
@@ -273,7 +285,8 @@ router.post(
 
 router.post(
   "/dosen/sync-uid",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: syncUidSchema }),
   asyncHandler(async (req, res) => {
     const { current_class, mode } = req.body;
     let daftarUid = [];
@@ -307,43 +320,35 @@ router.post(
           .status(500)
           .json({ success: false, message: "Gagal mengambil data mahasiswa." });
       }
-      const payload = JSON.stringify({
+      const ok = await publishCommand({
         perintah: "sync_uid_kelas",
         label: "Daftar Mahasiswa Kelas",
         uids: daftarUid,
       });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err) {
-          console.error("❌ Gagal kirim sync_uid_kelas:", err);
-          return res
-            .status(500)
-            .json({ success: false, message: "Gagal mengirim ke alat." });
-        }
-        console.log(`✅ sync_uid_kelas: ${daftarUid.length} UID`);
-        res.json({
-          success: true,
-          message: `✅ Daftar Kelas: ${daftarUid.length} UID dikirim ke alat.`,
-        });
+      if (!ok)
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal mengirim ke alat." });
+      console.log(`✅ sync_uid_kelas: ${daftarUid.length} UID`);
+      res.json({
+        success: true,
+        message: `✅ Daftar Kelas: ${daftarUid.length} UID dikirim ke alat.`,
       });
     } else {
       daftarUid = state.sessionData.scannedList.map((item) => item.uid);
-      const payload = JSON.stringify({
+      const ok = await publishCommand({
         perintah: "sync_uid_aktif",
         label: "Peserta Aktif Sesi",
         uids: daftarUid,
       });
-      mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-        if (err) {
-          console.error("❌ Gagal kirim sync_uid_aktif:", err);
-          return res
-            .status(500)
-            .json({ success: false, message: "Gagal mengirim ke alat." });
-        }
-        console.log(`✅ sync_uid_aktif: ${daftarUid.length} UID`);
-        res.json({
-          success: true,
-          message: `✅ Peserta Aktif: ${daftarUid.length} UID dikirim ke alat.`,
-        });
+      if (!ok)
+        return res
+          .status(500)
+          .json({ success: false, message: "Gagal mengirim ke alat." });
+      console.log(`✅ sync_uid_aktif: ${daftarUid.length} UID`);
+      res.json({
+        success: true,
+        message: `✅ Peserta Aktif: ${daftarUid.length} UID dikirim ke alat.`,
       });
     }
   }),
@@ -351,7 +356,9 @@ router.post(
 
 router.post(
   "/dosen/edit-log",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: editLogSchema }),
+  requireOwnsAnswer("body"),
   asyncHandler(async (req, res) => {
     const {
       id,
@@ -389,7 +396,9 @@ router.post(
 // ================= KELOLA RIWAYAT: EDIT/HAPUS JAWABAN & PERTANYAAN =================
 router.patch(
   "/dosen/answer/:id",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  requireOwnsAnswer(),
+  validate({ body: answerPatchSchema }),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { transcript, student_id, duration_answer } = req.body;
@@ -406,7 +415,8 @@ router.patch(
 
 router.delete(
   "/dosen/answer/:id",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  requireOwnsAnswer(),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     await sbDelete("answers", { answer_id: parseInt(id) });
@@ -417,7 +427,9 @@ router.delete(
 // Penilaian manual dosen (1-100), kosong = batalkan nilai
 router.patch(
   "/dosen/answer/:id/nilai",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  requireOwnsAnswer(),
+  validate({ body: nilaiSchema }),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     let { nilai } = req.body;
@@ -438,7 +450,9 @@ router.patch(
 
 router.patch(
   "/dosen/question/:id",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  requireOwnsQuestion(),
+  validate({ body: questionPatchSchema }),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { transcript } = req.body;
@@ -453,7 +467,8 @@ router.patch(
 
 router.delete(
   "/dosen/question/:id",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  requireOwnsQuestion(),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     await sbDelete("answers", { question_id: parseInt(id) });
@@ -464,7 +479,8 @@ router.delete(
 
 router.post(
   "/dosen/manage-uid",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: manageUidSchema }),
   asyncHandler(async (req, res) => {
     const { action, uid, entry_id, student_id, target_date, current_class } =
       req.body;
@@ -530,7 +546,9 @@ router.post(
 
 router.post(
   "/dosen/request-audio",
-  requireRole("dosen", "admin"),
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: requestAudioSchema }),
+  requireOwnsAnswer("body"),
   asyncHandler(async (req, res) => {
     const { id, current_class } = req.body;
 
@@ -545,61 +563,49 @@ router.post(
 
 router.post(
   "/dosen/request-audio-sync",
-  requireRole("dosen", "admin"),
-  asyncHandler((req, res) => {
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: requestSyncSchema }),
+  asyncHandler(async (req, res) => {
     const { current_class } = req.body;
-    const payloadTxt = JSON.stringify({
+    const ok = await publishCommand({
       perintah: "request_sync_audio",
       target_kelas: current_class,
     });
-    const payloadWav = JSON.stringify({
-      perintah: "request_sync_wav",
-      target_kelas: current_class,
-    });
-
-    mqttClient.publish("kelas/alat/perintah", payloadTxt, (errTxt) => {
-      if (errTxt) {
-        console.error("❌ Gagal kirim request_sync_audio:", errTxt);
-        return res
-          .status(500)
-          .json({ success: false, message: "Gagal menghubungi alat." });
-      }
-      console.log("✅ request_sync_audio terkirim:", payloadTxt);
-      setTimeout(() => {
-        mqttClient.publish("kelas/alat/perintah", payloadWav, (errWav) => {
-          if (errWav) console.error("❌ Gagal kirim request_sync_wav:", errWav);
-          else console.log("✅ request_sync_wav terkirim:", payloadWav);
-        });
-      }, 2000);
-      res.json({
-        success: true,
-        message: "Permintaan sync metadata & audio dikirim ke alat.",
+    if (!ok)
+      return res
+        .status(500)
+        .json({ success: false, message: "Gagal menghubungi alat." });
+    // Susul perintah sync WAV beberapa detik kemudian.
+    setTimeout(() => {
+      publishCommand({
+        perintah: "request_sync_wav",
+        target_kelas: current_class,
       });
+    }, 2000);
+    res.json({
+      success: true,
+      message: "Permintaan sync metadata & audio dikirim ke alat.",
     });
   }),
 );
 
 router.post(
   "/dosen/request-wav-sync",
-  requireRole("dosen", "admin"),
-  asyncHandler((req, res) => {
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  validate({ body: requestSyncSchema }),
+  asyncHandler(async (req, res) => {
     const { current_class } = req.body;
-    const payload = JSON.stringify({
+    const ok = await publishCommand({
       perintah: "request_sync_wav",
       target_kelas: current_class,
     });
-    mqttClient.publish("kelas/alat/perintah", payload, (err) => {
-      if (err) {
-        console.error("❌ Gagal kirim request_sync_wav:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "Gagal menghubungi alat." });
-      }
-      console.log("✅ request_sync_wav terkirim:", payload);
-      res.json({
-        success: true,
-        message: "Permintaan sync audio WAV dikirim ke alat.",
-      });
+    if (!ok)
+      return res
+        .status(500)
+        .json({ success: false, message: "Gagal menghubungi alat." });
+    res.json({
+      success: true,
+      message: "Permintaan sync audio WAV dikirim ke alat.",
     });
   }),
 );

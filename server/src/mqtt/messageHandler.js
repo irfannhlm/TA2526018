@@ -5,16 +5,17 @@
 // nilai. Dependency disuntik via ctx (sbSelect/sbInsert/sbUpdate/
 // parseNamaFile/mqttClient/state).
 
+const TOPICS = require("../lib/topics");
 const deviceStatus = require("./handlers/deviceStatus");
 const rfid = require("./handlers/rfid");
 const audioData = require("./handlers/audioData");
 const syncStatus = require("./handlers/syncStatus");
 
 const TOPIC_HANDLERS = {
-  "kelas/alat/status": deviceStatus,
-  "kelas/alat/rfid": rfid,
-  "kelas/alat/audio_data": audioData,
-  "kelas/alat/sync_status": syncStatus,
+  [TOPICS.STATUS]: deviceStatus,
+  [TOPICS.RFID]: rfid,
+  [TOPICS.AUDIO_DATA]: audioData,
+  [TOPICS.SYNC_STATUS]: syncStatus,
 };
 
 function createMessageHandler(ctx) {

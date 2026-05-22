@@ -146,11 +146,11 @@ test("/admin/add-user -> password ter-hash; /admin/delete-user guard user_id 1",
     const cookie = await ctx.loginAs("admin", "admin123");
     await ctx.request("POST", "/admin/add-user", {
       cookie,
-      form: { username: "dosen2", password: "rahasia", role: "dosen" },
+      form: { username: "dosen2", password: "rahasia8", role: "dosen" },
     });
     const u = ctx.supabase.rows("users").find((x) => x.username === "dosen2");
     assert.ok(u);
-    assert.notEqual(u.password, "rahasia", "password harus di-hash");
+    assert.notEqual(u.password, "rahasia8", "password harus di-hash");
 
     // user_id 1 dilindungi (tidak terhapus)
     await ctx.request("POST", "/admin/delete-user", {
@@ -237,8 +237,17 @@ test("/dosen/answer/:id/nilai validasi 1-100", async () => {
   const ctx = await loadApp({
     seed(sb) {
       seedUsers(sb);
+      sb.seed("classes", [
+        { class_id: 10, class_name: "K1", lecturer_user_id: 2 },
+      ]);
+      sb.seed("questions", [{ question_id: 1, class_id: 10 }]);
       sb.seed("answers", [
-        { answer_id: 3, question_id: 1, transcript_text: "" },
+        {
+          answer_id: 3,
+          question_id: 1,
+          class_id: 10,
+          transcript_text: "",
+        },
       ]);
     },
   });
@@ -275,6 +284,9 @@ test("/dosen/question/:id DELETE -> hapus question + answers terkait", async () 
   const ctx = await loadApp({
     seed(sb) {
       seedUsers(sb);
+      sb.seed("classes", [
+        { class_id: 10, class_name: "K1", lecturer_user_id: 2 },
+      ]);
       sb.seed("questions", [{ question_id: 5, class_id: 10 }]);
       sb.seed("answers", [
         { answer_id: 1, question_id: 5 },
@@ -288,6 +300,75 @@ test("/dosen/question/:id DELETE -> hapus question + answers terkait", async () 
     assert.equal(res.json().ok, true);
     assert.equal(ctx.supabase.rows("questions").length, 0);
     assert.equal(ctx.supabase.rows("answers").length, 0);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("Validasi: /admin/add-user password < 8 -> 400", async () => {
+  const ctx = await loadApp({ seed: seedUsers });
+  try {
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const res = await ctx.request("POST", "/admin/add-user", {
+      cookie,
+      form: { username: "x", password: "short", role: "dosen" },
+    });
+    assert.equal(res.status, 400);
+    assert.equal(
+      ctx.supabase.rows("users").some((u) => u.username === "x"),
+      false,
+    );
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("Ownership: dosen2 PATCH answer kelas dosen1 -> 403", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      // dosen1 = user 2 punya kelas K1 (class_id 10); dosen2 = user 3
+      // tidak punya kelas. Coba PATCH nilai answer milik K1 dari dosen2.
+      sb.seed("users", [
+        {
+          user_id: 1,
+          username: "admin",
+          password: hashPassword("admin123"),
+          role: "admin",
+        },
+        {
+          user_id: 2,
+          username: "dosen1",
+          password: hashPassword("dosen123"),
+          role: "dosen",
+        },
+        {
+          user_id: 3,
+          username: "dosen2",
+          password: hashPassword("dosen123"),
+          role: "dosen",
+        },
+      ]);
+      sb.seed("classes", [
+        { class_id: 10, class_name: "K1", lecturer_user_id: 2 },
+      ]);
+      sb.seed("questions", [{ question_id: 1, class_id: 10 }]);
+      sb.seed("answers", [
+        { answer_id: 7, question_id: 1, class_id: 10, transcript_text: "" },
+      ]);
+    },
+  });
+  try {
+    const cookie = await ctx.loginAs("dosen2", "dosen123");
+    const res = await ctx.request("PATCH", "/dosen/answer/7/nilai", {
+      cookie,
+      body: { nilai: 80 },
+    });
+    assert.equal(res.status, 403);
+    // Pastikan tidak ada nilai terupdate
+    assert.equal(
+      ctx.supabase.rows("answers").find((a) => a.answer_id === 7).nilai,
+      undefined,
+    );
   } finally {
     await ctx.close();
   }

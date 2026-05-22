@@ -169,6 +169,7 @@
       <% } %>
 
       <form action="/login" method="POST">
+<input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="mb-3">
           <div class="input-group">
             <span class="input-group-text"><i class="fas fa-user"></i></span>
