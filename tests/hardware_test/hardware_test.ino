@@ -5,10 +5,11 @@
 #include "Adafruit_MAX1704X.h"
 
 // --- Pin Definitions ---
-#define BUTTON_PIN GPIO_NUM_4  // Must use GPIO_NUM_X for sleep functions
-#define POWER_LED_PIN 16
-#define WARN_LED_PIN 17
+#define BUTTON_PIN GPIO_NUM_27  // Must use GPIO_NUM_X for sleep functions
+#define POWER_LED_PIN 25
+#define WARN_LED_PIN 26
 #define BUZZER_PIN 13
+#define EN_POWER 33
 
 // --- Timing Constants ---
 const unsigned long HOLD_TIME = 2000; 
@@ -58,9 +59,12 @@ void setup() {
   pinMode(WARN_LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(EN_POWER, OUTPUT);
 
+  digitalWrite(EN_POWER, HIGH);
   digitalWrite(POWER_LED_PIN, HIGH);
-  Wire.begin(21, 22); 
+  
+  Wire.begin(); 
   lcd.init();
   lcd.backlight();
   
