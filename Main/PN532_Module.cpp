@@ -21,31 +21,36 @@ void initPN532() {
 }
 
 void flushI2CBuffer() {
-  delay(10); // Give the PN532 time to prep its response
-  Wire.requestFrom(0x24, 10); // Request up to 10 bytes
-  while(Wire.available()) {
-    Wire.read(); // Read and discard
+  delay(10);
+  Wire.requestFrom(0x24, 10);
+  while (Wire.available()) {
+    Wire.read();
   }
 }
 
 void powerDownPN532() {
-  // Command 0x16: PowerDown command
-  // Item 0x80: WakeUpEnable byte (0x80 for I2C)
   uint8_t powerDownCmd[] = {0x16, 0x80};
-  nfc.sendCommandCheckAck(powerDownCmd, 3);
+
+  // Tadinya 3, tapi array cuma 2 byte
+  nfc.sendCommandCheckAck(powerDownCmd, 2);
+
   flushI2CBuffer();
-  delay(1); // wait 1ms for PN532 to turn off
+  delay(1);
 }
 
 String scanUID() {
-  if (!nfcActive) return ""; // Kalau gagal, jangan paksa scan terus
+  if (!nfcActive) return "";
 
   uint8_t success;
   uint8_t uid[7];
   uint8_t uidLength;
 
-  // Timeout 100ms
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
+  success = nfc.readPassiveTargetID(
+    PN532_MIFARE_ISO14443A,
+    uid,
+    &uidLength,
+    100
+  );
 
   if (success) {
     String currentUID = "";
@@ -56,5 +61,17 @@ String scanUID() {
     currentUID.toUpperCase();
     return currentUID;
   }
+
   return ""; 
+}
+
+String scanUIDPeriodik(uint32_t intervalMs) {
+  static unsigned long lastScanTime = 0;
+
+  if (millis() - lastScanTime < intervalMs) {
+    return "";
+  }
+
+  lastScanTime = millis();
+  return scanUID();
 }

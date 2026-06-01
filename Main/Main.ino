@@ -13,7 +13,8 @@
 #include <Preferences.h>
 #include <SD.h>
 #include "IdentTiming.h"
-// #include "I2C_Handler.h"
+#include "I2C_Handler.h"
+#include "Buzzer_Module.h"
 
 #define MAX_PESERTA        100
 #define ERROR_DISPLAY_TIME 2000
@@ -97,6 +98,13 @@ void IRAM_ATTR handleButtonInterrupt() {
   buttonFlag = true;
 }
 
+void clearButtonState() {
+  buttonFlag = false;
+  buttonClicks = 0;
+  lastClickTime = 0;
+  lastTriggerTime = millis();
+}
+
 bool cekHistory(String uid) {
   for (int i = 0; i < jumlahPeserta; i++)
     if (daftarSudahBicara[i] == uid) return true;
@@ -146,10 +154,15 @@ void checkModeButton() {
 }
 
 void gantiMode() {
+  OperatingMode oldMode = currentMode;   // simpan mode sebelum diganti
   OperatingMode nextMode;
   if      (currentMode == MODE_KOMUNIKASI) nextMode = MODE_DOSEN;
   else if (currentMode == MODE_DOSEN)      nextMode = MODE_MAHASISWA;
   else                                     nextMode = MODE_KOMUNIKASI;
+
+  if (oldMode == MODE_KOMUNIKASI && nextMode != MODE_KOMUNIKASI) {
+    stopMQTT();
+  }
 
   currentMode     = nextMode;
   state           = STANDBY;
@@ -166,11 +179,6 @@ void gantiMode() {
     updateLCD();
   }
 
-  for (int i = 0; i <= (int)currentMode; i++) {
-    digitalWrite(BUZZER_PIN, HIGH); delay(40);
-    digitalWrite(BUZZER_PIN, LOW);  delay(40);
-  }
-
   if (currentMode == MODE_DOSEN) {
     stopWiFi();
     delay(200);
@@ -178,18 +186,20 @@ void gantiMode() {
   }
   else if (currentMode == MODE_KOMUNIKASI) {
     deinitAudio();
-    // delay(300) dihapus — tidak perlu, malah bikin lag
     startWiFi();
     lastRegTime       = 0;
     lastHeartbeatTime = 0;
   }
   else {
     stopWiFi();
-    delay(200); // dikurangi dari 500
+    delay(200); 
     initAudioSD();
     muatDaftarEligible();
     muatDaftarBanned();
   }
+
+  playBuzzer((uint8_t)currentMode + 1, 40, 40);
+
 }
 
 void masukModeDebug() {
@@ -197,8 +207,8 @@ void masukModeDebug() {
   lcd.setCursor(0, 0); lcd.print("  [DEBUG MODE]  ");
   lcd.setCursor(0, 1); lcd.print(" Buka Portal... ");
   
-  digitalWrite(BUZZER_PIN, HIGH); delay(100); digitalWrite(BUZZER_PIN, LOW); delay(100);
-  digitalWrite(BUZZER_PIN, HIGH); delay(100); digitalWrite(BUZZER_PIN, LOW);
+  playBuzzer(2, 100, 100);
+  waitBuzzerDone();
   
   stopWiFi();
   delay(1500);
@@ -227,7 +237,8 @@ void prepareDeepSleep() {
   stopWiFi();
   lcd.noBacklight();
   lcd.noDisplay();
-  digitalWrite(BUZZER_PIN, HIGH); delay(500); digitalWrite(BUZZER_PIN, LOW);
+  playBuzzer(1, 500, 80);
+  waitBuzzerDone();
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
   powerDownPN532();
   Serial.println("Entering Deep Sleep...");
@@ -503,73 +514,87 @@ void checkBattery() {
   if (millis() - lastBatteryCheck >= BATTERY_CHECK_INTERVAL) {
     lastBatteryCheck = millis();
 
-    batteryVoltage = maxlipo.cellVoltage();
+    bool batteryReadOK = false;
 
-    if (isnan(batteryVoltage)) {
-      // Jika tidak ada baterai (USB Power)
-      batteryPercent = NAN;
-      smoothedVoltage = 0.0;       // Reset filter
-      lastReportedPercent = 100.0; // Reset memori persentase
-    } else {
-      // 1. Terapkan Low-Pass Filter (EMA) pada tegangan
-      if (smoothedVoltage == 0.0) {
-        smoothedVoltage = batteryVoltage; // Inisialisasi awal
+    // Baca MAX17048 dengan proteksi mutex I2C
+    if (lockI2C(20)) {
+      batteryVoltage = maxlipo.cellVoltage();
+      unlockI2C();
+      batteryReadOK = true;
+    }
+
+    // Kalau I2C sedang sibuk, skip pembacaan baterai siklus ini.
+    // LED tetap lanjut pakai nilai terakhir.
+    if (batteryReadOK) {
+      if (isnan(batteryVoltage)) {
+        // Jika tidak ada baterai / USB power
+        batteryPercent = NAN;
+        smoothedVoltage = 0.0;
+        lastReportedPercent = 100.0;
+      } 
+      else {
+        // 1. Low-pass filter / EMA pada tegangan
+        if (smoothedVoltage == 0.0) {
+          smoothedVoltage = batteryVoltage;
+        } else {
+          smoothedVoltage = (0.1 * batteryVoltage) + (0.9 * smoothedVoltage);
+        }
+
+        // 2. Hitung persentase dari LUT
+        float rawPercent = getBatteryPercentageFromLUT(smoothedVoltage);
+
+        // 3. Monotonic logic agar persentase tidak naik-turun sendiri
+        if (rawPercent < lastReportedPercent) {
+          lastReportedPercent = rawPercent;
+        } 
+        else if (rawPercent - lastReportedPercent > 10.0) {
+          // Lonjakan besar dianggap indikasi charging / dicolok
+          lastReportedPercent = rawPercent;
+        }
+
+        batteryPercent = lastReportedPercent;
+      }
+
+      // --- Cetak status hanya kalau pembacaan berhasil ---
+      Serial.println("=== STATUS BATERAI ===");
+      Serial.printf("Raw Voltage : %.2f V\n", batteryVoltage);
+      Serial.printf("Smooth Volt : %.2f V\n", smoothedVoltage);
+
+      if (isnan(batteryPercent)) {
+        Serial.println("Battery : USB Power / No Battery");
       } else {
-        // 10% nilai baru, 90% nilai lama (Bisa diubah jika kurang stabil/terlalu lambat)
-        smoothedVoltage = (0.1 * batteryVoltage) + (0.9 * smoothedVoltage);
+        Serial.printf("Battery : %.1f %%\n", batteryPercent);
       }
 
-      // 2. Hitung persentase mentah dari LUT
-      float rawPercent = getBatteryPercentageFromLUT(smoothedVoltage);
-
-      // 3. Logika Monotonic (Mencegah persentase naik-turun sendiri)
-      if (rawPercent < lastReportedPercent) {
-        // Baterai berkurang normal
-        lastReportedPercent = rawPercent;
-      } else if (rawPercent - lastReportedPercent > 10.0) {
-        // Persentase melonjak drastis (>10%), indikasi sedang di-charge / dicolok
-        lastReportedPercent = rawPercent; 
-      }
-      
-      // Simpan sebagai persentase final
-      batteryPercent = lastReportedPercent;
+      Serial.println("======================");
     }
-
-    // --- B. CETAK STATUS KE SERIAL MONITOR ---
-    // Serial.println("=== STATUS BATERAI ===");
-    // Serial.printf("Raw Voltage : %.2f V\n", batteryVoltage);
-    // Serial.printf("Smooth Volt : %.2f V\n", smoothedVoltage);
-    if (isnan(batteryPercent)) {
-    //  Serial.println("Battery : USB Power / No Battery");
-    } else {
-    //  Serial.printf("Battery : %.1f %%\n", batteryPercent);
-    }
-   // Serial.println("======================");
   }
 
-  // --- C. UPDATE LED BATERAI (Jalan terus di loop) ---
+  // --- B. UPDATE LED BATERAI (Jalan terus di loop) ---
   if (!isnan(batteryPercent) && batteryPercent < 20.0) {
-    // Mode Lemah: Kedip tiap 500ms
+    // Mode baterai lemah: kedip tiap 500 ms
     static unsigned long lastBlinkTime = 0;
     static bool ledState = false;
-    
-    if (millis() - lastBlinkTime >= 500) { 
+
+    if (millis() - lastBlinkTime >= 500) {
       lastBlinkTime = millis();
-      ledState = !ledState; 
+      ledState = !ledState;
       digitalWrite(LED_BATTERY, ledState ? HIGH : LOW);
     }
-  } else {
-    // Mode Normal / USB: Nyala terus
+  } 
+  else {
+    // Mode normal / USB: LED nyala terus
     digitalWrite(LED_BATTERY, HIGH);
   }
 
-  // --- D. UPDATE LED WIFI ---
+  // --- C. UPDATE LED WIFI ---
   if (WiFi.status() == WL_CONNECTED) {
     digitalWrite(LED_WIFI, HIGH);
   } else {
     digitalWrite(LED_WIFI, LOW);
   }
 }
+
 // ════════════════════════════════════════════════
 //  SETUP
 // ════════════════════════════════════════════════
@@ -585,7 +610,7 @@ void setup() {
 
   Wire.begin(I2C_SDA, I2C_SCL);
 
-  // initI2CMutex();
+  initI2CMutex();
 
   pinMode(LED_BATTERY, OUTPUT);
   pinMode(LED_WIFI, OUTPUT);
@@ -618,7 +643,7 @@ void setup() {
   initMPU6050();
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(BUZZER_PIN, OUTPUT);
+  initBuzzer();
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), handleButtonInterrupt, FALLING);
   delay(1000);
 
@@ -653,8 +678,8 @@ void setup() {
 } 
 
 void loop() {
+  updateBuzzer();
   checkBattery();
-  // handleResetButton();
   checkModeButton();
   updateLCD();
 
@@ -664,7 +689,9 @@ void loop() {
     handleMQTT();
 
     // Heartbeat kirimStatus setiap 10 detik
-    if (mqttClient.connected() && millis() - lastHeartbeatTime >= HEARTBEAT_MS) {
+  if (!isMQTTConnecting() &&
+      mqttClient.connected() &&
+      millis() - lastHeartbeatTime >= HEARTBEAT_MS) {
       lastHeartbeatTime = millis();
       kirimStatus("online");
     }
@@ -717,9 +744,7 @@ void loop() {
             if (SD.cardType() == CARD_NONE) {
               // Feedback error panjang
               identTimer_stop(DEC_SD_ERROR);
-              digitalWrite(BUZZER_PIN, HIGH); delay(300);
-              digitalWrite(BUZZER_PIN, LOW);
-              
+              playBuzzer(1, 300, 80);
               stateTimer = millis();
               state = SD_ERROR;
             }
@@ -727,48 +752,35 @@ void loop() {
             // CEK 0.5: Apakah Dosen sudah bikin soal? 
             else if (!cekAdaPertanyaan()) {
               identTimer_stop(DEC_NO_QUESTION);
-              digitalWrite(BUZZER_PIN, HIGH); delay(150);
-              digitalWrite(BUZZER_PIN, LOW);  delay(100);
-              digitalWrite(BUZZER_PIN, HIGH); delay(150);
-              digitalWrite(BUZZER_PIN, LOW);
-
+              playBuzzer(2, 150, 100);
               stateTimer = millis();
               state = NO_QUESTION;
             }
 
             // CEK 1: Apakah dia peserta kelas ini
-            // else if (!cekTerdaftar(idKartu)) {
-            //   identTimer_stop(DEC_UNREGISTERED);
-            //   digitalWrite(BUZZER_PIN, HIGH); delay(80);
-            //   digitalWrite(BUZZER_PIN, LOW);  delay(80);
-            //   digitalWrite(BUZZER_PIN, HIGH); delay(80);
-            //   digitalWrite(BUZZER_PIN, LOW);
+            else if (!cekTerdaftar(idKartu)) {
+              identTimer_stop(DEC_UNREGISTERED);
+              playBuzzer(2, 80, 80);
+              stateTimer = millis();
+              state = UNREGISTERED;
+            }
 
-            //   stateTimer = millis();
-            //   state = UNREGISTERED;
-            // }
             // CEK 2: Apakah dia kena BANNED dari web
             else if (cekBanned(idKartu)) {
               identTimer_stop(DEC_BANNED);
-              digitalWrite(BUZZER_PIN, HIGH); delay(80);
-              digitalWrite(BUZZER_PIN, LOW);  delay(80);
-              digitalWrite(BUZZER_PIN, HIGH); delay(80);
-              digitalWrite(BUZZER_PIN, LOW);
-
+              playBuzzer(2, 80, 80);
               stateTimer = millis();
               state = BANNED; 
             }
-            // CEK 3: Apakah dia sudah bicara di sesi lokal SAAT INI
-            // else if (cekHistory(idKartu)) {
-            //   identTimer_stop(DEC_INVALID);
-            //   digitalWrite(BUZZER_PIN, HIGH); delay(80);
-            //   digitalWrite(BUZZER_PIN, LOW);  delay(80);
-            //   digitalWrite(BUZZER_PIN, HIGH); delay(80);
-            //   digitalWrite(BUZZER_PIN, LOW);
 
-            //   stateTimer = millis();
-            //   state = INVALID; 
-            // } 
+            // CEK 3: Apakah dia sudah bicara di sesi lokal SAAT INI
+            else if (cekHistory(idKartu)) {
+              identTimer_stop(DEC_INVALID);
+              playBuzzer(2, 80, 80);
+              stateTimer = millis();
+              state = INVALID; 
+            } 
+
             // LOLOS SEMUA CEK: Izinkan Merekam
             else {
               identTimer_stop(DEC_AUTHORIZED);
@@ -795,9 +807,7 @@ void loop() {
             
             // CEK SD CARD
             if (SD.cardType() == CARD_NONE) {
-              digitalWrite(BUZZER_PIN, HIGH); delay(300);
-              digitalWrite(BUZZER_PIN, LOW);
-              
+              playBuzzer(1, 300, 80);
               stateTimer = millis();
               state = SD_ERROR;
               waktuMulai = millis(); // Reset countdown dosen setelah error
@@ -843,21 +853,23 @@ void loop() {
           }
 
           // 3. Scan RFID → kirim registrasi
-          String idKartu = scanUID();
+          String idKartu = scanUIDPeriodik(100);
           if (idKartu != "") {
             if (millis() - lastRegTime > 2000) { // Anti-spam 2 detik
               if (WiFi.status() == WL_CONNECTED && mqttClient.connected()) {
                 sendRegistration(idKartu);
                 lastRegTime = millis();
                 Serial.println("Registrasi terkirim: " + idKartu);
+                playBuzzer(1, 60, 60);
               } else {
                 Serial.println("Gagal! Cek koneksi WiFi/MQTT.");
                 lcd.setCursor(0, 1); lcd.print("  CONN ERROR!   ");
-                delay(1500);
+                playBuzzer(3, 80, 80);
+                delay(1000);
                 lastState = (SystemState)-1;
               }
             } else {
-              Serial.println("⏳ Anti-spam aktif, tunggu sebentar...");
+              Serial.println("Anti-spam aktif, tunggu sebentar...");
             }
           }
           break;
@@ -921,7 +933,7 @@ void loop() {
         state = TIMEOUT;      // Lempar ke state timeout
         
         // Bunyi panjang sebagai notifikasi gagal
-        digitalWrite(BUZZER_PIN, HIGH); delay(500); digitalWrite(BUZZER_PIN, LOW);
+        playBuzzer(1, 500, 80);
       }
       break;
     }
@@ -937,28 +949,24 @@ void loop() {
     }
 
     case RECORDING: {
+      clearButtonState(); // buang input tombol sebelum rekaman
+
       bool alatDilempar = rekamSuara(currentUID, waktuRespon);
+
+      clearButtonState(); // buang tombol yang kepencet selama rekaman
       resetAudioFilters();
 
-      // Feedback Record Saved
-      digitalWrite(BUZZER_PIN, HIGH); delay(60);
-      digitalWrite(BUZZER_PIN, LOW);  delay(60);
-      digitalWrite(BUZZER_PIN, HIGH); delay(60);
-      digitalWrite(BUZZER_PIN, LOW);
+      playBuzzer(2, 60, 60);
 
       if (currentMode == MODE_MAHASISWA) simpanHistory(currentUID);
 
-      // --- LOGIKA AUTO-SWITCH MODE ---
       if (alatDilempar && currentMode == MODE_DOSEN) {
-          // Fungsi gantiMode() kodemu aslinya memutar: KOM -> DOSEN -> MHS -> KOM
-          // Jadi kalau dipanggil saat MODE_DOSEN, otomatis masuk MODE_MAHASISWA!
           gantiMode(); 
       } else {
-          // Kalau tidak dilempar atau bukan dosen, kembali ke normal
           currentUID    = "";
           state         = STANDBY;
           waktuMulai    = millis();
-          lastCountdown = -1; // Paksa refresh countdown LCD
+          lastCountdown = -1;
       }
       break;
     }

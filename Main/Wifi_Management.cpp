@@ -7,7 +7,9 @@
 #include <DNSServer.h>
 #include <LiquidCrystal_I2C.h>
 #include "Config.h"
+#include "Buzzer_Module.h"
 
+extern volatile bool buttonFlag;
 extern LiquidCrystal_I2C lcd;
 extern int active_threshold;
 
@@ -24,6 +26,30 @@ char wifi_pass[64]  = "";
 
 unsigned long buttonPressTime = 0;
 bool          isButtonPressed = false;
+
+static void handlePortalButton() {
+  static unsigned long pressStart = 0;
+  static bool wasPressed = false;
+
+  bool pressed = (digitalRead(BUTTON_PIN) == LOW);
+
+  if (pressed && !wasPressed) {
+    wasPressed = true;
+    pressStart = millis();
+  }
+
+  if (!pressed) {
+    wasPressed = false;
+    pressStart = 0;
+  }
+
+  // Tahan tombol 2 detik di portal = restart
+  if (pressed && pressStart > 0 && millis() - pressStart > 2000) {
+    playBuzzer(1, 300, 80);
+    waitBuzzerDone();
+    ESP.restart();
+  }
+}
 
 // ════════════════════════════════════════════════
 //  bukaPortal
@@ -191,7 +217,15 @@ void bukaPortal() {
     preferences.end();
 
     server.send(200, "text/html", "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:'DM Sans',sans-serif;background:#fdf4f7;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:white;border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 4px 40px rgba(232,99,140,.1);}h2{color:#e8638c;font-size:20px;}</style></head><body><div class='box'><h2>✅ Konfigurasi tersimpan!</h2><p>ESP32 akan restart...</p></div></body></html>");
-    delay(2000);
+
+    unsigned long restartAt = millis() + 2000;
+    while (millis() < restartAt) {
+      updateBuzzer();
+      dnsServer.processNextRequest();
+      server.handleClient();
+      delay(1);
+    }
+
     ESP.restart();
   });
 
@@ -201,7 +235,15 @@ void bukaPortal() {
   server.on("/library/test/success.html", redirect); server.on("/ncsi.txt", redirect); server.on("/connecttest.txt", redirect); server.onNotFound(redirect);
 
   server.begin();
-  while (true) { dnsServer.processNextRequest(); server.handleClient(); }
+  while (true) {
+    dnsServer.processNextRequest();
+    server.handleClient();
+
+    updateBuzzer();
+    handlePortalButton();
+
+    delay(1); // kasih napas ke WiFi stack
+  }
 }
 
 //  initWifiPortal

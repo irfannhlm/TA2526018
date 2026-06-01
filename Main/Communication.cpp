@@ -26,6 +26,46 @@ PubSubClient     mqttClient(espClient);
 unsigned long lastWifiAttempt = 0;
 bool wifiDibatalkan = false;
 
+static TaskHandle_t mqttConnectTaskHandle = nullptr;
+static volatile bool mqttConnecting = false;
+static unsigned long lastMqttAttempt = 0;
+
+static void mqttConnectTask(void* param) {
+    String clientId = "ESP-" + String(DEVICE_ID) + "-" + String(random(0xffff), HEX);
+    String willMsg  = "{\"device_id\":\"" + String(DEVICE_ID) + "\",\"status\":\"offline\"}";
+
+    Serial.printf("[MQTT] Konek ke %s:%d sebagai %s...\n",
+                  MQTT_SERVER, MQTT_PORT, MQTT_USER);
+
+    bool ok = mqttClient.connect(
+        clientId.c_str(),
+        MQTT_USER,
+        MQTT_PASS,
+        MQTT_TOPIC_STATUS,
+        0,
+        true,
+        willMsg.c_str()
+    );
+
+    if (ok) {
+        Serial.println("[MQTT] Terhubung ke HiveMQ Cloud!");
+
+        mqttClient.subscribe(MQTT_TOPIC_PERINTAH);
+        mqttClient.subscribe(MQTT_TOPIC_SYNC_STATUS);
+
+        kirimStatus("online");
+    } else {
+        Serial.printf("[MQTT] Gagal rc=%d (retry 5 detik)\n", mqttClient.state());
+    }
+
+    mqttConnecting = false;
+    mqttConnectTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
+bool isMQTTConnecting() {
+    return mqttConnecting;
+}
 // ════════════════════════════════════════════════
 //  VARIABEL STATE
 // ════════════════════════════════════════════════
@@ -505,43 +545,71 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
 // ════════════════════════════════════════════════
 void handleMQTT() {
     static bool callbackSet = false;
+
     if (!callbackSet) {
-        // Skip verifikasi sertifikat HiveMQ 
         espClient.setInsecure();
+
         mqttClient.setCallback(mqttCallback);
         mqttClient.setBufferSize(512);
+
+        // Tetap dipakai, tapi bukan solusi utama.
+        mqttClient.setSocketTimeout(1);
+        mqttClient.setKeepAlive(15);
+
         callbackSet = true;
     }
 
-    if (WiFi.status() != WL_CONNECTED) return;
+    if (WiFi.status() != WL_CONNECTED) {
+        return;
+    }
 
-    if (!mqttClient.connected()) {
-        static unsigned long lastAttempt = 0;
-        if (millis() - lastAttempt < 5000) return;
-        lastAttempt = millis();
+    // Kalau task connect sedang jalan, jangan akses mqttClient dari loop utama
+    if (mqttConnecting) {
+        return;
+    }
 
-        String clientId = "ESP-" + String(random(0xffff), HEX);
-        String willMsg  = "{\"device_id\":\"" + String(DEVICE_ID) + "\",\"status\":\"offline\"}";
-
-        Serial.printf("[MQTT] Konek ke %s:%d sebagai %s...\n",
-                      MQTT_SERVER, MQTT_PORT, MQTT_USER);
-
-        // Connect dengan username & password HiveMQ
-        if (mqttClient.connect(clientId.c_str(),
-                               MQTT_USER, MQTT_PASS,
-                               MQTT_TOPIC_STATUS, 0, true, willMsg.c_str())) {
-            Serial.println("[MQTT] ✅ Terhubung ke HiveMQ Cloud!");
-            mqttClient.subscribe(MQTT_TOPIC_PERINTAH);
-            mqttClient.subscribe(MQTT_TOPIC_SYNC_STATUS);
-            kirimStatus("online");
-        } else {
-            Serial.printf("[MQTT] ❌ Gagal rc=%d (retry 5 detik)\n", mqttClient.state());
-        }
-    } else {
+    if (mqttClient.connected()) {
         mqttClient.loop();
+        return;
+    }
+
+    const unsigned long MQTT_RETRY_INTERVAL = 5000;
+
+    if (millis() - lastMqttAttempt < MQTT_RETRY_INTERVAL) {
+        return;
+    }
+
+    lastMqttAttempt = millis();
+
+    mqttConnecting = true;
+
+    BaseType_t result = xTaskCreatePinnedToCore(
+        mqttConnectTask,
+        "MQTTConnect",
+        8192,
+        nullptr,
+        1,
+        &mqttConnectTaskHandle,
+        0
+    );
+
+    if (result != pdPASS) {
+        Serial.println("[MQTT] Gagal membuat task connect");
+        mqttConnecting = false;
+        mqttConnectTaskHandle = nullptr;
     }
 }
 
+void stopMQTT() {
+  if (mqttClient.connected()) {
+    kirimStatus("offline");
+    mqttClient.disconnect();
+  }
+
+  espClient.stop();
+
+  Serial.println("[MQTT] Disconnected");
+}
 
 void kirimStatus(String status_device) {
     if (!mqttClient.connected()) return;

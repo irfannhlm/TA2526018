@@ -18,6 +18,8 @@ void handleWiFi();
 
 // ── Fungsi MQTT ──
 void handleMQTT();
+bool isMQTTConnecting();
+void stopMQTT();
 void kirimStatus(String status_device);
 void sendRegistration(String uid);
 

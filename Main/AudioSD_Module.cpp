@@ -6,6 +6,7 @@
 #include <driver/i2s_std.h>
 #include <math.h>
 #include "MPU6050_Module.h"
+#include "I2C_Handler.h"
 
 // =========================
 // Variabel Global Audio
@@ -617,24 +618,28 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
             float sisaHening = (SILENCE_LIMIT_MS - (now - lastSoundTime)) / 1000.0f;
             if (sisaHening < 0) sisaHening = 0;
 
-            // Update LCD tiap 250 ms.
+            // Update LCD tiap 500 ms.
             static unsigned long lastLCD = 0;
-            if (now - lastLCD > 250) {
-                lcd.setCursor(0, 0);
-                lcd.print("SISA: ");
+            if (now - lastLCD > 500) {
+                if (lockI2C(20)) {
+                    lcd.setCursor(0, 0);
+                    lcd.print("SISA: ");
 
-                if (menit < 10) lcd.print("0");
-                lcd.print(menit);
-                lcd.print(":");
+                    if (menit < 10) lcd.print("0");
+                    lcd.print(menit);
+                    lcd.print(":");
 
-                if (detik < 10) lcd.print("0");
-                lcd.print(detik);
-                lcd.print("   ");
+                    if (detik < 10) lcd.print("0");
+                    lcd.print(detik);
+                    lcd.print("   ");
 
-                lcd.setCursor(0, 1);
-                lcd.print("STOP IN: ");
-                lcd.print(sisaHening, 1);
-                lcd.print("s   ");
+                    lcd.setCursor(0, 1);
+                    lcd.print("STOP IN: ");
+                    lcd.print(sisaHening, 1);
+                    lcd.print("s   ");
+
+                    unlockI2C();
+                }
 
                 lastLCD = now;
             }
