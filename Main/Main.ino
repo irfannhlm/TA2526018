@@ -225,11 +225,11 @@ void prepareDeepSleep() {
   lcd.setCursor(0, 0); lcd.print("  MEMATIKAN...  ");
   delay(1000);
   stopWiFi();
-  lcd.noBacklight();
-  lcd.noDisplay();
+  // lcd.noBacklight();
+  // lcd.noDisplay();
   digitalWrite(BUZZER_PIN, HIGH); delay(500); digitalWrite(BUZZER_PIN, LOW);
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
-  powerDownPN532();
+  // powerDownPN532();
   Serial.println("Entering Deep Sleep...");
   esp_deep_sleep_start();
 }
@@ -574,6 +574,9 @@ void checkBattery() {
 //  SETUP
 // ════════════════════════════════════════════════
 void setup() {
+  pinMode(EN_POWER, OUTPUT);
+  digitalWrite(EN_POWER, HIGH); // nyalakan power rail
+
   Serial.begin(115200);
 
   // 1. NVS wajib pertama

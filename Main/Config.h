@@ -7,9 +7,9 @@
 #define I2C_SCL 22
 
 // I2S Pins (INMP441)
-#define I2S_WS 26
-#define I2S_SD 27
-#define I2S_SCK 25
+#define I2S_WS 16
+#define I2S_SD 4
+#define I2S_SCK 17
 
 // SPI Pins (SD Card Module)
 #define SD_SCK 18
@@ -20,9 +20,10 @@
 // Extra Pins
 #define MPU_INT_PIN 32 // External interrupt MPU6050
 #define BUZZER_PIN 13 // Pin untuk indikator audio
-#define BUTTON_PIN 4  // Button untuk switching mode
-#define LED_BATTERY 16
-#define LED_WIFI    17
+#define BUTTON_PIN 27  // Button untuk switching mode
+#define LED_BATTERY 25
+#define LED_WIFI    26
+#define EN_POWER 33
 
 // Pin untuk tombol reset WiFi (Tombol BOOT bawaan ESP32)
 #define RESET_BUTTON 0
