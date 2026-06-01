@@ -7,6 +7,7 @@
 #include <math.h>
 #include "MPU6050_Module.h"
 #include "I2C_Handler.h"
+#include "LCD_Helper.h"
 
 // =========================
 // Variabel Global Audio
@@ -50,6 +51,7 @@ struct VadFeatures {
 // Skor agar VAD tidak trigger hanya karena 1 frame keras.
 static int vadScore = 0;
 static unsigned long vadMuteUntil = 0;
+static unsigned long vadFirstSpeechMs = 0;
 
 #ifndef VAD_TRIGGER_SCORE
 #define VAD_TRIGGER_SCORE 18
@@ -73,6 +75,11 @@ static const float VAD_CREST_REJECT_RECORD = 12.0f;
 
 void resetVadState() {
     vadScore = 0;
+    vadFirstSpeechMs = 0;
+}
+
+unsigned long getVadFirstSpeechMs() {
+    return vadFirstSpeechMs;
 }
 
 void muteVad(unsigned long ms) {
@@ -114,22 +121,56 @@ bool isOngoingSpeechFrame(const VadFeatures &vf) {
 
 bool updateVadTrigger(const VadFeatures &vf) {
     bool speechLike = isSpeechLikeFrame(vf);
+    unsigned long now = millis();
+
+    // Estimasi waktu awal frame, bukan waktu setelah frame selesai diproses.
+    unsigned long frameDurationMs = 0;
+    if (vf.samples > 0) {
+        frameDurationMs = ((unsigned long)vf.samples * 1000UL) / SAMPLE_RATE;
+    }
+
+    unsigned long frameStartMs = now;
+    if (now > frameDurationMs) {
+        frameStartMs = now - frameDurationMs;
+    }
 
     if (speechLike) {
+        // Catat awal kandidat suara pertama.
+        // Ini hanya diset saat skor masih 0 agar tidak bergeser ke frame berikutnya.
+        if (vadScore == 0 && vadFirstSpeechMs == 0) {
+            vadFirstSpeechMs = frameStartMs;
+        }
+
         vadScore += 2;
     } else {
-        // Suara keras impulsif harus cepat menghapus skor
+        // Suara keras impulsif harus cepat menghapus skor.
         if (vf.avgAbs > active_threshold * 2.0f && vf.crest > VAD_CREST_REJECT_START) {
             vadScore -= 8;
         } else {
             vadScore -= 3;
         }
+
+        // Kalau kandidat suara gagal total, hapus waktu awalnya.
+        if (vadScore <= 0) {
+            vadScore = 0;
+            vadFirstSpeechMs = 0;
+        }
     }
 
-    if (vadScore < 0) vadScore = 0;
-    if (vadScore > VAD_MAX_SCORE) vadScore = VAD_MAX_SCORE;
+    if (vadScore > VAD_MAX_SCORE) {
+        vadScore = VAD_MAX_SCORE;
+    }
 
     return vadScore >= VAD_TRIGGER_SCORE;
+}
+
+void clearPreRecordBuffer() {
+    if (preRecordBuffer != nullptr) {
+        memset(preRecordBuffer, 0, PRE_BUFFER_SIZE * sizeof(int16_t));
+    }
+
+    bufferHead = 0;
+    bufferIsFull = false;
 }
 
 // WAV Header
@@ -202,9 +243,17 @@ void initFileIndex() {
         }
     }
 
-    // 2. Jika file tidak ada, lakukan full scan.
-    Serial.println("[WARNING] Tracker tidak ditemukan. Memulai full scan...");
+    // 2. Jika tracker tidak ada / tidak valid, lakukan full scan.
+    Serial.println("[WARNING] Tracker tidak ditemukan/tidak valid. Memulai full scan...");
+
     File root = SD.open("/");
+    if (!root) {
+        Serial.println("[ERROR] Gagal membuka root SD untuk scan index.");
+        qIndex = 0;
+        aIndex = 0;
+        return;
+    }
+
     int maxQ = 0;
     int maxA = 0;
 
@@ -213,27 +262,49 @@ void initFileIndex() {
         if (!entry) break;
 
         String name = String(entry.name());
+        entry.close();
 
+        // Beberapa implementasi SD bisa mengembalikan nama dengan awalan "/".
+        if (name.startsWith("/")) {
+            name.remove(0, 1);
+        }
+
+        int dotPos = name.lastIndexOf('.');
+        if (dotPos == -1) continue;
+
+        // Format: DSN_<DEVICE_ID>_<Q>.wav
         if (name.startsWith("DSN_")) {
-            int dotPos = name.lastIndexOf('.');
-            if (dotPos != -1) {
-                int q = name.substring(4, dotPos).toInt();
-                if (q > maxQ) maxQ = q;
-            }
-        } else if (name.startsWith("MHS_")) {
-            int firstU = name.indexOf('_');
-            int secondU = name.indexOf('_', firstU + 1);
-            int dotPos = name.lastIndexOf('.');
-            if (firstU != -1 && secondU != -1 && dotPos != -1) {
-                int q = name.substring(firstU + 1, secondU).toInt();
-                int a = name.substring(secondU + 1, dotPos).toInt();
-                if (q > maxQ) maxQ = q;
-                if (a > maxA) maxA = a;
+            int lastU = name.lastIndexOf('_');
+
+            if (lastU != -1 && lastU < dotPos) {
+                int q = name.substring(lastU + 1, dotPos).toInt();
+
+                if (q > maxQ) {
+                    maxQ = q;
+                }
             }
         }
 
-        entry.close();
+        // Format: MHS_<DEVICE_ID>_<Q>_<A>.wav
+        else if (name.startsWith("MHS_")) {
+            int lastU = name.lastIndexOf('_');
+            int prevU = name.lastIndexOf('_', lastU - 1);
+
+            if (prevU != -1 && lastU != -1 && lastU < dotPos) {
+                int q = name.substring(prevU + 1, lastU).toInt();
+                int a = name.substring(lastU + 1, dotPos).toInt();
+
+                if (q > maxQ) {
+                    maxQ = q;
+                }
+
+                if (a > maxA) {
+                    maxA = a;
+                }
+            }
+        }
     }
+
     root.close();
 
     qIndex = maxQ;
@@ -258,6 +329,13 @@ bool cekAdaPertanyaan() {
         String name = String(entry.name());
         entry.close();
 
+        // Samakan format nama file, karena kadang SD mengembalikan "/nama.wav"
+        if (name.startsWith("/")) {
+            name.remove(0, 1);
+        }
+
+        name.trim();
+
         if (name.startsWith("DSN_") && name.endsWith(".wav")) {
             adaDSN = true;
             break;
@@ -267,7 +345,6 @@ bool cekAdaPertanyaan() {
     root.close();
     return adaDSN;
 }
-
 
 // Init / Deinit Audio
 void deinitAudio() {
@@ -334,6 +411,7 @@ void initAudioSD() {
     esp_err_t err = i2s_new_channel(&chan_cfg, NULL, &rx_handle);
     if (err != ESP_OK || rx_handle == nullptr) {
         Serial.printf("I2S channel gagal dibuat: %d\n", err);
+        deinitAudio();
         return;
     }
 
@@ -354,12 +432,14 @@ void initAudioSD() {
     err = i2s_channel_init_std_mode(rx_handle, &std_cfg);
     if (err != ESP_OK) {
         Serial.printf("I2S init std mode gagal: %d\n", err);
+        deinitAudio();
         return;
     }
 
     err = i2s_channel_enable(rx_handle);
     if (err != ESP_OK) {
         Serial.printf("I2S enable gagal: %d\n", err);
+        deinitAudio();
         return;
     }
 
@@ -565,7 +645,7 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
     }
 
     unsigned long startTime = millis();
-    unsigned long lastSoundTime = millis();
+    unsigned long totalWaktuBerpikir = waktuBerpikir; // hidden, untuk metadata
     bool isRecording = true;
     bool thrown = false;
     size_t bytes_read = 0;
@@ -598,11 +678,14 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
             (void)avgLoudness; // avgLoudness tetap dihitung untuk kompatibilitas/debug jika dibutuhkan.
 
             // Tulis 16-bit PCM ke SD.
-            size_t written = file.write((uint8_t *)processed_buffer, samples * sizeof(int16_t));
+            size_t expected = samples * sizeof(int16_t);
+            size_t written = file.write((uint8_t *)processed_buffer, expected);
             totalDataWritten += written;
 
-            if (written == 0 && samples > 0) {
-                Serial.println("Error: Gagal menulis ke SD!");
+            if (written != expected) {
+                Serial.printf("Error: SD write tidak lengkap! expected=%u written=%u\n",
+                            (unsigned)expected,
+                            (unsigned)written);
                 isRecording = false;
             }
 
@@ -615,15 +698,15 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
             int menit = sisaMs / 60000;
             int detik = (sisaMs % 60000) / 1000;
 
-            float sisaHening = (SILENCE_LIMIT_MS - (now - lastSoundTime)) / 1000.0f;
-            if (sisaHening < 0) sisaHening = 0;
-
             // Update LCD tiap 500 ms.
             static unsigned long lastLCD = 0;
             if (now - lastLCD > 500) {
                 if (lockI2C(20)) {
                     lcd.setCursor(0, 0);
-                    lcd.print("SISA: ");
+                    lcd.print(" SEDANG MEREKAM");
+
+                    lcd.setCursor(0, 1);
+                    lcd.print("SISA WAKTU ");
 
                     if (menit < 10) lcd.print("0");
                     lcd.print(menit);
@@ -631,12 +714,6 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
 
                     if (detik < 10) lcd.print("0");
                     lcd.print(detik);
-                    lcd.print("   ");
-
-                    lcd.setCursor(0, 1);
-                    lcd.print("STOP IN: ");
-                    lcd.print(sisaHening, 1);
-                    lcd.print("s   ");
 
                     unlockI2C();
                 }
@@ -654,12 +731,15 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
                 lastRamCheck = now;
             }
 
-            // lastSoundTime hanya di-reset kalau frame masih mirip speech,
-            // bukan sekadar keras.
-            if (isOngoingSpeechFrame(vf)) {
-                lastSoundTime = now;
-            } else if (now - lastSoundTime > SILENCE_LIMIT_MS) {
-                isRecording = false;
+            // Saat recording, VAD hanya dipakai untuk mengukur apakah frame ini speech atau hening.
+            unsigned long frameDurationMs = 0;
+            if (samples > 0) {
+                frameDurationMs = ((unsigned long)samples * 1000UL) / SAMPLE_RATE;
+            }
+
+            bool speechNow = isOngoingSpeechFrame(vf);
+            if (!speechNow) {
+                totalWaktuBerpikir += frameDurationMs;
             }
 
             if (elapsed >= maxRecordMs) {
@@ -672,10 +752,6 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
     resetFlyingFlag();
 
     if (totalDataWritten > 0) {
-        lcd.clear();
-        lcd.setCursor(0, 1);
-        lcd.print(" SAVING FILE... ");
-
         long dataSize = file.size() - 44;
         writeWavHeader(file, dataSize);
         file.flush();
@@ -690,16 +766,28 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
     }
 
     saveTracker();
-    tulisMetadata(filename, uid, waktuBerpikir, currentQ, currentA);
+
+    Serial.println("--------- METADATA ---------");
+    Serial.printf("[META] UID                : %s\n", uid.c_str());
+    Serial.printf("[META] waktuResponAwal    : %lu ms\n", waktuBerpikir);
+    Serial.printf("[META] waktuBerpikirTotal : %lu ms\n", totalWaktuBerpikir);
+    Serial.println("----------------------------");
+
+    tulisMetadata(filename, uid, totalWaktuBerpikir, currentQ, currentA);
 
     lcd.clear();
 
     if (thrown) {
         lcd.setCursor(0, 0);
         lcd.print(" ALAT DILEMPAR ");
-    } else {
+        lcd.setCursor(0, 1);
+        lcd.print("REKAMAN SELESAI");
+    } 
+    else {
         lcd.setCursor(0, 0);
-        lcd.print(" RECORD SELESAI ");
+        lcd.print("  WAKTU HABIS  ");
+        lcd.setCursor(0, 1);
+        lcd.print("REKAMAN SELESAI");
     }
 
     delay(1500);

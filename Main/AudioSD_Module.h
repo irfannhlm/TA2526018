@@ -20,6 +20,7 @@ extern bool bufferIsFull;
 void initAudioSD();
 void deinitAudio();
 float processAudioBuffer(int32_t *input, int16_t *output, int samples, long &sumLoudness);
+void clearPreRecordBuffer();
 String getFastFilename(String prefix);
 bool cekAdaPertanyaan();
 bool rekamSuara(String uid, unsigned long waktuBerpikir);
@@ -28,5 +29,6 @@ void resetAudioFilters();
 void resetVadState();
 void muteVad(unsigned long ms);
 bool updateAudioPreBufferAndVad(int samples, float &maxLoudness);
+unsigned long getVadFirstSpeechMs();
 
 #endif

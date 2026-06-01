@@ -11,6 +11,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <vector>
 #include <Preferences.h>
+#include "LCD_Helper.h"
 
 // ════════════════════════════════════════════════
 //  BACKEND SERVER — upload WAV via HTTPS
@@ -135,13 +136,28 @@ static bool isFormatMHSWav(const String& n) {
 //  startWiFi
 // ════════════════════════════════════════════════
 void startWiFi() {
+    if (String(saved_ssid).length() < 2) {
+    Serial.println("[WiFi] Belum ada konfigurasi WiFi. Masuk mode offline.");
+
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+
+    lcd.clear();
+    lcdPrint16(0, " MODE: OFFLINE ");
+    lcdPrint16(1, "WIFI BELUM DISET");
+
+    lastWifiAttempt = millis();
+    return;
+    }
+
     if (WiFi.status() == WL_CONNECTED) return;
 
     lcd.clear();
-    lcd.setCursor(0, 0); lcd.print("  [MODE: KOM]   ");
-    lcd.setCursor(0, 1); lcd.print("Wi-Fi Connect  ");
+    lcdPrint16(0, "  MODE ONLINE  ");
+    lcdPrint16(1, " KONEK WIFI");
 
     Serial.printf("\n[WiFi] Connect ke: %s (tipe: %s)\n", saved_ssid, wifi_type);
+
     WiFi.disconnect(true);
     delay(100);
     WiFi.mode(WIFI_STA);
@@ -150,99 +166,125 @@ void startWiFi() {
     if (String(wifi_type) == "eduroam") {
         String identity = String(eap_nim);
         if (identity.indexOf("@") == -1) identity += "@itb.ac.id";
+
         esp_eap_client_set_identity((uint8_t*)identity.c_str(), identity.length());
         esp_eap_client_set_username((uint8_t*)eap_nim, strlen(eap_nim));
         esp_eap_client_set_password((uint8_t*)eap_pass, strlen(eap_pass));
         esp_eap_client_set_ttls_phase2_method(ESP_EAP_TTLS_PHASE2_MSCHAPV2);
         esp_wifi_sta_enterprise_enable();
+
         WiFi.begin(saved_ssid);
     } else {
         WiFi.begin(saved_ssid, wifi_pass);
     }
 
     int tc = 0;
+
     while (WiFi.status() != WL_CONNECTED && !buttonFlag) {
-        delay(500); Serial.print(".");
-        String dots = ""; for (int d = 0; d < (tc % 4); d++) dots += ".";
-        lcd.setCursor(13, 1); lcd.print(dots + "    ");
+        delay(500);
+        Serial.print(".");
+
+        lcdPrint16(0, "  MODE ONLINE  ");
+        lcdPrint16(1, " KONEK WIFI" + animDots());
+
         if (++tc >= 60) {
-            lcd.setCursor(0, 1); lcd.print(" Wi-Fi Timeout! ");
-            delay(2000); break;
+            lcdPrint16(0, "  WIFI GAGAL   ");
+            lcdPrint16(1, "COBA LAGI 05s  ");
+            delay(1000);
+
+            lastWifiAttempt = millis();
+            break;
         }
     }
+
     if (buttonFlag) {
-        WiFi.disconnect(true); WiFi.mode(WIFI_OFF);
-        lcd.setCursor(0, 1); lcd.print(" DIBATALKAN!    ");
-        delay(1500); 
-        lastWifiAttempt = millis(); 
-        wifiDibatalkan  = true;    
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+
+        lcdPrint16(0, "  DIBATALKAN   ");
+        lcdPrint16(1, "MOHON TUNGGU" + animDots());
+
+        delay(1000);
+
+        lastWifiAttempt = millis();
+        wifiDibatalkan  = true;
         return;
     }
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("\n[WiFi] Terhubung! IP: %s\n", WiFi.localIP().toString().c_str());
-        lcd.setCursor(0, 1); lcd.print("Wi-Fi Connected!");
+
+        lcdPrint16(0, "WIFI TERHUBUNG ");
+        lcdPrint16(1, "MOHON TUNGGU" + animDots());
         delay(1000);
 
         // NTP sync
-        lcd.setCursor(0, 1); lcd.print(" Sync NTP       "); 
+        lcdPrint16(0, "PENGATURAN WAKTU");
+        lcdPrint16(1, "MOHON TUNGGU" + animDots());
+
         configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
         struct tm timeinfo;
         bool ntpOk = false;
         delay(500);
 
         unsigned long startNtpSync = millis();
-        unsigned long ntpTimeout = 9000; // Total maksimal tunggu 9 detik (3 percobaan x 3 detik)
+        unsigned long ntpTimeout = 9000;
 
-        // Loop sampai berhasil atau timeout 9 detik
         while (millis() - startNtpSync < ntpTimeout) {
-            
-            // Animasi Titik Time-based (berubah tiap 500ms)
-            int numDots = ((millis() - startNtpSync) / 500) % 4;
-            String text = " Sync NTP";
-            for (int d = 0; d < numDots; d++) text += ".";
-            while (text.length() < 16) text += " "; // Penuhi sisa baris dengan spasi
-            
-            lcd.setCursor(0, 1); 
-            lcd.print(text);
+            lcdPrint16(0, "PENGATURAN WAKTU");
+            lcdPrint16(1, "MOHON TUNGGU" + animDots());
 
-            // Coba ambil waktu sekali (non-blocking, timeout 0)
-            if (getLocalTime(&timeinfo, 0)) { 
-                ntpOk = true; 
-                break; // Keluar dari loop jika berhasil
+            if (getLocalTime(&timeinfo, 0)) {
+                ntpOk = true;
+                break;
             }
 
-            // Jika user menekan tombol (batal)
             if (buttonFlag) {
                 break;
             }
 
-            delay(100); // Jeda pendek agar tidak membebani CPU
+            delay(100);
         }
 
-        lcd.setCursor(0, 1);
         if (ntpOk) {
             char ds[11];
             strftime(ds, sizeof(ds), "%d-%m-%Y", &timeinfo);
+
             Serial.printf("[NTP] Tanggal: %s\n", ds);
+
             File f = SD.open("/tanggal.txt", FILE_WRITE);
-            if (f) { f.println(ds); f.close(); }
-            lcd.print(" Waktu Updated! ");
+            if (f) {
+                f.println(ds);
+                f.close();
+            }
+
+            lcdPrint16(0, " WAKTU UPDATED ");
+            lcdPrint16(1, "MOHON TUNGGU" + animDots());
         } 
         else if (buttonFlag) {
-            WiFi.disconnect(true); WiFi.mode(WIFI_OFF);
-            lcd.print(" DIBATALKAN!    ");
-            delay(1500);
-            wifiDibatalkan  = true;   // ← tambah
-            lastWifiAttempt = millis(); // ← tambah
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+
+            lcdPrint16(0, "  DIBATALKAN   ");
+            lcdPrint16(1, "MOHON TUNGGU" + animDots());
+
+            delay(1000);
+
+            wifiDibatalkan  = true;
+            lastWifiAttempt = millis();
             return;
         }
         else {
             Serial.println("[NTP] Gagal sync.");
-            lcd.print(" NTP Timeout!   ");
+
+            lcdPrint16(0, " WAKTU GAGAL   ");
+            lcdPrint16(1, "LANJUT ONLINE  ");
         }
-        delay(1500);
+
+        delay(1000);
     }
+
     lastWifiAttempt = millis();
 }
 

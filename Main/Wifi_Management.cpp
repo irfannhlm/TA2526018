@@ -8,11 +8,10 @@
 #include <LiquidCrystal_I2C.h>
 #include "Config.h"
 #include "Buzzer_Module.h"
+#include "LCD_Helper.h"
 
 extern volatile bool buttonFlag;
 extern LiquidCrystal_I2C lcd;
-extern int active_threshold;
-
 Preferences preferences;
 WebServer   server(80);
 DNSServer   dnsServer;
@@ -45,6 +44,10 @@ static void handlePortalButton() {
 
   // Tahan tombol 2 detik di portal = restart
   if (pressed && pressStart > 0 && millis() - pressStart > 2000) {
+    lcd.clear();
+    lcdPrint16(0, "  RESTARTING   ");
+    lcdPrint16(1, "MOHON TUNGGU...");
+
     playBuzzer(1, 300, 80);
     waitBuzzerDone();
     ESP.restart();
@@ -63,20 +66,15 @@ void bukaPortal() {
   String saved_eap_pass_str = preferences.getString("eap_pass", "");
   String saved_ssid_str     = preferences.getString("ssid", ""); // Meski tadi dihapus di NVS, kita bisa tetap pakai variabel global saved_ssid jika mau, tapi ini aman jika kosong.
   String saved_type_str     = preferences.getString("wifi_type", "biasa");
-  int    saved_threshold    = preferences.getInt("threshold", 300);
   preferences.end();
 
   String chk_biasa   = (saved_type_str == "biasa")   ? "active" : "";
   String chk_eduroam = (saved_type_str == "eduroam") ? "active" : "";
   String sec_biasa   = (saved_type_str == "biasa")   ? "show"   : "";
   String sec_eduroam = (saved_type_str == "eduroam") ? "show"   : "";
-  
-  String chkT = (saved_threshold >= 400) ? "checked" : "";
-  String chkS = (saved_threshold == 300) ? "checked" : "";
-  String chkR = (saved_threshold <= 200) ? "checked" : "";
 
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("CatchNote-Setup");
+  WiFi.softAP("CatchNote");
   IPAddress apIP = WiFi.softAPIP();
   Serial.printf("📡 Portal aktif! IP: %s\n", apIP.toString().c_str());
   dnsServer.start(DNS_PORT, "*", apIP);
@@ -117,13 +115,6 @@ void bukaPortal() {
     .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
     .field input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); background: #fff; outline: none; }
     .field input:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba(232,99,140,0.10); }
-    .threshold-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
-    .threshold-card { position: relative; cursor: pointer; }
-    .threshold-card input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
-    .threshold-label { display: flex; flex-direction: column; align-items: center; padding: 14px 8px 12px; border: 2px solid var(--border); border-radius: 14px; background: #fff; transition: all 0.18s; user-select: none; }
-    .threshold-card input[type=radio]:checked + .threshold-label { border-color: var(--pink); background: var(--pink-lt); }
-    .threshold-label .th-icon  { font-size: 22px; margin-bottom: 6px; }
-    .threshold-label .th-name  { font-size: 13px; font-weight: 600; color: var(--text); }
     button[type=submit] { width: 100%; padding: 14px; background: linear-gradient(135deg, #e8638c, #f598b4); color: white; border: none; border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
   </style>
 </head>
@@ -169,13 +160,6 @@ void bukaPortal() {
       </div>
     </div>
 
-    <div class="section-title"> Sensitivitas Mic</div>
-    <div class="threshold-grid">
-      <label class="threshold-card"><input type="radio" name="threshold_cat" value="tinggi" )rawhtml" + chkT + R"rawhtml(><span class="threshold-label"><span class="th-icon">🔴</span><span class="th-name">Tinggi</span></span></label>
-      <label class="threshold-card"><input type="radio" name="threshold_cat" value="sedang" )rawhtml" + chkS + R"rawhtml(><span class="threshold-label"><span class="th-icon">🟡</span><span class="th-name">Sedang</span></span></label>
-      <label class="threshold-card"><input type="radio" name="threshold_cat" value="rendah" )rawhtml" + chkR + R"rawhtml(><span class="threshold-label"><span class="th-icon">🟢</span><span class="th-name">Rendah</span></span></label>
-    </div>
-
     <button type="submit">Simpan &amp; Restart →</button>
   </form>
 </div>
@@ -194,22 +178,15 @@ void bukaPortal() {
 
   server.on("/", HTTP_GET, [&, html]() { server.send(200, "text/html", html); });
 
-  // 3. HANDLER SAVE DENGAN THRESHOLD
+  // 3. HANDLER SAVE WIFI
   server.on("/save", HTTP_POST, [&]() {
     String wifiType = server.arg("wifi_type");
     String ssid     = (wifiType == "eduroam") ? server.arg("ssid_eduroam") : server.arg("ssid_biasa");
     String eapPass  = server.arg("eap_pass");
-    String thresholdCat = server.arg("threshold_cat");
-
-    int thresholdVal = 300;
-    if (thresholdCat == "tinggi") thresholdVal = 400;
-    else if (thresholdCat == "rendah") thresholdVal = 200;
-
     preferences.begin("catch_note", false);
     preferences.putString("ssid", ssid);
     preferences.putString("wifi_type", wifiType);
     preferences.putString("nim", server.arg("nim"));
-    preferences.putInt("threshold", thresholdVal);
     
     // Jangan overwrite password SSO jika field dikosongkan (artinya user pakai password lama)
     if (eapPass.length() > 0) preferences.putString("eap_pass", eapPass);
@@ -217,6 +194,10 @@ void bukaPortal() {
     preferences.end();
 
     server.send(200, "text/html", "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:'DM Sans',sans-serif;background:#fdf4f7;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:white;border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 4px 40px rgba(232,99,140,.1);}h2{color:#e8638c;font-size:20px;}</style></head><body><div class='box'><h2>✅ Konfigurasi tersimpan!</h2><p>ESP32 akan restart...</p></div></body></html>");
+
+    lcd.clear();
+    lcdPrint16(0, "KONFIG TERSIMPAN");
+    lcdPrint16(1, "RESTART SISTEM");
 
     unsigned long restartAt = millis() + 2000;
     while (millis() < restartAt) {
@@ -277,54 +258,18 @@ void initWifiPortal() {
   Serial.printf("WiFi Type : %s\n", wifi_type);
   Serial.println("===================\n");
 
-  // Jika belum ada konfigurasi
   if (cekSSID == "" || cekSSID == " " || cekSSID.length() < 2) {
-    Serial.println("⚠️ SSID kosong → Masuk Mode Setup...");
-    // TAMPILAN LCD UNTUK MODE PORTAL
+    Serial.println("SSID kosong → lanjut tanpa WiFi.");
+
+    saved_ssid[0] = '\0';
+    wifi_pass[0]  = '\0';
+
     lcd.clear();
-    lcd.setCursor(0, 0); 
-    lcd.print("CONNECT KE WIFI:"); // 16 Karakter
-    lcd.setCursor(0, 1); 
-    lcd.print("CatchNote Setup"); // 16 Karakter
-
-    bukaPortal();
-
-
+    lcdPrint16(0, " MODE: OFFLINE ");
+    lcdPrint16(1, "WIFI BELUM DISET");
+    delay(1500);
 
   } else {
     Serial.println("✅ Config ditemukan, lanjut boot.");
   }
 }
-
-// ════════════════════════════════════════════════
-//  handleResetButton
-// ════════════════════════════════════════════════
-// void handleResetButton() {
-//   if (digitalRead(RESET_BUTTON) == LOW) {
-//     if (!isButtonPressed) {
-//       buttonPressTime = millis();
-//       isButtonPressed = true;
-//       Serial.println("⚠️ Tahan 3 detik untuk reset konfigurasi...");
-//     }
-//     else if (millis() - buttonPressTime >= 3000) {
-//       extern LiquidCrystal_I2C lcd;
-//       lcd.clear();
-//       lcd.setCursor(0, 0); lcd.print("  RESET CONFIG! ");
-//       lcd.setCursor(0, 1); lcd.print("LEPAS TOMBOLNYA!");
-
-//       preferences.begin("catch_note", false);
-//       preferences.clear();
-//       preferences.end();
-
-//       Serial.println("✅ NVS terhapus. Lepaskan tombol!");
-//       while (digitalRead(RESET_BUTTON) == LOW) delay(100);
-
-//       lcd.clear();
-//       lcd.setCursor(0, 0); lcd.print("  RESTARTING... ");
-//       delay(500);
-//       ESP.restart();
-//     }
-//   } else {
-//     isButtonPressed = false;
-//   }
-// }

@@ -15,6 +15,7 @@
 #include "IdentTiming.h"
 #include "I2C_Handler.h"
 #include "Buzzer_Module.h"
+#include "LCD_Helper.h"
 
 #define MAX_PESERTA        100
 #define ERROR_DISPLAY_TIME 2000
@@ -154,8 +155,9 @@ void checkModeButton() {
 }
 
 void gantiMode() {
-  OperatingMode oldMode = currentMode;   // simpan mode sebelum diganti
+  OperatingMode oldMode = currentMode;
   OperatingMode nextMode;
+
   if      (currentMode == MODE_KOMUNIKASI) nextMode = MODE_DOSEN;
   else if (currentMode == MODE_DOSEN)      nextMode = MODE_MAHASISWA;
   else                                     nextMode = MODE_KOMUNIKASI;
@@ -169,15 +171,18 @@ void gantiMode() {
   lastState       = (SystemState)-1;
   lastCountdown   = -1;
   lastWifiLine    = "";
-  lastMqttStatus  = mqttClient.connected(); // nilai aktual, bukan false
+  lastMqttStatus  = mqttClient.connected();
   lastWifiAttempt = millis();
   wifiDibatalkan  = false;
   waktuMulai      = millis();
 
-  // KOM: skip updateLCD(), startWiFi() langsung pegang LCD sendiri
   if (currentMode != MODE_KOMUNIKASI) {
     updateLCD();
   }
+
+  // Bunyi mode langsung, sebelum proses berat
+  playBuzzer((uint8_t)currentMode + 1, 40, 40);
+  waitBuzzerDone();
 
   if (currentMode == MODE_DOSEN) {
     stopWiFi();
@@ -197,15 +202,12 @@ void gantiMode() {
     muatDaftarEligible();
     muatDaftarBanned();
   }
-
-  playBuzzer((uint8_t)currentMode + 1, 40, 40);
-
 }
 
 void masukModeDebug() {
   lcd.clear();
-  lcd.setCursor(0, 0); lcd.print("  [DEBUG MODE]  ");
-  lcd.setCursor(0, 1); lcd.print(" Buka Portal... ");
+  lcdPrint16(0, "   MODE SETUP  ");
+  lcdPrint16(1, "  WIFI CONFIG  ");
   
   playBuzzer(2, 100, 100);
   waitBuzzerDone();
@@ -221,10 +223,8 @@ void masukModeDebug() {
   prefs.end();
 
   lcd.clear();
-  lcd.setCursor(0, 0); 
-  lcd.print("CONNECT KE WIFI:"); // 16 Karakter
-  lcd.setCursor(0, 1); 
-  lcd.print("CatchNote Setup"); // 16 Karakter
+  lcdPrint16(0, "WIFI: CatchNote");
+  lcdPrint16(1, "IP: 192.168.4.1");
 
   bukaPortal(); 
 }
@@ -323,7 +323,6 @@ bool cekBanned(String uid) {
   return false;
 }
 
-
 void updateLCD() {
   unsigned long durasi = millis() - waktuMulai;
   
@@ -331,118 +330,159 @@ void updateLCD() {
   if (countdownSekarang < 0) countdownSekarang = 0;
 
   int timeoutSekarang = 0;
-  if (durasi < TIMEOUT_BICARA)
+  if (durasi < TIMEOUT_BICARA) {
     timeoutSekarang = (TIMEOUT_BICARA - durasi + 999) / 1000;
+  }
 
-  static int  lastTimeout    = -1;
+  static int lastTimeout = -1;
+  static int lastAnimFrame = -1;
 
-  // ── WIFI COUNTDOWN: handle sendiri, tanpa lcd.clear() ──
- if (currentMode == MODE_KOMUNIKASI && state == STANDBY && WiFi.status() != WL_CONNECTED && !wifiDibatalkan) {
+  int animFrame = (millis() / 500) % 4;
+
+  if (currentMode == MODE_KOMUNIKASI &&
+    state == STANDBY &&
+    String(saved_ssid).length() < 2) {
+
+  lcdPrint16(0, " MODE: OFFLINE ");
+  lcdPrint16(1, "WIFI BELUM DISET");
+  return;
+  }
+
+  // ── WIFI RETRY / BELUM CONNECT ──
+  if (currentMode == MODE_KOMUNIKASI &&
+      state == STANDBY &&
+      WiFi.status() != WL_CONNECTED &&
+      !wifiDibatalkan) {
     
-    if (state != lastState) {
-      lcd.clear();
-      lcd.setCursor(0, 0); lcd.print("  [MODE: KOM]   ");
-      lastState = state;
-    }
-
     int sisa = (5000 - (int)(millis() - lastWifiAttempt)) / 1000;
     if (sisa < 0) sisa = 0;
 
-    int numDots = (millis() / 500) % 4;
-    String dots = "";
-    for (int d = 0; d < numDots; d++) dots += ".";
-    while (dots.length() < 3) dots += " ";
+    String wifiLine = "COBA LAGI " + twoDigit(sisa) + "s" + animDots();
 
-    String wifiLine = "Retry in " + String(sisa) + "s" + dots + "   ";
-    while (wifiLine.length() < 16) wifiLine += " ";
-
-    if (wifiLine != lastWifiLine) {
-      lcd.setCursor(0, 1); lcd.print(wifiLine);
+    // Update hanya saat teks berubah, tanpa clear terus-menerus
+    if (wifiLine != lastWifiLine || state != lastState) {
+      lcdPrint16(0, "  WIFI GAGAL   ");
+      lcdPrint16(1, wifiLine);
       lastWifiLine = wifiLine;
+      lastState = state;
     }
+
+    return;
+  }
+
+  // ── MQTT / SERVER CONNECTING, WIFI SUDAH CONNECT ──
+  if (currentMode == MODE_KOMUNIKASI &&
+      state == STANDBY &&
+      WiFi.status() == WL_CONNECTED &&
+      !wifiDibatalkan &&
+      !mqttClient.connected()) {
+
+    if (animFrame != lastAnimFrame ||
+        state != lastState ||
+        lastMqttStatus != mqttClient.connected()) {
+
+      lcdPrint16(0, "  KONEK SERVER  ");
+      lcdPrint16(1, " MOHON TUNGGU" + animDots());
+
+      lastAnimFrame = animFrame;
+      lastMqttStatus = mqttClient.connected();
+      lastState = state;
+    }
+
     return;
   }
 
   // ── EARLY-RETURN GATE ──
-  bool mqttChanged = (currentMode == MODE_KOMUNIKASI) && !wifiDibatalkan && (mqttClient.connected() != lastMqttStatus);
-  bool isCountdownDosen = (state == STANDBY && currentMode == MODE_DOSEN && countdownSekarang > 0);
-  bool isCountdownAuth  = (state == AUTHORIZED);
+  bool mqttChanged = (currentMode == MODE_KOMUNIKASI) &&
+                     !wifiDibatalkan &&
+                     (mqttClient.connected() != lastMqttStatus);
+
+  bool isCountdownDosen = (state == STANDBY &&
+                           currentMode == MODE_DOSEN &&
+                           countdownSekarang > 0);
+
+  bool isCountdownAuth = (state == AUTHORIZED);
 
   if (state == lastState) {
     if (isCountdownDosen && countdownSekarang == lastCountdown) return;
-    if (isCountdownAuth  && timeoutSekarang  == lastTimeout)   return;
-    if (!isCountdownDosen && !isCountdownAuth && !mqttChanged)  return;
+    if (isCountdownAuth && timeoutSekarang == lastTimeout) return;
+    if (!isCountdownDosen && !isCountdownAuth && !mqttChanged) return;
   }
 
-  if (currentMode == MODE_KOMUNIKASI) lastMqttStatus = mqttClient.connected();
-  lastWifiLine = ""; // reset supaya re-entry WiFi block bisa render ulang
+  if (currentMode == MODE_KOMUNIKASI) {
+    lastMqttStatus = mqttClient.connected();
+  }
+
+  lastWifiLine = "";
+  lastAnimFrame = animFrame;
 
   lcd.clear();
+
   lastCountdown = countdownSekarang;
-  lastTimeout   = timeoutSekarang;
+  lastTimeout = timeoutSekarang;
 
   switch (state) {
+
     case STANDBY:
       if (currentMode == MODE_MAHASISWA) {
-        lcd.setCursor(0, 0); lcd.print("  [MODE: MHS]   ");
-        lcd.setCursor(0, 1); lcd.print("  MENUNGGU TAG  ");
+        lcdPrint16(0, "MODE: MAHASISWA");
+        lcdPrint16(1, "SCAN KARTU ANDA ");
       }
+
       else if (currentMode == MODE_DOSEN) {
-        lcd.setCursor(0, 0); lcd.print("  [MODE: DSN]   ");
-        lcd.setCursor(0, 1); lcd.print(" Cooldown: " + String(countdownSekarang) + "s ");
+        lcdPrint16(0, "  MODE: DOSEN  ");
+        lcdPrint16(1, "TUNGGU " + twoDigit(countdownSekarang) + " DETIK");
       }
-      else { // MODE_KOMUNIKASI — WiFi sudah connected di sini
-        lcd.setCursor(0, 0); lcd.print("  [MODE: KOM]   ");
-        if (wifiDibatalkan) return;
-        else if (!mqttClient.connected()) {
-          lcd.setCursor(0, 1); lcd.print("MQTT Connecting.");
+
+      else { // MODE_KOMUNIKASI, WiFi dan MQTT sudah siap
+        if (wifiDibatalkan) {
+          lcdPrint16(0, "  DIBATALKAN   ");
+          lcdPrint16(1, " MOHON TUNGGU" + animDots());
         } else {
-          lcd.setCursor(0, 1); lcd.print("Standby Tag/Task");
+          lcdPrint16(0, "  MODE: ONLINE  ");
+          lcdPrint16(1, "   TAP KARTU  ");
         }
       }
       break;
 
     case AUTHORIZED:
-      lcd.setCursor(0, 0);
-      lcd.print("ID: ");
-      lcd.print(currentMode == MODE_DOSEN ? "DOSEN" : currentUID.substring(0, 8));
-      lcd.setCursor(0, 1);
-      lcd.print("TIMEOUT: "); lcd.print(timeoutSekarang); lcd.print("s ");
+      lcdPrint16(0, "  MULAI BICARA ");
+      lcdPrint16(1, "BATAL DALAM " + twoDigit(timeoutSekarang) + "s");
       break;
 
     case RECORDING:
-      lcd.setCursor(0, 0); lcd.print(" >>> RECORDING  ");
-      lcd.setCursor(0, 1); lcd.print("    ------    ");
+      lcdPrint16(0, " SEDANG MEREKAM");
+      lcdPrint16(1, "    ------      ");
       break;
 
     case INVALID:
-      lcd.setCursor(0, 0); lcd.print("   TIDAK VALID  ");
-      lcd.setCursor(0, 1); lcd.print("  SUDAH BICARA  ");
+      lcdPrint16(0, "    DITOLAK    ");
+      lcdPrint16(1, "  SUDAH BICARA ");
       break;
 
     case UNREGISTERED:
-      lcd.setCursor(0, 0); lcd.print(" AKSES DITOLAK ");
-      lcd.setCursor(0, 1); lcd.print("BUKAN KELAS INI!");
+      lcdPrint16(0, "    DITOLAK    ");
+      lcdPrint16(1, "TIDAK TERDAFTAR");
       break;
 
     case TIMEOUT:
-      lcd.setCursor(0, 0); lcd.print("  WAKTU HABIS   ");
-      lcd.setCursor(0, 1); lcd.print(" BATAL MEREKAM  ");
+      lcdPrint16(0, "  WAKTU HABIS  ");
+      lcdPrint16(1, " GILIRAN BATAL ");
       break;
 
     case BANNED:
-      lcd.setCursor(0, 0); lcd.print(" AKSES DITOLAK ");
-      lcd.setCursor(0, 1); lcd.print(" TERLALU AKTIF! ");
+      lcdPrint16(0, "    DITOLAK    ");
+      lcdPrint16(1, "  KUOTA HABIS  ");
       break;
 
     case SD_ERROR:
-      lcd.setCursor(0, 0); lcd.print("  SYSTEM ERROR  ");
-      lcd.setCursor(0, 1); lcd.print(" SD CARD GAGAL! ");
+      lcdPrint16(0, "  SISTEM ERROR  ");
+      lcdPrint16(1, " SD CARD GAGAL ");
       break;
 
     case NO_QUESTION:
-      lcd.setCursor(0, 0); lcd.print(" AKSES DITOLAK ");
-      lcd.setCursor(0, 1); lcd.print("  BELUM MULAI  ");
+      lcdPrint16(0, "BELUM ADA SOAL ");
+      lcdPrint16(1, "DOSEN REKAM DULU");
       break;
   }
 
@@ -595,6 +635,32 @@ void checkBattery() {
   }
 }
 
+void mulaiAuthorizedWindow(const String &uid) {
+  currentUID = uid;
+
+  resetVadState();
+  clearPreRecordBuffer();
+  resetAudioFilters();
+
+  waktuMulai = millis();
+
+  // Timestamp absolut hanya untuk log/debug.
+  // Interval utama tetap pakai millis().
+  t1EpochMs = getEpochMs();
+
+  lastCountdown = -1;
+  lastState = (SystemState)-1;
+
+  state = AUTHORIZED;
+
+  Serial.println("------------- T1 -------------");
+  Serial.printf("[T1] Authorized UID : %s\n", currentUID.c_str());
+  Serial.printf("[T1] Timestamp      : %s\n", getTimestampMs().c_str());
+  Serial.printf("[T1] epoch_ms       : %llu\n", (unsigned long long)t1EpochMs);
+  Serial.printf("[T1] millis         : %lu\n", waktuMulai);
+  Serial.println("------------------------------");
+}
+
 // ════════════════════════════════════════════════
 //  SETUP
 // ════════════════════════════════════════════════
@@ -680,6 +746,21 @@ void setup() {
   lastState = (SystemState)-1; 
 } 
 
+void printListTerdaftar() {
+  Serial.println("===== LIST TERDAFTAR =====");
+  Serial.printf("Jumlah terdaftar: %d\n", jumlahTerdaftar);
+
+  for (int i = 0; i < jumlahTerdaftar; i++) {
+    Serial.print(i);
+    Serial.print(" | [");
+    Serial.print(listTerdaftar[i]);
+    Serial.print("] len=");
+    Serial.println(listTerdaftar[i].length());
+  }
+
+  Serial.println("==========================");
+}
+
 void loop() {
   updateBuzzer();
   checkBattery();
@@ -705,6 +786,7 @@ void loop() {
   // Trigger VAD hanya dipakai saat state == AUTHORIZED.
   float maxLoudness = 0;
   bool vadTriggered = false;
+  unsigned long vadFirstSpeechMsThisLoop = 0;
 
   if (currentMode != MODE_KOMUNIKASI && state != RECORDING &&
       rx_handle != nullptr &&
@@ -725,7 +807,19 @@ void loop() {
       // Di STANDBY, suara luar tetap masuk pre-buffer, tapi tidak boleh membangun skor trigger.
       if (state == AUTHORIZED && frameTriggered) {
         vadTriggered = true;
-      } else if (state != AUTHORIZED) {
+
+        // Ambil waktu awal suara secepat mungkin.
+        vadFirstSpeechMsThisLoop = getVadFirstSpeechMs();
+
+        if (vadFirstSpeechMsThisLoop == 0) {
+          vadFirstSpeechMsThisLoop = millis();
+        }
+
+        // Begitu sudah trigger, tidak perlu drain semua frame lagi.
+        // Lebih cepat masuk ke state RECORDING.
+        break;
+      } 
+      else if (state != AUTHORIZED) {
         resetVadState();
       }
     }
@@ -740,6 +834,7 @@ void loop() {
 
         case MODE_MAHASISWA: {
           identTimer_start();
+          // printListTerdaftar();
           String idKartu = scanUID();
           if (idKartu != "") {
             
@@ -787,17 +882,7 @@ void loop() {
             // LOLOS SEMUA CEK: Izinkan Merekam
             else {
               identTimer_stop(DEC_AUTHORIZED);
-              currentUID = idKartu;
-              waktuMulai = millis();
-
-              // t1EpochMs = getEpochMs();
-              // Serial.printf("[T1] Identifikasi Authorized\n");
-              // Serial.printf("[T1] Timestamp : %s\n", getTimestampMs().c_str());
-              // Serial.printf("[T1] epoch_ms  : %llu\n", (unsigned long long)t1EpochMs);
-              // Serial.printf("[T1] millis    : %lu\n", waktuMulai);
-
-              resetVadState();
-              state = AUTHORIZED;
+              mulaiAuthorizedWindow(idKartu);
             }
           }
           break;
@@ -816,9 +901,7 @@ void loop() {
               waktuMulai = millis(); // Reset countdown dosen setelah error
             } 
             else {
-              resetVadState();
-              state = AUTHORIZED;
-              waktuMulai = millis();
+              mulaiAuthorizedWindow("DOSEN");
             }
           }
           break;
@@ -830,8 +913,8 @@ void loop() {
           // 1. Sinkronisasi TXT (trigger dari mqttCallback)
           if (sdSyncAktif && sdTargetKelas != "") {
             lcd.clear();
-            lcd.setCursor(0, 0); lcd.print("  SYNC DATA...  ");
-            lcd.setCursor(0, 1); lcd.print(" MOHON TUNGGU   ");
+            lcdPrint16(0, "   SYNC DATA   ");
+            lcdPrint16(1, " MOHON TUNGGU" + animDots());
 
             String kelas  = sdTargetKelas;
             sdTargetKelas = "";
@@ -844,8 +927,8 @@ void loop() {
           // 2. Sinkronisasi Audio WAV (trigger dari mqttCallback) ← BARU
           if (audioSyncAktif && audioTargetKelas != "") {
             lcd.clear();
-            lcd.setCursor(0, 0); lcd.print("  SYNC AUDIO... ");
-            lcd.setCursor(0, 1); lcd.print(" MOHON TUNGGU   ");
+            lcdPrint16(0, "  SYNC AUDIO   ");
+            lcdPrint16(1, " MOHON TUNGGU" + animDots());
 
             String kelas     = audioTargetKelas;
             audioTargetKelas = "";
@@ -908,36 +991,61 @@ void loop() {
     }
 
     case AUTHORIZED: {
-      if (vadTriggered)  {
-        waktuRespon = millis() - waktuMulai;
-        // unsigned long waktuTerdeteksi = millis();
-        // t2EpochMs = getEpochMs();
+      if (vadTriggered) {
+        unsigned long firstSpeechMs = vadFirstSpeechMsThisLoop;
 
-        // waktuRespon = waktuTerdeteksi - waktuMulai;
-        // uint64_t selisihEpoch = t2EpochMs - t1EpochMs;
+        if (firstSpeechMs == 0) {
+          firstSpeechMs = getVadFirstSpeechMs();
+        }
 
-        // Serial.printf("[T2] Suara terdeteksi\n");
-        // Serial.printf("[T2] Timestamp : %s\n", getTimestampMs().c_str());
-        // Serial.printf("[T2] epoch_ms  : %llu\n", (unsigned long long)t2EpochMs);
-        // Serial.printf("[T2] millis    : %lu\n", waktuTerdeteksi);
+        if (firstSpeechMs == 0) {
+          firstSpeechMs = millis();
+        }
 
-        // Serial.println("------------- HASIL -------------");
-        // Serial.printf("[RESULT] Interval dari millis   : %lu ms\n", waktuRespon);
-        // Serial.printf("[RESULT] Interval dari epoch_ms : %llu ms\n", (unsigned long long)selisihEpoch);
-        // Serial.println("==================================");
+        // Kalau karena edge case firstSpeechMs lebih kecil dari waktuMulai,
+        // jangan sampai unsigned underflow.
+        if (firstSpeechMs < waktuMulai) {
+          firstSpeechMs = waktuMulai;
+        }
 
-        resetVadState();
-        state = RECORDING;
+        unsigned long kandidatWaktuRespon = firstSpeechMs - waktuMulai;
+
+        // Suara dianggap sah kalau awal suaranya masih dalam batas timeout.
+        // Ini lebih adil daripada mengecek waktu saat VAD baru trigger.
+        if (kandidatWaktuRespon <= TIMEOUT_BICARA) {
+          waktuRespon = kandidatWaktuRespon;
+
+          t2EpochMs = t1EpochMs + waktuRespon;
+
+          Serial.println("------------- T2 -------------");
+          Serial.printf("[T2] Suara mulai terdeteksi\n");
+          Serial.printf("[T2] firstSpeechMs : %lu\n", firstSpeechMs);
+          Serial.printf("[T2] epoch_ms est.  : %llu\n", (unsigned long long)t2EpochMs);
+          Serial.println("------------ HASIL -----------");
+          Serial.printf("[RESULT] waktuRespon : %lu ms\n", waktuRespon);
+          Serial.println("==============================");
+
+          resetVadState();
+          state = RECORDING;
+        } 
+        else {
+          currentUID = "";
+          stateTimer = millis();
+          state = TIMEOUT;
+          resetVadState();
+
+          playBuzzer(1, 500, 80);
+        }
       } 
-      // Logika pembatalan jika waktu tunggu habis
       else if (millis() - waktuMulai > TIMEOUT_BICARA) {
-        currentUID = "";          // Jangan masukkan ke histori
-        stateTimer = millis();    // Mulai timer pesan error
-        state = TIMEOUT;      // Lempar ke state timeout
-        
-        // Bunyi panjang sebagai notifikasi gagal
+        currentUID = "";
+        stateTimer = millis();
+        state = TIMEOUT;
+        resetVadState();
+
         playBuzzer(1, 500, 80);
       }
+
       break;
     }
 
