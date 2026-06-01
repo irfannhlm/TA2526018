@@ -8,5 +8,6 @@
 void initPN532();
 void powerDownPN532();
 String scanUID(); // Fungsi untuk mendapatkan ID kartu sebagai String
+String scanUIDPeriodik(uint32_t intervalMs = 100);
 
 #endif
