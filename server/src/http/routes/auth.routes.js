@@ -35,13 +35,24 @@ const { z } = require("zod");
 
 const router = express.Router();
 
-// Batasi percobaan login (mitigasi brute-force).
+// Batasi percobaan login (mitigasi brute-force): maksimal 10 percobaan
+// per 15 menit. Saat terlampaui, render halaman login dengan pesan berisi
+// sisa waktu tunggu (dibulatkan ke atas, minimal 1 menit) agar pengguna
+// tahu kapan boleh mencoba lagi.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Terlalu banyak percobaan login. Coba lagi nanti.",
+  handler: (req, res) => {
+    const resetTime = req.rateLimit && req.rateLimit.resetTime;
+    const menit = resetTime
+      ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 60000))
+      : 15;
+    return res.status(429).render("login", {
+      error: `Terlalu banyak percobaan login. Coba lagi dalam ${menit} menit.`,
+    });
+  },
 });
 
 const loginSchema = z.object({
