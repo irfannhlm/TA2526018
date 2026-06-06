@@ -8,3 +8,30 @@ temp_audio/*
 # Rekaman hasil unggah (jangan di-commit, jaga foldernya saja)
 public/recordings/*
 !public/recordings/.gitkeep
+
+# ================= HANYA KIRIM FILE UNTUK MENJALANKAN WEB =================
+# Berikut bukan kebutuhan runtime web, jadi tidak dikirim ke git
+# (tetap ada di disk lokal).
+
+# Dokumentasi, diagram, migrasi SQL
+docs/
+/README.md
+
+# Test (tidak dipakai saat web berjalan)
+test/
+
+# Konfigurasi tooling pengembangan (lint/format, bukan runtime)
+.editorconfig
+.prettierignore
+.prettierrc.json
+eslint.config.js
+
+# Log
+*.log
+logs/
+
+# Junk OS & editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

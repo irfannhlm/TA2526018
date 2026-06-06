@@ -866,10 +866,41 @@ router.post(
   validate({ body: addUserSchema }),
   asyncHandler(async (req, res) => {
     const { username, password, role, current_class } = req.body;
+    const backTo = current_class ? `/admin?kelas=${current_class}` : `/admin`;
 
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    await sbInsert("users", { username, password: hashedPassword, role });
-    res.redirect(`/admin?kelas=${current_class}`);
+    // Pre-check duplikat: hindari error 500 dari unique constraint Postgres
+    // (users_username_key) dan tampilkan pesan ramah lewat popup flashError.
+    const existing = await sbSelect(
+      "users",
+      { username },
+      "user_id",
+      { limit: 1 },
+    );
+    if (existing.length > 0) {
+      if (req.session) {
+        req.session.flashError = `Username "${username}" sudah digunakan, pilih yang lain.`;
+      }
+      return res.redirect(backTo);
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+      await sbInsert("users", { username, password: hashedPassword, role });
+    } catch (err) {
+      // Race condition antara pre-check & insert: dua request paralel
+      // dengan username sama. Tangkap dan beri pesan yang sama.
+      const msg = err && err.message ? String(err.message) : "";
+      const isDup =
+        (err && err.code === "23505") || msg.includes("duplicate key");
+      if (isDup) {
+        if (req.session) {
+          req.session.flashError = `Username "${username}" sudah digunakan, pilih yang lain.`;
+        }
+        return res.redirect(backTo);
+      }
+      throw err;
+    }
+    res.redirect(backTo);
   }),
 );
 
@@ -880,9 +911,7 @@ router.post(
   validate({ body: deleteUserSchema }),
   asyncHandler(async (req, res) => {
     const { id, current_class } = req.body;
-    console.log("🗑️ [delete-user] req.body:", req.body);
     const userId = toInt(id);
-    console.log("🗑️ [delete-user] userId setelah toInt:", userId);
     if (userId && userId !== 1) {
       try {
         await sbDelete("users", { user_id: userId });
@@ -890,10 +919,9 @@ router.post(
         console.error("❌ [delete-user] Error:", err);
       }
     }
-    const target = current_class
-      ? `/admin?kelas=${current_class}`
-      : `/pilih-kelas`;
-    res.redirect(target);
+    // Bila aksi dilakukan dari tab "Manajemen Akun" (tanpa kelas dipilih),
+    // tetap di /admin — JANGAN redirect ke /pilih-kelas.
+    res.redirect(current_class ? `/admin?kelas=${current_class}` : `/admin`);
   }),
 );
 

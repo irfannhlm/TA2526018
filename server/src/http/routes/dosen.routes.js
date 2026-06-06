@@ -508,17 +508,24 @@ router.post(
       }
     } else if (action === "add_single") {
       try {
-        const rows = await sbSelect(
-          "students",
-          { student_id: toInt(student_id) },
-          "rfid_uid",
-        );
-        if (rows.length > 0) {
-          state.scanCounter++;
-          state.sessionData.scannedList.unshift({
-            id: state.scanCounter,
-            uid: rows[0].rfid_uid,
-          });
+        // Normalkan jadi array id (form checklist bisa kirim banyak).
+        const rawIds = Array.isArray(student_id) ? student_id : [student_id];
+        const ids = rawIds.map((v) => toInt(v)).filter((v) => v && v > 0);
+        if (ids.length > 0) {
+          const rows = await sbSelect("students", { student_id: ids }, "rfid_uid");
+          const existingUids = new Set(
+            state.sessionData.scannedList.map((s) => s.uid),
+          );
+          for (const r of rows || []) {
+            const uid = r && r.rfid_uid;
+            if (!uid || existingUids.has(uid)) continue; // skip duplikat
+            state.scanCounter++;
+            state.sessionData.scannedList.unshift({
+              id: state.scanCounter,
+              uid,
+            });
+            existingUids.add(uid);
+          }
         }
       } catch (err) {}
     } else if (action === "add_date" && current_class) {

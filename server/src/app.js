@@ -25,6 +25,12 @@ const ROOT = path.join(__dirname, ".."); // folder server/
 // cookie `secure` bekerja di produksi.
 app.set("trust proxy", 1);
 
+// ================= REQUEST LOGGER =================
+// Catat tiap request ke terminal (metode, URL, status, durasi). Dipasang
+// paling awal agar seluruh request — termasuk yang nyangkut di 404 —
+// tetap tercatat.
+app.use(require("./http/middleware/logger"));
+
 // ================= KEAMANAN (HELMET) =================
 // CSP dimatikan karena view EJS lama memakai script/style inline;
 // proteksi header lain (X-Frame-Options, noSniff, dll.) tetap aktif.
@@ -119,6 +125,11 @@ app.use(require("./http/routes/auth.routes"));
 app.use(require("./http/routes/pilihKelas.routes"));
 app.use(require("./http/routes/admin.routes"));
 app.use(require("./http/routes/dosen.routes"));
+
+// ================= HANDLER 404 (setelah semua router) =================
+// Tidak ada route yang cocok → tampilkan 404 rapi (JSON utk API, halaman
+// bertema utk web).
+app.use(require("./http/middleware/notFound"));
 
 // ================= ERROR HANDLER TERPUSAT (harus paling akhir) =================
 app.use(require("./http/middleware/error"));

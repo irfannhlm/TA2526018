@@ -160,11 +160,17 @@
         <p class="text-muted small">Masuk untuk mengelola perangkat</p>
       </div>
 
-      <% if (error) { %>
+      <%
+        // Tampilkan pesan dari `error` (login gagal) ATAU dari flashError
+        // (mis. CSRF kedaluwarsa setelah server restart). Halaman ini
+        // sudah ter-refresh oleh redirect; pengguna tinggal submit ulang.
+        const loginErr = error || (typeof flashError !== 'undefined' ? flashError : null);
+      %>
+      <% if (loginErr) { %>
       <div
         class="alert alert-danger py-2 small border-0 bg-danger bg-opacity-10 text-danger mb-4 rounded-3 text-center"
       >
-        <i class="fas fa-exclamation-circle me-1"></i> <%= error %>
+        <i class="fas fa-exclamation-circle me-1"></i> <%= loginErr %>
       </div>
       <% } %>
 

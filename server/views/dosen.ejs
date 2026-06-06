@@ -863,22 +863,39 @@
             </ul>
             <div class="tab-content">
               <div class="tab-pane fade show active" id="pills-single">
-                <form action="/dosen/manage-uid" method="POST">
+                <form action="/dosen/manage-uid" method="POST" id="addSingleForm" onsubmit="return validateAddSingle()">
 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="current_class" value="<%= currentClass %>">
                   <input type="hidden" name="action" value="add_single" />
-                  <div class="mb-3">
-                    <label class="small text-muted fw-bold">NAMA MAHASISWA</label>
-                    <select name="student_id" class="form-select bg-light border-0 py-2 rounded-3" required>
-                      <option value="" disabled selected>Pilih...</option>
-                      <% students.forEach(s => { %>
-                      <option value="<%= s.student_id %>"><%= s.name %> (<%= s.nim %>)</option>
-                      <% }) %>
-                    </select>
+                  <div class="mb-2">
+                    <input type="text" id="addSingleSearch" class="form-control bg-light border-0 rounded-3" placeholder="Cari nama / NIM..." />
                   </div>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="small text-muted fw-bold mb-0">PILIH MAHASISWA</label>
+                    <div class="form-check m-0">
+                      <input class="form-check-input" type="checkbox" id="addSingleCheckAll" onchange="toggleAddSingleAll(this)">
+                      <label class="form-check-label small fw-semibold" for="addSingleCheckAll">Pilih semua</label>
+                    </div>
+                  </div>
+                  <div id="addSingleList" class="rounded-3 p-2 mb-3" style="max-height:260px;overflow:auto;background:#faf7f9;border:1px solid #f0e0e8;">
+                    <% if (students.length === 0) { %>
+                    <div class="text-muted text-center small py-3">Tidak ada mahasiswa.</div>
+                    <% } %>
+                    <% students.forEach(s => { %>
+                    <div class="form-check py-1 add-single-item" data-search="<%= (s.name + ' ' + s.nim).toLowerCase() %>">
+                      <input class="form-check-input add-single-chk" type="checkbox" name="student_id" value="<%= s.student_id %>" id="addSingle-<%= s.student_id %>">
+                      <label class="form-check-label small" for="addSingle-<%= s.student_id %>">
+                        <span class="fw-semibold"><%= s.name %></span> <span class="text-muted">(<%= s.nim %>)</span>
+                      </label>
+                    </div>
+                    <% }) %>
+                  </div>
+                  <small class="text-muted d-block mb-2"><span id="addSingleCount">0</span> dipilih</small>
                   <div class="d-flex gap-2">
                     <button type="button" class="btn btn-light flex-grow-1 rounded-pill" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary flex-grow-1 rounded-pill py-2 border-0" style="background: var(--dark-pink)">Simpan</button>
+                    <button type="submit" class="btn btn-primary flex-grow-1 rounded-pill py-2 border-0" style="background: var(--dark-pink)">
+                      <i class="fas fa-user-plus me-2"></i>Tambahkan
+                    </button>
                   </div>
                 </form>
               </div>
@@ -1036,6 +1053,57 @@
       document.addEventListener('DOMContentLoaded', () => {
         const sel = document.getElementById('device-select');
         if (sel) applySelectColor(sel);
+      });
+
+      // ===== Tambah Peserta Blacklist (Perorangan) — multi-select =====
+      function toggleAddSingleAll(master) {
+        document.querySelectorAll('#addSingleList .add-single-item').forEach(item => {
+          if (item.style.display === 'none') return; // hormati hasil filter cari
+          const chk = item.querySelector('.add-single-chk');
+          if (chk) chk.checked = master.checked;
+        });
+        updateAddSingleCount();
+      }
+      function updateAddSingleCount() {
+        const n = document.querySelectorAll('#addSingleList .add-single-chk:checked').length;
+        const el = document.getElementById('addSingleCount');
+        if (el) el.textContent = n;
+      }
+      function validateAddSingle() {
+        const n = document.querySelectorAll('#addSingleList .add-single-chk:checked').length;
+        if (n === 0) {
+          Swal.fire({ icon: 'warning', title: 'Belum ada yang dipilih', text: 'Pilih minimal satu mahasiswa untuk ditambahkan.', confirmButtonColor: '#d81b60' });
+          return false;
+        }
+        return true;
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        const search = document.getElementById('addSingleSearch');
+        const list = document.getElementById('addSingleList');
+        if (search && list) {
+          search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            list.querySelectorAll('.add-single-item').forEach(item => {
+              const hay = item.dataset.search || '';
+              item.style.display = (!q || hay.includes(q)) ? '' : 'none';
+            });
+          });
+        }
+        document.querySelectorAll('#addSingleList .add-single-chk').forEach(chk => {
+          chk.addEventListener('change', updateAddSingleCount);
+        });
+        // Reset state setiap kali modal dibuka.
+        const modal = document.getElementById('addUidModal');
+        if (modal) {
+          modal.addEventListener('show.bs.modal', () => {
+            if (search) search.value = '';
+            const all = document.getElementById('addSingleCheckAll');
+            if (all) all.checked = false;
+            document.querySelectorAll('#addSingleList .add-single-item').forEach(i => i.style.display = '');
+            document.querySelectorAll('#addSingleList .add-single-chk').forEach(c => c.checked = false);
+            updateAddSingleCount();
+          });
+        }
       });
 
       document.addEventListener('DOMContentLoaded', () => {

@@ -72,7 +72,13 @@ function validate(schemas) {
         // Simpan pesan ke session, lalu kembali ke halaman asal. Popup
         // SweetAlert akan muncul di sana (lihat res.locals.flashError).
         if (req.session) req.session.flashError = msg;
-        return res.redirect(req.get("Referer") || "/");
+        // Fallback aman bila Referer tidak ada (mis. Referrer-Policy di
+        // hosting). Jangan jatuh ke "/" karena route itu merender login —
+        // pengguna admin/dosen akan terlihat seperti "ter-logout".
+        const role = req.session && req.session.user && req.session.user.role;
+        const fallback =
+          role === "admin" ? "/admin" : role === "dosen" ? "/dosen" : "/";
+        return res.redirect(req.get("Referer") || fallback);
       }
       // Merge hasil parse (coerced) di atas nilai asli — field yang
       // divalidasi ter-coerce, field lain (tidak di-skema) tetap utuh.

@@ -34,7 +34,11 @@
       "Bash(node -c src/data/baseRepo.js)",
       "Bash(node -e \"console.log\\('zod', require\\('zod/package.json'\\).version\\)\")",
       "Bash(node -e \"const {z}=require\\('zod'\\); const r=z.object\\({password:z.string\\(\\).min\\(8\\),role:z.enum\\(['a','b']\\)}\\).safeParse\\({password:'x'}\\); console.log\\(JSON.stringify\\(r.error.issues,null,2\\)\\)\")",
-      "Bash(node -e \"const ejs=require\\('ejs'\\),fs=require\\('fs'\\);try{ejs.compile\\(fs.readFileSync\\('views/dosen.ejs','utf8'\\),{filename:'views/dosen.ejs'}\\);console.log\\('OK compile'\\)}catch\\(e\\){console.log\\('FAIL',e.message\\)}\")"
+      "Bash(node -e \"const ejs=require\\('ejs'\\),fs=require\\('fs'\\);try{ejs.compile\\(fs.readFileSync\\('views/dosen.ejs','utf8'\\),{filename:'views/dosen.ejs'}\\);console.log\\('OK compile'\\)}catch\\(e\\){console.log\\('FAIL',e.message\\)}\")",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(node -e \"const ejs=require\\('ejs'\\),fs=require\\('fs'\\);try{ejs.compile\\(fs.readFileSync\\('views/login.ejs','utf8'\\),{filename:'views/login.ejs'}\\);console.log\\('login compile OK'\\)}catch\\(e\\){console.log\\('FAIL',e.message\\)}\")",
+      "Bash(node _csrf-check.js)",
+      "Bash(npx -p @mermaid-js/mermaid-cli mmdc -i server/docs/flowchart/03-fitur-upload-audio.md -o server/docs/flowchart/03-fitur-upload-audio.svg -b white)"
     ]
   }
 }

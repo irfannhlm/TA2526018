@@ -49,10 +49,26 @@ function csrfMiddleware(req, res, next) {
 
   // Validasi pada metode state-changing (GET/HEAD/OPTIONS dilewati lib).
   doubleCsrfProtection(req, res, (err) => {
-    if (err) {
-      return res.status(403).send("Token CSRF tidak valid atau hilang.");
+    if (!err) return next();
+
+    // Token bisa kedaluwarsa setelah server restart (sesi di MemoryStore
+    // hilang, cookie x-csrf lama tidak cocok lagi). Hindari "layar putih":
+    // - Navigasi form (HTML): redirect balik dgn pesan via flash, sehingga
+    //   browser memuat halaman segar (token baru) lalu pengguna submit lagi.
+    // - AJAX/API: balas JSON 403 supaya handler sisi-klien bisa menangani.
+    const wantsHtml = (req.headers.accept || "").includes("text/html");
+    const isApi = req.path.startsWith("/api/");
+
+    if (wantsHtml && !isApi) {
+      if (req.session) {
+        req.session.flashError =
+          "Sesi keamanan diperbarui. Silakan coba lagi.";
+      }
+      return res.redirect(req.get("Referer") || "/");
     }
-    next();
+    return res
+      .status(403)
+      .json({ error: "Token CSRF tidak valid atau hilang." });
   });
 }
 
