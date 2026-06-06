@@ -10,5 +10,7 @@
 void initWifiPortal();
 void handleResetButton();
 void bukaPortal();
-
+void handleWifiPortal();
+void stopWifiPortal();
+bool isWifiPortalActive();
 #endif

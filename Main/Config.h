@@ -42,9 +42,22 @@
 #define DOSEN_COUNTDOWN 6 // Jeda 6 detik
 #define TIMEOUT_BICARA    60000
 
-// Accelerometer Config
-#define FLYING_THRESHOLD 0.35f  // Di bawah 0.35g dianggap dilempar
-#define FLYING_DURATION_MS 120 // Minimal durasi melayang dalam ms
+// Throw Detection Config
+#define THROW_LOW_G_THRESHOLD 0.35f
+#define THROW_EXIT_LOW_G 0.65f
+#define THROW_MIN_LOW_G_MS 90UL
+#define THROW_MIN_FLIGHT_MS 200UL
+#define THROW_MIN_IMPACT_DELAY_MS 60UL
+#define THROW_CLEAN_LOW_G_THRESHOLD 0.28f
+#define THROW_SPIN_DPS 360.0f
+#define THROW_MIN_SPIN_MS 80UL
+#define THROW_SPIN_MAX_G 1.60f
+#define THROW_SPIN_RELEASE_G 1.05f
+#define THROW_SPIN_MIN_LOW_G_MS 40UL
+#define THROW_IMPACT_G 2.25f
+#define THROW_IMPACT_WINDOW_MS 800UL
+#define THROW_SAMPLE_INTERVAL_MS 10UL
+#define THROW_DEBUG 1
 
 // MQTT CONFIG
 #define MQTT_PORT 8883           

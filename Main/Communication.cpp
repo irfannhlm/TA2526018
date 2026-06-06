@@ -85,8 +85,79 @@ const long  gmtOffset_sec      = 25200;
 const int   daylightOffset_sec = 0;
 
 extern LiquidCrystal_I2C lcd;
-extern volatile bool buttonFlag;
 extern int active_threshold;
+
+static bool wifiConnecting = false;
+static bool timeSyncing = false;
+static unsigned long wifiConnectStarted = 0;
+static unsigned long timeSyncStarted = 0;
+static unsigned long lastWifiProgressLog = 0;
+
+const unsigned long WIFI_CONNECT_TIMEOUT_MS = 30000;
+const unsigned long WIFI_RETRY_INTERVAL_MS = 5000;
+const unsigned long TIME_SYNC_TIMEOUT_MS = 9000;
+
+bool isWiFiConnecting() {
+    return wifiConnecting;
+}
+
+bool isTimeSyncing() {
+    return timeSyncing;
+}
+
+static void stopTimeSyncState() {
+    timeSyncing = false;
+    timeSyncStarted = 0;
+}
+
+static void beginTimeSync() {
+    if (timeSyncing) return;
+
+    Serial.println("[NTP] Mulai sinkronisasi waktu...");
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+    timeSyncing = true;
+    timeSyncStarted = millis();
+
+    lcdPrint16(0, "PENGATURAN WAKTU");
+    lcdPrint16(1, " MOHON TUNGGU" + animDots());
+}
+
+static bool finishTimeSyncIfReady() {
+    if (!timeSyncing) return true;
+
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 0)) {
+        char ds[11];
+        strftime(ds, sizeof(ds), "%d-%m-%Y", &timeinfo);
+
+        Serial.printf("[NTP] Tanggal: %s\n", ds);
+
+        File f = SD.open("/tanggal.txt", FILE_WRITE);
+        if (f) {
+            f.println(ds);
+            f.close();
+        }
+
+        lcdPrint16(0, " WAKTU UPDATED ");
+        lcdPrint16(1, " MOHON TUNGGU" + animDots());
+
+        stopTimeSyncState();
+        return true;
+    }
+
+    if (millis() - timeSyncStarted >= TIME_SYNC_TIMEOUT_MS) {
+        Serial.println("[NTP] Gagal sync.");
+
+        lcdPrint16(0, "  WAKTU GAGAL   ");
+        lcdPrint16(1, " MOHON TUNGGU" + animDots());
+
+        stopTimeSyncState();
+        return true;
+    }
+
+    return false;
+}
 
 // ════════════════════════════════════════════════
 //  VALIDASI NAMA FILE (ketat, karakter per karakter)
@@ -137,31 +208,40 @@ static bool isFormatMHSWav(const String& n) {
 // ════════════════════════════════════════════════
 void startWiFi() {
     if (String(saved_ssid).length() < 2) {
-    Serial.println("[WiFi] Belum ada konfigurasi WiFi. Masuk mode offline.");
+        Serial.println("[WiFi] Belum ada konfigurasi WiFi. Masuk mode offline.");
 
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
+        wifiConnecting = false;
+        stopTimeSyncState();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
 
-    lcd.clear();
-    lcdPrint16(0, " MODE: OFFLINE ");
-    lcdPrint16(1, "WIFI BELUM DISET");
+        lcd.clear();
+        lcdPrint16(0, " MODE: OFFLINE ");
+        lcdPrint16(1, "WIFI BELUM DISET");
 
-    lastWifiAttempt = millis();
-    return;
+        lastWifiAttempt = millis();
+        return;
     }
 
-    if (WiFi.status() == WL_CONNECTED) return;
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiConnecting = false;
+        if (!timeSyncing) {
+            beginTimeSync();
+        }
+        return;
+    }
+
+    if (wifiConnecting) return;
 
     lcd.clear();
-    lcdPrint16(0, "  MODE ONLINE  ");
+    lcdPrint16(0, "  MODE: ONLINE  ");
     lcdPrint16(1, " KONEK WIFI");
 
     Serial.printf("\n[WiFi] Connect ke: %s (tipe: %s)\n", saved_ssid, wifi_type);
 
+    stopTimeSyncState();
     WiFi.disconnect(true);
-    delay(100);
     WiFi.mode(WIFI_STA);
-    delay(500);
 
     if (String(wifi_type) == "eduroam") {
         String identity = String(eap_nim);
@@ -178,113 +258,10 @@ void startWiFi() {
         WiFi.begin(saved_ssid, wifi_pass);
     }
 
-    int tc = 0;
-
-    while (WiFi.status() != WL_CONNECTED && !buttonFlag) {
-        delay(500);
-        Serial.print(".");
-
-        lcdPrint16(0, "  MODE ONLINE  ");
-        lcdPrint16(1, " KONEK WIFI" + animDots());
-
-        if (++tc >= 60) {
-            lcdPrint16(0, "  WIFI GAGAL   ");
-            lcdPrint16(1, "COBA LAGI 05s  ");
-            delay(1000);
-
-            lastWifiAttempt = millis();
-            break;
-        }
-    }
-
-    if (buttonFlag) {
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_OFF);
-
-        lcdPrint16(0, "  DIBATALKAN   ");
-        lcdPrint16(1, "MOHON TUNGGU" + animDots());
-
-        delay(1000);
-
-        lastWifiAttempt = millis();
-        wifiDibatalkan  = true;
-        return;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("\n[WiFi] Terhubung! IP: %s\n", WiFi.localIP().toString().c_str());
-
-        lcdPrint16(0, "WIFI TERHUBUNG ");
-        lcdPrint16(1, "MOHON TUNGGU" + animDots());
-        delay(1000);
-
-        // NTP sync
-        lcdPrint16(0, "PENGATURAN WAKTU");
-        lcdPrint16(1, "MOHON TUNGGU" + animDots());
-
-        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-        struct tm timeinfo;
-        bool ntpOk = false;
-        delay(500);
-
-        unsigned long startNtpSync = millis();
-        unsigned long ntpTimeout = 9000;
-
-        while (millis() - startNtpSync < ntpTimeout) {
-            lcdPrint16(0, "PENGATURAN WAKTU");
-            lcdPrint16(1, "MOHON TUNGGU" + animDots());
-
-            if (getLocalTime(&timeinfo, 0)) {
-                ntpOk = true;
-                break;
-            }
-
-            if (buttonFlag) {
-                break;
-            }
-
-            delay(100);
-        }
-
-        if (ntpOk) {
-            char ds[11];
-            strftime(ds, sizeof(ds), "%d-%m-%Y", &timeinfo);
-
-            Serial.printf("[NTP] Tanggal: %s\n", ds);
-
-            File f = SD.open("/tanggal.txt", FILE_WRITE);
-            if (f) {
-                f.println(ds);
-                f.close();
-            }
-
-            lcdPrint16(0, " WAKTU UPDATED ");
-            lcdPrint16(1, "MOHON TUNGGU" + animDots());
-        } 
-        else if (buttonFlag) {
-            WiFi.disconnect(true);
-            WiFi.mode(WIFI_OFF);
-
-            lcdPrint16(0, "  DIBATALKAN   ");
-            lcdPrint16(1, "MOHON TUNGGU" + animDots());
-
-            delay(1000);
-
-            wifiDibatalkan  = true;
-            lastWifiAttempt = millis();
-            return;
-        }
-        else {
-            Serial.println("[NTP] Gagal sync.");
-
-            lcdPrint16(0, " WAKTU GAGAL   ");
-            lcdPrint16(1, "LANJUT ONLINE  ");
-        }
-
-        delay(1000);
-    }
-
+    wifiConnecting = true;
+    wifiDibatalkan = false;
+    wifiConnectStarted = millis();
+    lastWifiProgressLog = 0;
     lastWifiAttempt = millis();
 }
 
@@ -292,6 +269,9 @@ void startWiFi() {
 //  stopWiFi
 // ════════════════════════════════════════════════
 void stopWiFi() {
+    wifiConnecting = false;
+    stopTimeSyncState();
+
     if (WiFi.getMode() == WIFI_OFF || WiFi.getMode() == WIFI_MODE_NULL) return;
     Serial.println("[WiFi] Mematikan WiFi...");
     if (mqttClient.connected()) {
@@ -345,9 +325,57 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
 
 
 void handleWiFi() {
-    if (WiFi.status() == WL_CONNECTED) { wifiDibatalkan = false; return; }
-    if (wifiDibatalkan) return; // tunggu user ganti mode sendiri
-    if (millis() - lastWifiAttempt < 5000) return;
+    if (String(saved_ssid).length() < 2) {
+        wifiConnecting = false;
+        stopTimeSyncState();
+        return;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiDibatalkan = false;
+
+        if (wifiConnecting) {
+            wifiConnecting = false;
+            Serial.printf("\n[WiFi] Terhubung! IP: %s\n", WiFi.localIP().toString().c_str());
+            lcdPrint16(0, "WIFI TERHUBUNG ");
+            lcdPrint16(1, " MOHON TUNGGU" + animDots());
+            beginTimeSync();
+        }
+
+        if (timeSyncing) {
+            finishTimeSyncIfReady();
+        }
+
+        return;
+    }
+
+    stopTimeSyncState();
+
+    if (wifiConnecting) {
+        if (millis() - lastWifiProgressLog >= 500) {
+            lastWifiProgressLog = millis();
+            Serial.print(".");
+            lcdPrint16(0, "  MODE: ONLINE  ");
+            lcdPrint16(1, " KONEK WIFI" + animDots());
+        }
+
+        if (millis() - wifiConnectStarted >= WIFI_CONNECT_TIMEOUT_MS) {
+            Serial.println("\n[WiFi] Gagal connect, retry 5 detik.");
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+
+            wifiConnecting = false;
+            lastWifiAttempt = millis();
+
+            lcdPrint16(0, "  WIFI GAGAL   ");
+            lcdPrint16(1, "COBA LAGI 05s  ");
+        }
+
+        return;
+    }
+
+    if (millis() - lastWifiAttempt < WIFI_RETRY_INTERVAL_MS) return;
+
     startWiFi();
 }
 // ════════════════════════════════════════════════
@@ -409,7 +437,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
     );
     httpClient.print(partHeader);
 
-    const size_t CHUNK = 512;
+    const size_t CHUNK = 4096;
     uint8_t chunkBuf[CHUNK];
     size_t terkirim = 0;
     unsigned long lastPrint = millis();
@@ -592,7 +620,7 @@ void handleMQTT() {
         espClient.setInsecure();
 
         mqttClient.setCallback(mqttCallback);
-        mqttClient.setBufferSize(512);
+        mqttClient.setBufferSize(4096);
 
         // Tetap dipakai, tapi bukan solusi utama.
         mqttClient.setSocketTimeout(1);
@@ -787,7 +815,7 @@ void prosesSinkronisasiSD(const String& targetKelas) {
 
         sdFileSedangDikirim = namaFile;
         sdAckDiterima = false; sdAckBatalkan = false;
-        mqttClient.setBufferSize(512);
+        mqttClient.setBufferSize(4096);
         bool terkirim = mqttClient.publish(MQTT_TOPIC_AUDIO_DATA, jsonData.c_str(), true);
 
         if (!terkirim) {

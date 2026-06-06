@@ -54,7 +54,7 @@ static unsigned long vadMuteUntil = 0;
 static unsigned long vadFirstSpeechMs = 0;
 
 #ifndef VAD_TRIGGER_SCORE
-#define VAD_TRIGGER_SCORE 18
+#define VAD_TRIGGER_SCORE 22
 #endif
 
 #ifndef VAD_MAX_SCORE
@@ -62,7 +62,7 @@ static unsigned long vadFirstSpeechMs = 0;
 #endif
 
 static const float VAD_START_THRESHOLD_MULT  = 1.40f;
-static const float VAD_RECORD_THRESHOLD_MULT = 0.60f;
+static const float VAD_RECORD_THRESHOLD_MULT = 0.50f;
 
 static const float VAD_ZCR_MIN_START  = 0.020f;
 static const float VAD_ZCR_MAX_START  = 0.180f;
@@ -70,8 +70,11 @@ static const float VAD_ZCR_MAX_START  = 0.180f;
 static const float VAD_ZCR_MIN_RECORD = 0.010f;
 static const float VAD_ZCR_MAX_RECORD = 0.320f;
 
-static const float VAD_CREST_REJECT_START  = 6.0f;
+static const float VAD_CREST_REJECT_START  = 5.0f;
 static const float VAD_CREST_REJECT_RECORD = 12.0f;
+
+static const float VAD_PEAK_REJECT_MULT = 16.0f;
+static const float VAD_IMPACT_AVG_MULT  = 2.0f;
 
 void resetVadState() {
     vadScore = 0;
@@ -405,7 +408,7 @@ void initAudioSD() {
     }
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-    chan_cfg.dma_desc_num = 12;
+    chan_cfg.dma_desc_num = 16;
     chan_cfg.dma_frame_num = 512;
 
     esp_err_t err = i2s_new_channel(&chan_cfg, NULL, &rx_handle);
@@ -544,18 +547,35 @@ bool updateAudioPreBufferAndVad(int samples, float &maxLoudness) {
     VadFeatures vf;
     float chunkLoudness = processAudioBufferVAD(raw_i2s_buffer, processed_buffer, samples, dummySum, vf);
 
-    static unsigned long lastVadLog = 0;
-    if (millis() - lastVadLog > 300) {
-    Serial.printf("[VAD] avg=%.1f rms=%.1f zcr=%.3f crest=%.2f peak=%d score=%d th=%d\n",
-                  vf.avgAbs, vf.rms, vf.zcr, vf.crest, vf.peak, vadScore, active_threshold);
-    lastVadLog = millis();
-}
-
     if (chunkLoudness > maxLoudness) {
         maxLoudness = chunkLoudness;
     }
 
+    bool speechLike = isSpeechLikeFrame(vf);
     bool vadTriggered = updateVadTrigger(vf);
+
+    static bool csvHeaderPrinted = false;
+    if (!csvHeaderPrinted) {
+        Serial.println("time,avgAbs,rms,zcr,crest,peak,threshold,speechLike,score,triggered");
+        csvHeaderPrinted = true;
+    }
+
+    static unsigned long lastVadLog = 0;
+    if (millis() - lastVadLog > 300) {
+        Serial.printf("%lu,%.1f,%.1f,%.3f,%.2f,%d,%d,%d,%d,%d\n",
+                      millis(),
+                      vf.avgAbs,
+                      vf.rms,
+                      vf.zcr,
+                      vf.crest,
+                      vf.peak,
+                      active_threshold,
+                      speechLike ? 1 : 0,
+                      vadScore,
+                      vadTriggered ? 1 : 0);
+
+        lastVadLog = millis();
+    }
 
     for (int i = 0; i < samples; i++) {
         preRecordBuffer[bufferHead] = processed_buffer[i];
@@ -698,9 +718,9 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
             int menit = sisaMs / 60000;
             int detik = (sisaMs % 60000) / 1000;
 
-            // Update LCD tiap 500 ms.
+            // Update LCD tiap 1000 ms.
             static unsigned long lastLCD = 0;
-            if (now - lastLCD > 500) {
+            if (now - lastLCD > 1000) {
                 if (lockI2C(20)) {
                     lcd.setCursor(0, 0);
                     lcd.print(" SEDANG MEREKAM");
@@ -722,14 +742,14 @@ bool rekamSuara(String uid, unsigned long waktuBerpikir) {
             }
 
             // Pengecekan RAM tiap 2 detik, tidak setiap loop.
-            static unsigned long lastRamCheck = 0;
-            if (now - lastRamCheck > 2000) {
-                Serial.printf("[AUDIO] RAM Sisa saat Merekam: %u bytes (%.2f KB)\n",
-                              ESP.getFreeHeap(), ESP.getFreeHeap() / 1024.0f);
-                Serial.printf("Free heap: %u\n", ESP.getFreeHeap());
-                Serial.printf("Max alloc heap: %u\n", ESP.getMaxAllocHeap());
-                lastRamCheck = now;
-            }
+            // static unsigned long lastRamCheck = 0;
+            // if (now - lastRamCheck > 2000) {
+            //     Serial.printf("[AUDIO] RAM Sisa saat Merekam: %u bytes (%.2f KB)\n",
+            //                   ESP.getFreeHeap(), ESP.getFreeHeap() / 1024.0f);
+            //     Serial.printf("Free heap: %u\n", ESP.getFreeHeap());
+            //     Serial.printf("Max alloc heap: %u\n", ESP.getMaxAllocHeap());
+            //     lastRamCheck = now;
+            // }
 
             // Saat recording, VAD hanya dipakai untuk mengukur apakah frame ini speech atau hening.
             unsigned long frameDurationMs = 0;

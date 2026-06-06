@@ -10,12 +10,15 @@
 #include "Buzzer_Module.h"
 #include "LCD_Helper.h"
 
-extern volatile bool buttonFlag;
 extern LiquidCrystal_I2C lcd;
 Preferences preferences;
 WebServer   server(80);
 DNSServer   dnsServer;
 const byte  DNS_PORT = 53;
+
+static bool portalActive = false;
+static bool portalRoutesReady = false;
+static String portalHtml = "";
 
 char eap_nim[40]    = "";
 char eap_pass[40]   = "";
@@ -54,9 +57,11 @@ static void handlePortalButton() {
   }
 }
 
-// ════════════════════════════════════════════════
+bool isWifiPortalActive() {
+  return portalActive;
+}
+
 //  bukaPortal
-// ════════════════════════════════════════════════
 void bukaPortal() {
   Serial.println("🌐 Membuka portal konfigurasi...");
 
@@ -80,7 +85,7 @@ void bukaPortal() {
   dnsServer.start(DNS_PORT, "*", apIP);
 
   // 2. BANGUN HTML DENGAN PRE-FILL
-  String html = R"rawhtml(
+  portalHtml = R"rawhtml(
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -88,7 +93,6 @@ void bukaPortal() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Catch Note Setup</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Serif+Display&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --pink: #e8638c; --pink-lt: #fde8ef; --pink-md: #f5b8cc; --text: #2d1a22;
@@ -96,26 +100,26 @@ void bukaPortal() {
       --border: #f0d0dc; --radius: 14px;
     }
     body {
-      font-family: 'DM Sans', sans-serif; background: var(--bg);
+      font-family: Arial, sans-serif; background: var(--bg);
       min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
       background-image: radial-gradient(circle at 20% 20%, #fce4ed 0%, transparent 50%), radial-gradient(circle at 80% 80%, #fde8ef 0%, transparent 50%);
     }
     .card { background: var(--card); border-radius: 24px; padding: 36px 32px; width: 100%; max-width: 420px; box-shadow: 0 4px 40px rgba(232,99,140,0.10); border: 1px solid var(--border); }
     .logo { text-align: center; margin-bottom: 28px; }
     .logo-icon { width: 56px; height: 56px; background: linear-gradient(135deg, #e8638c, #f598b4); border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 12px; box-shadow: 0 6px 20px rgba(232,99,140,0.30); }
-    .logo h1 { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--text); }
+    .logo h1 { font-family: Georgia, serif; font-size: 22px; color: var(--text); }
     .logo p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
     .section-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 14px; display: flex; align-items: center; gap: 8px; }
     .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
     .toggle-wrap { display: flex; background: var(--pink-lt); border-radius: 12px; padding: 4px; margin-bottom: 20px; gap: 4px; }
-    .toggle-btn { flex: 1; padding: 10px; border: none; border-radius: 9px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--muted); }
+    .toggle-btn { flex: 1; padding: 10px; border: none; border-radius: 9px; font-family: Arial, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--muted); }
     .toggle-btn.active { background: white; color: var(--pink); box-shadow: 0 2px 8px rgba(232,99,140,0.15); }
     .section { display: none; } .section.show { display: block; }
     .field { margin-bottom: 16px; }
     .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-    .field input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); background: #fff; outline: none; }
+    .field input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius); font-family: Arial, sans-serif; font-size: 15px; color: var(--text); background: #fff; outline: none; }
     .field input:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba(232,99,140,0.10); }
-    button[type=submit] { width: 100%; padding: 14px; background: linear-gradient(135deg, #e8638c, #f598b4); color: white; border: none; border-radius: var(--radius); font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+    button[type=submit] { width: 100%; padding: 14px; background: linear-gradient(135deg, #e8638c, #f598b4); color: white; border: none; border-radius: var(--radius); font-family: Arial, sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -176,10 +180,13 @@ void bukaPortal() {
 </html>
 )rawhtml";
 
-  server.on("/", HTTP_GET, [&, html]() { server.send(200, "text/html", html); });
+  if (!portalRoutesReady) {
+    server.on("/", HTTP_GET, []() {
+      server.send(200, "text/html", portalHtml);
+    });
 
-  // 3. HANDLER SAVE WIFI
-  server.on("/save", HTTP_POST, [&]() {
+    // 3. HANDLER SAVE WIFI
+    server.on("/save", HTTP_POST, []() {
     String wifiType = server.arg("wifi_type");
     String ssid     = (wifiType == "eduroam") ? server.arg("ssid_eduroam") : server.arg("ssid_biasa");
     String eapPass  = server.arg("eap_pass");
@@ -193,7 +200,7 @@ void bukaPortal() {
     if (server.arg("wifi_pass").length() > 0) preferences.putString("wifi_pass", server.arg("wifi_pass"));
     preferences.end();
 
-    server.send(200, "text/html", "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:'DM Sans',sans-serif;background:#fdf4f7;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:white;border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 4px 40px rgba(232,99,140,.1);}h2{color:#e8638c;font-size:20px;}</style></head><body><div class='box'><h2>✅ Konfigurasi tersimpan!</h2><p>ESP32 akan restart...</p></div></body></html>");
+    server.send(200, "text/html", "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;background:#fdf4f7;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:white;border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 4px 40px rgba(232,99,140,.1);}h2{color:#e8638c;font-size:20px;}</style></head><body><div class='box'><h2>✅ Konfigurasi tersimpan!</h2><p>ESP32 akan restart...</p></div></body></html>");
 
     lcd.clear();
     lcdPrint16(0, "KONFIG TERSIMPAN");
@@ -210,21 +217,53 @@ void bukaPortal() {
     ESP.restart();
   });
 
-  // Captive portal detection boilerplate
-  auto redirect = [&]() { server.sendHeader("Location", "/", true); server.send(302, "text/plain", ""); };
-  server.on("/generate_204", redirect); server.on("/fwlink", redirect); server.on("/hotspot-detect.html", redirect);
-  server.on("/library/test/success.html", redirect); server.on("/ncsi.txt", redirect); server.on("/connecttest.txt", redirect); server.onNotFound(redirect);
+    auto servePortal = []() {
+      server.send(200, "text/html", portalHtml);
+    };
+
+    server.on("/favicon.ico", HTTP_GET, []() {
+      server.send(204, "image/x-icon", "");
+    });
+    server.on("/generate_204", HTTP_GET, servePortal);
+    server.on("/fwlink", HTTP_GET, servePortal);
+    server.on("/hotspot-detect.html", HTTP_GET, servePortal);
+    server.on("/library/test/success.html", HTTP_GET, servePortal);
+    server.on("/ncsi.txt", HTTP_GET, servePortal);
+    server.on("/connecttest.txt", HTTP_GET, servePortal);
+    server.onNotFound([]() {
+      if (server.method() == HTTP_GET) {
+        server.send(200, "text/html", portalHtml);
+      } else {
+        server.send(404, "text/plain", "");
+      }
+    });
+
+    portalRoutesReady = true;
+  }
 
   server.begin();
-  while (true) {
-    dnsServer.processNextRequest();
-    server.handleClient();
+  portalActive = true;
 
-    updateBuzzer();
-    handlePortalButton();
+  Serial.println("✅ Portal non-blocking aktif.");
+}
 
-    delay(1); // kasih napas ke WiFi stack
-  }
+void handleWifiPortal() {
+  if (!portalActive) return;
+  dnsServer.processNextRequest();
+  server.handleClient();
+  yield();
+}
+
+void stopWifiPortal() {
+  if (!portalActive) return;
+
+  Serial.println("🛑 Menutup portal konfigurasi...");
+
+  server.stop();
+  dnsServer.stop();
+  WiFi.softAPdisconnect(true);
+
+  portalActive = false;
 }
 
 //  initWifiPortal

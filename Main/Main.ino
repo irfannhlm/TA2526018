@@ -16,6 +16,8 @@
 #include "I2C_Handler.h"
 #include "Buzzer_Module.h"
 #include "LCD_Helper.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #define MAX_PESERTA        100
 #define ERROR_DISPLAY_TIME 2000
@@ -59,7 +61,11 @@ float batteryVoltage = 0.0;
 float batteryPercent = 0.0;
 
 volatile int buttonClicks = 0;
-unsigned long lastClickTime = 0;
+volatile unsigned long lastClickTime = 0;
+volatile bool holdRequested = false;
+volatile bool buttonIgnoreUntilReleased = false;
+static TaskHandle_t buttonTaskHandle = nullptr;
+static portMUX_TYPE buttonMux = portMUX_INITIALIZER_UNLOCKED;
 
 unsigned long lastBatteryCheck = 0;
 const unsigned long BATTERY_CHECK_INTERVAL = 5000; // cek tiap 5 detik
@@ -76,10 +82,12 @@ enum SystemState { STANDBY, INVALID, UNREGISTERED, BANNED, SD_ERROR, AUTHORIZED,
 SystemState state     = STANDBY;
 SystemState lastState = (SystemState)-1;
 
-const int LONG_PRESS_TIME = 2000;
+const unsigned long BUTTON_POLL_MS           = 10;
+const unsigned long BUTTON_DEBOUNCE_MS       = 60;
+const unsigned long CLICK_EVALUATE_MS        = 500;
+const unsigned long LONG_PRESS_TIME          = 3000;
 
-volatile bool          buttonFlag        = false;
-volatile unsigned long lastTriggerTime   = 0;
+bool pendingWifiReconnect = false;
 
 bool lastMqttStatus = false;
 
@@ -95,15 +103,104 @@ static String lastWifiLine = "";
 static unsigned long lastHeartbeatTime = 0;
 const  unsigned long HEARTBEAT_MS      = 10000;
 
-void IRAM_ATTR handleButtonInterrupt() {
-  buttonFlag = true;
-}
-
 void clearButtonState() {
-  buttonFlag = false;
+  bool ignoreRelease = (digitalRead(BUTTON_PIN) == LOW);
+
+  portENTER_CRITICAL(&buttonMux);
   buttonClicks = 0;
   lastClickTime = 0;
-  lastTriggerTime = millis();
+  holdRequested = false;
+  buttonIgnoreUntilReleased = ignoreRelease;
+  portEXIT_CRITICAL(&buttonMux);
+}
+
+void buttonPollingTask(void* param) {
+  bool rawLast = digitalRead(BUTTON_PIN);
+  bool stableState = rawLast;
+  unsigned long rawChangedAt = millis();
+  unsigned long pressStartedAt = (stableState == LOW) ? millis() : 0;
+  bool holdReported = false;
+
+  while (true) {
+    unsigned long now = millis();
+    bool raw = digitalRead(BUTTON_PIN);
+
+    if (raw != rawLast) {
+      rawLast = raw;
+      rawChangedAt = now;
+    }
+
+    if (raw != stableState && now - rawChangedAt >= BUTTON_DEBOUNCE_MS) {
+      stableState = raw;
+
+      if (stableState == LOW) {
+        pressStartedAt = now;
+        holdReported = false;
+      } else {
+        bool ignoreRelease = false;
+
+        portENTER_CRITICAL(&buttonMux);
+        ignoreRelease = buttonIgnoreUntilReleased;
+        if (buttonIgnoreUntilReleased) {
+          buttonIgnoreUntilReleased = false;
+        }
+
+        if (!holdReported && !ignoreRelease) {
+          if (buttonClicks < 10) {
+            buttonClicks++;
+          }
+          lastClickTime = now;
+        }
+        portEXIT_CRITICAL(&buttonMux);
+
+        pressStartedAt = 0;
+        holdReported = false;
+      }
+    }
+
+    if (stableState == LOW &&
+        pressStartedAt > 0 &&
+        !holdReported &&
+        now - pressStartedAt >= LONG_PRESS_TIME) {
+      portENTER_CRITICAL(&buttonMux);
+      holdRequested = true;
+      buttonClicks = 0;
+      lastClickTime = 0;
+      buttonIgnoreUntilReleased = true;
+      portEXIT_CRITICAL(&buttonMux);
+
+      holdReported = true;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_MS));
+  }
+}
+
+void startButtonTask() {
+  if (buttonTaskHandle != nullptr) return;
+
+  bool ignoreRelease = (digitalRead(BUTTON_PIN) == LOW);
+  portENTER_CRITICAL(&buttonMux);
+  buttonClicks = 0;
+  lastClickTime = 0;
+  holdRequested = false;
+  buttonIgnoreUntilReleased = ignoreRelease;
+  portEXIT_CRITICAL(&buttonMux);
+
+  BaseType_t ok = xTaskCreatePinnedToCore(
+    buttonPollingTask,
+    "ButtonTask",
+    2048,
+    nullptr,
+    2,
+    &buttonTaskHandle,
+    1
+  );
+
+  if (ok != pdPASS) {
+    buttonTaskHandle = nullptr;
+    Serial.println("[BUTTON] Gagal membuat task polling.");
+  }
 }
 
 bool cekHistory(String uid) {
@@ -117,91 +214,11 @@ void simpanHistory(String uid) {
     daftarSudahBicara[jumlahPeserta++] = uid;
 }
 
-// ════════════════════════════════════════════════
-//  checkModeButton
-// ════════════════════════════════════════════════
-void checkModeButton() {
-  // 1. Tangkap flag dari interrupt (Pasti terjadi saat tombol mulai ditekan)
-  if (buttonFlag) {
-    buttonFlag = false;
-    // CUKUP pakai jeda waktu (250ms), hilangkan pengecekan posisi jari.
-    // Ini memastikan klik yang cepat di mode MHS (loop lambat) tetap terekam!
-    if (millis() - lastTriggerTime > 250) { 
-      lastTriggerTime = millis();
-      buttonClicks++;
-      lastClickTime = millis();
-    }
-  }
+bool isModeChangeAllowed() {
+  // Tombol mode hanya boleh diproses saat sistem idle
+  if (state != STANDBY) return false;
 
-  // 2. Deteksi Hold untuk Deep Sleep (NON-BLOCKING)
-  if (digitalRead(BUTTON_PIN) == LOW) {
-    if (buttonClicks > 0 && (millis() - lastTriggerTime > LONG_PRESS_TIME)) {
-      buttonClicks = 0; 
-      prepareDeepSleep();
-    }
-  }
-
-  // 3. Evaluasi aksi setelah jeda 350ms dari klik terakhir
-  if (buttonClicks > 0 && digitalRead(BUTTON_PIN) == HIGH && (millis() - lastClickTime > 350)) {
-    if (buttonClicks >= 3) {
-      masukModeDebug(); // Triple click
-    } 
-    // Terima 1 atau 2 klik sebagai aksi ganti mode (anti-bounce aman)
-    else if (buttonClicks == 1 || buttonClicks == 2) {
-      gantiMode();      
-    }
-    buttonClicks = 0; // Reset counter
-  }
-}
-
-void gantiMode() {
-  OperatingMode oldMode = currentMode;
-  OperatingMode nextMode;
-
-  if      (currentMode == MODE_KOMUNIKASI) nextMode = MODE_DOSEN;
-  else if (currentMode == MODE_DOSEN)      nextMode = MODE_MAHASISWA;
-  else                                     nextMode = MODE_KOMUNIKASI;
-
-  if (oldMode == MODE_KOMUNIKASI && nextMode != MODE_KOMUNIKASI) {
-    stopMQTT();
-  }
-
-  currentMode     = nextMode;
-  state           = STANDBY;
-  lastState       = (SystemState)-1;
-  lastCountdown   = -1;
-  lastWifiLine    = "";
-  lastMqttStatus  = mqttClient.connected();
-  lastWifiAttempt = millis();
-  wifiDibatalkan  = false;
-  waktuMulai      = millis();
-
-  if (currentMode != MODE_KOMUNIKASI) {
-    updateLCD();
-  }
-
-  // Bunyi mode langsung, sebelum proses berat
-  playBuzzer((uint8_t)currentMode + 1, 40, 40);
-  waitBuzzerDone();
-
-  if (currentMode == MODE_DOSEN) {
-    stopWiFi();
-    delay(200);
-    initAudioSD();
-  }
-  else if (currentMode == MODE_KOMUNIKASI) {
-    deinitAudio();
-    startWiFi();
-    lastRegTime       = 0;
-    lastHeartbeatTime = 0;
-  }
-  else {
-    stopWiFi();
-    delay(200); 
-    initAudioSD();
-    muatDaftarEligible();
-    muatDaftarBanned();
-  }
+  return true;
 }
 
 void masukModeDebug() {
@@ -211,22 +228,17 @@ void masukModeDebug() {
   
   playBuzzer(2, 100, 100);
   waitBuzzerDone();
-  
-  stopWiFi();
-  delay(1500);
 
-  // Hapus SSID saja agar alat dipaksa masuk AP Mode jika di-restart, 
-  // tapi fungsi bukaPortal() tetap bisa pre-fill dari data terakhir (Nim/Tipe).
-  Preferences prefs;
-  prefs.begin("catch_note", false);
-  prefs.remove("ssid");
-  prefs.end();
+  stopMQTT();
+  stopWiFi();
+  delay(300);
 
   lcd.clear();
   lcdPrint16(0, "WIFI: CatchNote");
   lcdPrint16(1, "IP: 192.168.4.1");
 
   bukaPortal(); 
+  lastState = (SystemState)-1;
 }
 
 //  prepareDeepSleep
@@ -339,11 +351,25 @@ void updateLCD() {
 
   int animFrame = (millis() / 500) % 4;
 
+  static bool portalScreenShown = false;
+
+  if (currentMode == MODE_KOMUNIKASI && isWifiPortalActive()) {
+    if (!portalScreenShown) {
+      lcd.clear();
+      lcdPrint16(0, "WIFI: CatchNote");
+      lcdPrint16(1, "IP: 192.168.4.1");
+      portalScreenShown = true;
+    }
+    return;
+  }
+
+  portalScreenShown = false;
+
   if (currentMode == MODE_KOMUNIKASI &&
     state == STANDBY &&
     String(saved_ssid).length() < 2) {
 
-  lcdPrint16(0, " MODE: OFFLINE ");
+  lcdPrint16(0, "    OFFLINE   ");
   lcdPrint16(1, "WIFI BELUM DISET");
   return;
   }
@@ -351,8 +377,39 @@ void updateLCD() {
   // ── WIFI RETRY / BELUM CONNECT ──
   if (currentMode == MODE_KOMUNIKASI &&
       state == STANDBY &&
+      isWiFiConnecting()) {
+
+    if (animFrame != lastAnimFrame || state != lastState) {
+      lcdPrint16(0, "  MODE: ONLINE  ");
+      lcdPrint16(1, " KONEK WIFI" + animDots());
+
+      lastAnimFrame = animFrame;
+      lastState = state;
+    }
+
+    return;
+  }
+
+  if (currentMode == MODE_KOMUNIKASI &&
+      state == STANDBY &&
+      isTimeSyncing()) {
+
+    if (animFrame != lastAnimFrame || state != lastState) {
+      lcdPrint16(0, "PENGATURAN WAKTU");
+      lcdPrint16(1, " MOHON TUNGGU" + animDots());
+
+      lastAnimFrame = animFrame;
+      lastState = state;
+    }
+
+    return;
+  }
+
+  if (currentMode == MODE_KOMUNIKASI &&
+      state == STANDBY &&
       WiFi.status() != WL_CONNECTED &&
-      !wifiDibatalkan) {
+      !wifiDibatalkan &&
+      !isWiFiConnecting()) {
     
     int sisa = (5000 - (int)(millis() - lastWifiAttempt)) / 1000;
     if (sisa < 0) sisa = 0;
@@ -489,6 +546,152 @@ void updateLCD() {
   lastState = state;
 }
 
+void setOperatingMode(int nextModeValue) {
+  OperatingMode nextMode = (OperatingMode) nextModeValue;
+  OperatingMode oldMode = currentMode;
+
+  if (oldMode == nextMode) return;
+
+  pendingWifiReconnect = false;
+
+  if (oldMode == MODE_KOMUNIKASI && nextMode != MODE_KOMUNIKASI) {
+    if (isWifiPortalActive()) {
+      stopWifiPortal();
+    }
+    stopMQTT();
+  }
+
+  currentMode     = nextMode;
+  state           = STANDBY;
+  lastState       = (SystemState)-1;
+  lastCountdown   = -1;
+  lastWifiLine    = "";
+  lastMqttStatus  = mqttClient.connected();
+  lastWifiAttempt = millis();
+  wifiDibatalkan  = false;
+  waktuMulai      = millis();
+
+  if (currentMode != MODE_KOMUNIKASI) {
+    updateLCD();
+  }
+
+  playBuzzer((uint8_t)currentMode + 1, 40, 40);
+  waitBuzzerDone();
+
+  if (currentMode == MODE_DOSEN) {
+    stopWiFi();
+    delay(200);
+    initAudioSD();
+  }
+  else if (currentMode == MODE_MAHASISWA) {
+    stopWiFi();
+    delay(200);
+    initAudioSD();
+    muatDaftarEligible();
+    muatDaftarBanned();
+  }
+  else if (currentMode == MODE_KOMUNIKASI) {
+    deinitAudio();
+    startWiFi();
+    lastRegTime       = 0;
+    lastHeartbeatTime = 0;
+  }
+
+  lastState = (SystemState)-1;
+}
+
+void checkModeButton() {
+  bool shouldSleep = false;
+  int queuedClicks = 0;
+  unsigned long queuedAt = 0;
+
+  portENTER_CRITICAL(&buttonMux);
+  shouldSleep = holdRequested;
+  if (shouldSleep) {
+    holdRequested = false;
+    buttonClicks = 0;
+    lastClickTime = 0;
+  } else {
+    queuedClicks = buttonClicks;
+    queuedAt = lastClickTime;
+  }
+  portEXIT_CRITICAL(&buttonMux);
+
+  if (shouldSleep) {
+    prepareDeepSleep();
+    return;
+  }
+
+  unsigned long now = millis();
+  if (queuedClicks <= 0 || now - queuedAt <= CLICK_EVALUATE_MS) return;
+
+  int clicks = 0;
+  portENTER_CRITICAL(&buttonMux);
+  if (buttonClicks > 0 && now - lastClickTime > CLICK_EVALUATE_MS) {
+    clicks = buttonClicks;
+    buttonClicks = 0;
+    lastClickTime = 0;
+  }
+  portEXIT_CRITICAL(&buttonMux);
+
+  if (clicks <= 0) return;
+  if (!isModeChangeAllowed()) return;
+
+  if ((clicks == 1 || clicks == 2) && currentMode == MODE_KOMUNIKASI) {
+    // Single/double click di MODE_KOMUNIKASI: ONLINE <-> SET WIFI
+    if (isWifiPortalActive()) {
+      // SET WIFI -> MODE ONLINE
+      stopWifiPortal();
+
+      lcd.clear();
+      lcdPrint16(0, "  MODE: ONLINE  ");
+      lcdPrint16(1, " KONEK WIFI");
+
+      playBuzzer(1, 60, 60);
+      waitBuzzerDone();
+
+      pendingWifiReconnect = true;
+      lastWifiAttempt = millis();
+      wifiDibatalkan = false;
+      lastWifiLine = "";
+      lastState = (SystemState)-1;
+    } 
+    else {
+      // MODE ONLINE -> SET WIFI
+      masukModeDebug();
+    }
+  }
+
+  else if (clicks == 1) {
+    Serial.println("1 click diabaikan di mode utama");
+  }
+
+  else if (clicks == 2) {
+    // Double click di mode utama non-komunikasi:
+    // DOSEN <-> MAHASISWA
+    if (currentMode == MODE_DOSEN) {
+      setOperatingMode(MODE_MAHASISWA);
+    }
+    else if (currentMode == MODE_MAHASISWA) {
+      setOperatingMode(MODE_DOSEN);
+    }
+  }
+
+  else if (clicks >= 3) {
+    // Triple click:
+    // Mode utama -> KOMUNIKASI
+    // KOMUNIKASI -> DOSEN
+    if (currentMode == MODE_KOMUNIKASI) {
+      if (isWifiPortalActive()) {
+        stopWifiPortal();
+      }
+      setOperatingMode(MODE_DOSEN);
+    }
+    else {
+      setOperatingMode(MODE_KOMUNIKASI);
+    }
+  }
+}
 
 // ==========================================
 // 1. VARIABEL GLOBAL & KONFIGURASI BATERAI
@@ -596,17 +799,17 @@ void checkBattery() {
       }
 
       // --- Cetak status hanya kalau pembacaan berhasil ---
-      Serial.println("=== STATUS BATERAI ===");
-      Serial.printf("Raw Voltage : %.2f V\n", batteryVoltage);
-      Serial.printf("Smooth Volt : %.2f V\n", smoothedVoltage);
+      // Serial.println("=== STATUS BATERAI ===");
+      // Serial.printf("Raw Voltage : %.2f V\n", batteryVoltage);
+      // Serial.printf("Smooth Volt : %.2f V\n", smoothedVoltage);
 
       if (isnan(batteryPercent)) {
-        Serial.println("Battery : USB Power / No Battery");
+        // Serial.println("Battery : USB Power / No Battery");
       } else {
-        Serial.printf("Battery : %.1f %%\n", batteryPercent);
+        // Serial.printf("Battery : %.1f %%\n", batteryPercent);
       }
 
-      Serial.println("======================");
+      // Serial.println("======================");
     }
   }
 
@@ -713,7 +916,7 @@ void setup() {
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   initBuzzer();
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), handleButtonInterrupt, FALLING);
+  startButtonTask();
   delay(1000);
 
   // 2. Portal konfigurasi WiFi
@@ -762,22 +965,50 @@ void printListTerdaftar() {
 }
 
 void loop() {
+  if (currentMode == MODE_KOMUNIKASI && isWifiPortalActive()) {
+    updateBuzzer();
+
+    if (isWifiPortalActive()) {
+      handleWifiPortal();
+    }
+
+    checkModeButton();
+
+    return;
+  }
+
   updateBuzzer();
-  checkBattery();
+
+  if (pendingWifiReconnect) {
+    pendingWifiReconnect = false;
+    startWiFi();
+    lastRegTime       = 0;
+    lastHeartbeatTime = 0;
+    lastState         = (SystemState)-1;
+  }
+
   checkModeButton();
+  checkBattery();
   updateLCD();
 
   // ── MODE_KOMUNIKASI: MQTT + heartbeat ──
   if (currentMode == MODE_KOMUNIKASI) {
-    handleWiFi();
-    handleMQTT();
+    if (isWifiPortalActive()) {
+      handleWifiPortal();
+    } 
+    else {
+      handleWiFi();
 
-    // Heartbeat kirimStatus setiap 10 detik
-  if (!isMQTTConnecting() &&
-      mqttClient.connected() &&
-      millis() - lastHeartbeatTime >= HEARTBEAT_MS) {
-      lastHeartbeatTime = millis();
-      kirimStatus("online");
+      if (WiFi.status() == WL_CONNECTED && !isTimeSyncing()) {
+        handleMQTT();
+
+        if (!isMQTTConnecting() &&
+            mqttClient.connected() &&
+            millis() - lastHeartbeatTime >= HEARTBEAT_MS) {
+          lastHeartbeatTime = millis();
+          kirimStatus("online");
+        }
+      }
     }
   }
 
@@ -872,12 +1103,12 @@ void loop() {
             }
 
             // CEK 3: Apakah dia sudah bicara di sesi lokal SAAT INI
-            else if (cekHistory(idKartu)) {
-              identTimer_stop(DEC_INVALID);
-              playBuzzer(2, 80, 80);
-              stateTimer = millis();
-              state = INVALID; 
-            } 
+            // else if (cekHistory(idKartu)) {
+            //   identTimer_stop(DEC_INVALID);
+            //   playBuzzer(2, 80, 80);
+            //   stateTimer = millis();
+            //   state = INVALID; 
+            // } 
 
             // LOLOS SEMUA CEK: Izinkan Merekam
             else {
@@ -909,6 +1140,9 @@ void loop() {
 
         // ── MODE KOMUNIKASI ──
         case MODE_KOMUNIKASI: {
+          if (isWifiPortalActive()) {
+            break;
+          }
 
           // 1. Sinkronisasi TXT (trigger dari mqttCallback)
           if (sdSyncAktif && sdTargetKelas != "") {
@@ -1072,7 +1306,7 @@ void loop() {
       if (currentMode == MODE_MAHASISWA) simpanHistory(currentUID);
 
       if (alatDilempar && currentMode == MODE_DOSEN) {
-          gantiMode(); 
+          setOperatingMode(MODE_MAHASISWA);
       } else {
           currentUID    = "";
           state         = STANDBY;

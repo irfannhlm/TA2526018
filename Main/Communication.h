@@ -15,6 +15,8 @@
 void startWiFi();
 void stopWiFi();
 void handleWiFi();
+bool isWiFiConnecting();
+bool isTimeSyncing();
 
 // ── Fungsi MQTT ──
 void handleMQTT();
