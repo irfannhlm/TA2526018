@@ -12,6 +12,7 @@
 #include <vector>
 #include <Preferences.h>
 #include "LCD_Helper.h"
+#include "AudioSD_Module.h"
 
 // ════════════════════════════════════════════════
 //  BACKEND SERVER — upload WAV via HTTPS
@@ -29,14 +30,19 @@ bool wifiDibatalkan = false;
 
 static TaskHandle_t mqttConnectTaskHandle = nullptr;
 static volatile bool mqttConnecting = false;
+static volatile bool mqttStopRequested = false;
 static unsigned long lastMqttAttempt = 0;
 
 static void mqttConnectTask(void* param) {
     String clientId = "ESP-" + String(DEVICE_ID) + "-" + String(random(0xffff), HEX);
     String willMsg  = "{\"device_id\":\"" + String(DEVICE_ID) + "\",\"status\":\"offline\"}";
 
-    Serial.printf("[MQTT] Konek ke %s:%d sebagai %s...\n",
-                  MQTT_SERVER, MQTT_PORT, MQTT_USER);
+    if (mqttStopRequested || WiFi.status() != WL_CONNECTED) {
+        mqttConnecting = false;
+        mqttConnectTaskHandle = nullptr;
+        vTaskDelete(nullptr);
+        return;
+    }
 
     bool ok = mqttClient.connect(
         clientId.c_str(),
@@ -48,15 +54,14 @@ static void mqttConnectTask(void* param) {
         willMsg.c_str()
     );
 
-    if (ok) {
-        Serial.println("[MQTT] Terhubung ke HiveMQ Cloud!");
+    if (ok && !mqttStopRequested && WiFi.status() == WL_CONNECTED) {
 
         mqttClient.subscribe(MQTT_TOPIC_PERINTAH);
         mqttClient.subscribe(MQTT_TOPIC_SYNC_STATUS);
 
         kirimStatus("online");
-    } else {
-        Serial.printf("[MQTT] Gagal rc=%d (retry 5 detik)\n", mqttClient.state());
+    } else if (ok) {
+        mqttClient.disconnect();
     }
 
     mqttConnecting = false;
@@ -113,7 +118,6 @@ static void stopTimeSyncState() {
 static void beginTimeSync() {
     if (timeSyncing) return;
 
-    Serial.println("[NTP] Mulai sinkronisasi waktu...");
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
     timeSyncing = true;
@@ -131,12 +135,12 @@ static bool finishTimeSyncIfReady() {
         char ds[11];
         strftime(ds, sizeof(ds), "%d-%m-%Y", &timeinfo);
 
-        Serial.printf("[NTP] Tanggal: %s\n", ds);
-
-        File f = SD.open("/tanggal.txt", FILE_WRITE);
-        if (f) {
-            f.println(ds);
-            f.close();
+        if (ensureSdReady("ntp_date", true)) {
+            File f = SD.open("/tanggal.txt", FILE_WRITE);
+            if (f) {
+                f.println(ds);
+                f.close();
+            }
         }
 
         lcdPrint16(0, " WAKTU UPDATED ");
@@ -147,7 +151,6 @@ static bool finishTimeSyncIfReady() {
     }
 
     if (millis() - timeSyncStarted >= TIME_SYNC_TIMEOUT_MS) {
-        Serial.println("[NTP] Gagal sync.");
 
         lcdPrint16(0, "  WAKTU GAGAL   ");
         lcdPrint16(1, " MOHON TUNGGU" + animDots());
@@ -208,10 +211,10 @@ static bool isFormatMHSWav(const String& n) {
 // ════════════════════════════════════════════════
 void startWiFi() {
     if (String(saved_ssid).length() < 2) {
-        Serial.println("[WiFi] Belum ada konfigurasi WiFi. Masuk mode offline.");
 
         wifiConnecting = false;
         stopTimeSyncState();
+        stopMQTT();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
 
@@ -237,9 +240,8 @@ void startWiFi() {
     lcdPrint16(0, "  MODE: ONLINE  ");
     lcdPrint16(1, " KONEK WIFI");
 
-    Serial.printf("\n[WiFi] Connect ke: %s (tipe: %s)\n", saved_ssid, wifi_type);
-
     stopTimeSyncState();
+    mqttStopRequested = false;
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
 
@@ -271,14 +273,9 @@ void startWiFi() {
 void stopWiFi() {
     wifiConnecting = false;
     stopTimeSyncState();
+    stopMQTT();
 
     if (WiFi.getMode() == WIFI_OFF || WiFi.getMode() == WIFI_MODE_NULL) return;
-    Serial.println("[WiFi] Mematikan WiFi...");
-    if (mqttClient.connected()) {
-        kirimStatus("offline");
-        delay(200);
-        mqttClient.disconnect();
-    }
     esp_wifi_sta_wpa2_ent_disable();
     WiFi.disconnect(true);
     delay(10);
@@ -289,6 +286,8 @@ void stopWiFi() {
 //  Baca file SD → JSON string
 // ════════════════════════════════════════════════
 static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas) {
+    if (!ensureSdReady("sync_txt_read", true)) return "";
+
     File f = SD.open("/" + namaFile, FILE_READ);
     if (!f) return "";
 
@@ -323,7 +322,6 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
     return String(buf);
 }
 
-
 void handleWiFi() {
     if (String(saved_ssid).length() < 2) {
         wifiConnecting = false;
@@ -336,7 +334,6 @@ void handleWiFi() {
 
         if (wifiConnecting) {
             wifiConnecting = false;
-            Serial.printf("\n[WiFi] Terhubung! IP: %s\n", WiFi.localIP().toString().c_str());
             lcdPrint16(0, "WIFI TERHUBUNG ");
             lcdPrint16(1, " MOHON TUNGGU" + animDots());
             beginTimeSync();
@@ -354,13 +351,11 @@ void handleWiFi() {
     if (wifiConnecting) {
         if (millis() - lastWifiProgressLog >= 500) {
             lastWifiProgressLog = millis();
-            Serial.print(".");
             lcdPrint16(0, "  MODE: ONLINE  ");
             lcdPrint16(1, " KONEK WIFI" + animDots());
         }
 
         if (millis() - wifiConnectStarted >= WIFI_CONNECT_TIMEOUT_MS) {
-            Serial.println("\n[WiFi] Gagal connect, retry 5 detik.");
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
 
@@ -391,7 +386,6 @@ static void kirimStatusSync(const String& status, const String& pesan,
     if (berhasil > 0) doc["berhasil"] = berhasil;
     char buf[256]; serializeJson(doc, buf);
     mqttClient.publish(MQTT_TOPIC_SYNC_STATUS, buf);
-    Serial.println("📤 StatusSync → " + String(buf));
 }
 
 // ════════════════════════════════════════════════
@@ -399,10 +393,11 @@ static void kirimStatusSync(const String& status, const String& pesan,
 //  Pakai WiFiClientSecure terpisah dari MQTT client
 // ════════════════════════════════════════════════
 static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
+    if (!ensureSdReady("sync_audio_read", true)) return -1;
+
     File f = SD.open("/" + namaFile, FILE_READ);
-    if (!f) { Serial.println("❌ Gagal buka: " + namaFile); return -1; }
+    if (!f) {  return -1; }
     size_t ukuranFile = f.size();
-    Serial.printf("📂 Upload WAV: %s (%u bytes)\n", namaFile.c_str(), ukuranFile);
 
     String boundary   = "ESP32Boundary7a3f";
     String partHeader =
@@ -421,9 +416,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
     WiFiClientSecure httpClient;
     httpClient.setInsecure();
 
-    Serial.printf("🔌 Konek ke %s:443...\n", BACKEND_SERVER);
     if (!httpClient.connect(BACKEND_SERVER, 443)) {
-        Serial.println("❌ Gagal konek ke backend HTTPS!");
         f.close(); return -1;
     }
 
@@ -445,15 +438,11 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
         size_t baca = f.read(chunkBuf, CHUNK);
         terkirim += httpClient.write(chunkBuf, baca);
         if (millis() - lastPrint > 2000) {
-            Serial.printf("   ⏳ %u/%u bytes (%.0f%%)\n",
-                terkirim, (unsigned int)ukuranFile,
-                (float)terkirim / ukuranFile * 100.0f);
             lastPrint = millis();
         }
     }
     f.close();
     httpClient.print(partMid);
-    Serial.printf("✅ Stream selesai: %u bytes\n", terkirim);
 
     // Baca response code
     int httpCode = -1;
@@ -464,21 +453,77 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
             line.trim();
             if (line.startsWith("HTTP/")) {
                 httpCode = line.substring(9, 12).toInt();
-                Serial.printf("📡 HTTP %d ← %s\n", httpCode, namaFile.c_str());
                 break;
             }
         }
         delay(10);
     }
-    if (httpCode == -1) Serial.println("⏱️ Timeout baca response!");
-
-    String body = ""; unsigned long bt = millis();
-    while (httpClient.available() && millis() - bt < 3000) body += (char)httpClient.read();
-    int js = body.indexOf('{');
-    if (js >= 0) Serial.println("   Response: " + body.substring(js));
 
     httpClient.stop();
     return httpCode;
+}
+
+static bool tulisUidCacheAtomik(const char* finalPath,
+                                const char* tempPath,
+                                const char* backupPath,
+                                JsonArray uids,
+                                bool allowEmpty,
+                                int &count) {
+    count = 0;
+
+    if (!ensureSdReady("uid_cache_write", true)) {
+        return false;
+    }
+
+    if (uids.isNull()) {
+        return false;
+    }
+
+    if (SD.exists(tempPath)) SD.remove(tempPath);
+
+    File file = SD.open(tempPath, FILE_WRITE);
+    if (!file) {
+        return false;
+    }
+
+    for (JsonVariant v : uids) {
+        String uid = v.as<String>();
+        uid.trim();
+        if (uid.length() == 0) continue;
+
+        file.println(uid);
+        count++;
+    }
+
+    file.close();
+
+    if (!ensureSdReady("uid_cache_temp_done", true)) {
+        return false;
+    }
+
+    if (count == 0 && !allowEmpty) {
+        SD.remove(tempPath);
+        return false;
+    }
+
+    if (SD.exists(backupPath)) SD.remove(backupPath);
+
+    bool hadFinal = SD.exists(finalPath);
+    if (hadFinal && !SD.rename(finalPath, backupPath)) {
+        SD.remove(tempPath);
+        return false;
+    }
+
+    if (!SD.rename(tempPath, finalPath)) {
+        if (hadFinal) {
+            SD.rename(backupPath, finalPath);
+        }
+        SD.remove(tempPath);
+        return false;
+    }
+
+    if (hadFinal) SD.remove(backupPath);
+    return true;
 }
 
 // ════════════════════════════════════════════════
@@ -487,7 +532,6 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas) {
 static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String msg;
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-    Serial.println("\n📩 [" + String(topic) + "] " + msg);
 
     if (String(topic) != MQTT_TOPIC_PERINTAH) return;
 
@@ -496,8 +540,6 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     DeserializationError error = deserializeJson(doc, msg);
     
     if (error) { 
-        Serial.print("⚠️ JSON tidak valid: "); 
-        Serial.println(error.c_str()); 
         return; 
     }
     
@@ -506,24 +548,18 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (perintah == "request_sync_audio") {
         // Sync file TXT
         String kelas = doc["target_kelas"] | "";
-        Serial.println("📥 request_sync_audio → " + kelas);
         if (!sdSyncAktif) { sdSyncAktif = true; sdTargetKelas = kelas; }
-        else Serial.println("⚠️ TXT sync sudah berjalan.");
     }
     else if (perintah == "request_sync_wav") {
         // Sync file WAV
         String kelas = doc["target_kelas"] | "";
-        Serial.println("📥 request_sync_wav → " + kelas);
         if (!audioSyncAktif) { audioSyncAktif = true; audioTargetKelas = kelas; }
-        else Serial.println("⚠️ Audio sync sudah berjalan.");
     }
     else if (perintah == "ack_file") {
         String namaFile = doc["file"] | "";
-        Serial.println("✅ ACK: " + namaFile);
         if (namaFile == sdFileSedangDikirim || namaFile == "") sdAckDiterima = true;
     }
     else if (perintah == "batalkan_sync") {
-        Serial.println("🛑 Batalkan sync.");
         sdAckBatalkan = true;
     }
     else if (perintah == "set_timer") {
@@ -537,20 +573,20 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
             prefs.begin("catch_note", false);
             prefs.putULong("max_record_ms", maxRecordMs);
             prefs.end();
-            
-            // --- PRINT VARIABEL TERUPDATE DI SINI ---
-            Serial.println("====================================");
-            Serial.printf("⏱️ [UPDATE DARI WEB] Batas waktu rekaman berhasil diubah!\n");
-            Serial.printf("⏱️ Variabel maxRecordMs sekarang: %lu ms\n", maxRecordMs);
-            Serial.println("====================================");
-            
-        } else {
-            Serial.println("⚠️ Parameter 'durasi_detik' kosong atau tidak valid!");
         }
     }
    // --- FITUR: SYNC DAFTAR MAHASISWA BANNED (Dari command web "sync_uid_kelas") ---
     else if (perintah == "sync_uid_aktif") { 
-        Serial.println("📥 Menerima sinkronisasi daftar mahasiswa BANNED...");
+        {
+            JsonArray uids = doc["uids"].as<JsonArray>();
+            int count = 0;
+            if (!tulisUidCacheAtomik("/banned.txt", "/banned.tmp", "/banned.bak", uids, true, count)) {
+                return;
+            }
+
+            return;
+        }
+#if 0
         
         // 1. Hapus file lama agar benar-benar ter-overwrite
         if (SD.exists("/banned.txt")) {
@@ -560,7 +596,6 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         // 2. Buat file baru
         File file = SD.open("/banned.txt", FILE_WRITE);
         if (!file) {
-            Serial.println("❌ Gagal membuka /banned.txt untuk menulis!");
             return;
         }
 
@@ -577,14 +612,22 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         
         file.close();
         
-        Serial.println("====================================");
-        Serial.printf("[UPDATE BANNED] %d UID Mahasiswa berhasil disimpan ke banned.txt!\n", count);
-        Serial.println("====================================");
     }
 
+#endif
+    }
     // --- FITUR BARU: SYNC DAFTAR PESERTA AKTIF (Sesuai gambar baris ke-2) ---
     else if (perintah == "sync_uid_kelas") {
-        Serial.println("📥 Menerima sinkronisasi peserta aktif sesi...");
+        {
+            JsonArray uids = doc["uids"].as<JsonArray>();
+            int count = 0;
+            if (!tulisUidCacheAtomik("/eligible.txt", "/eligible.tmp", "/eligible.bak", uids, false, count)) {
+                return;
+            }
+
+            return;
+        }
+#if 0
         
         if (SD.exists("/eligible.txt")) {
             SD.remove("/eligible.txt");
@@ -592,7 +635,6 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
         File file = SD.open("/eligible.txt", FILE_WRITE);
         if (!file) {
-            Serial.println("Gagal membuka /eligible.txt!");
             return;
         }
 
@@ -604,15 +646,16 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         }
         file.close();
         
-        Serial.println("====================================");
-        Serial.printf("[UPDATE eligible] %d UID berhasil disimpan ke eligible.txt!\n", count);
-        Serial.println("====================================");
     }
 }
 
 // ════════════════════════════════════════════════
 //  handleMQTT — jaga koneksi ke HiveMQ Cloud TLS
 // ════════════════════════════════════════════════
+#endif
+    }
+}
+
 void handleMQTT() {
     static bool callbackSet = false;
 
@@ -651,6 +694,7 @@ void handleMQTT() {
 
     lastMqttAttempt = millis();
 
+    mqttStopRequested = false;
     mqttConnecting = true;
 
     BaseType_t result = xTaskCreatePinnedToCore(
@@ -664,21 +708,36 @@ void handleMQTT() {
     );
 
     if (result != pdPASS) {
-        Serial.println("[MQTT] Gagal membuat task connect");
         mqttConnecting = false;
         mqttConnectTaskHandle = nullptr;
     }
 }
 
 void stopMQTT() {
+  mqttStopRequested = true;
+
+  if (mqttConnecting) {
+    unsigned long startWait = millis();
+    while (mqttConnecting && millis() - startWait < 2500) {
+      espClient.stop();
+      delay(20);
+    }
+
+    if (mqttConnecting) {
+      espClient.stop();
+      return;
+    }
+  }
+
   if (mqttClient.connected()) {
     kirimStatus("offline");
+    delay(100);
     mqttClient.disconnect();
   }
 
   espClient.stop();
+  mqttConnectTaskHandle = nullptr;
 
-  Serial.println("[MQTT] Disconnected");
 }
 
 void kirimStatus(String status_device) {
@@ -693,9 +752,7 @@ void kirimStatus(String status_device) {
     char buf[256];
     serializeJson(doc, buf);
     mqttClient.publish(MQTT_TOPIC_STATUS, buf, true);
-    Serial.println("📤 Status: " + String(buf));
 }
-
 
 void sendRegistration(String uid) {
     if (!mqttClient.connected()) return;
@@ -710,16 +767,26 @@ void sendRegistration(String uid) {
     char buf[256];
     serializeJson(doc, buf);
     mqttClient.publish(MQTT_TOPIC_REG, buf);
-    Serial.println("[MQTT] Registrasi: " + String(buf));
 }
 
 // ════════════════════════════════════════════════
 //  prosesSinkronisasiAudio — semua WAV via HTTPS
 // ════════════════════════════════════════════════
 void prosesSinkronisasiAudio(const String& targetKelas) {
-    Serial.println("\n🎵 Sinkronisasi Audio WAV → kelas: " + targetKelas);
+
+    if (!ensureSdReady("sync_audio_start", true)) {
+        kirimStatusSync("error", "SD Card tidak siap.", 0, 0);
+        audioSyncAktif = false;
+        return;
+    }
 
     File root = SD.open("/");
+    if (!root) {
+        markSdLost("sync_audio_root");
+        kirimStatusSync("error", "SD Card gagal dibaca.", 0, 0);
+        audioSyncAktif = false;
+        return;
+    }
     std::vector<String> daftarAudio;
     while (true) {
         File entry = root.openNextFile();
@@ -728,8 +795,7 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
         if (isDir) continue;
         if (isFormatDSNWav(nama) || isFormatMHSWav(nama)) {
             daftarAudio.push_back(nama);
-            Serial.println("🎵 Ditemukan: " + nama);
-        } else { Serial.println("⏭️  Skip: " + nama); }
+        }
     }
     root.close();
 
@@ -738,7 +804,6 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
         kirimStatusSync("selesai", "Tidak ada file audio untuk dikirim.", 0, 0);
         audioSyncAktif = false; return;
     }
-    Serial.printf("📦 Total WAV: %d file\n", total);
 
     for (int i = 0; i < total; i++) {
         if (sdAckBatalkan) {
@@ -746,11 +811,14 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
             audioSyncAktif = false; sdAckBatalkan = false; return;
         }
         String nama = daftarAudio[i];
-        Serial.printf("\n🎵 [%d/%d] Upload: %s\n", i + 1, total, nama.c_str());
         int httpCode = kirimAudioHTTP(nama, targetKelas);
         if (httpCode == 200 || httpCode == 201) {
-            SD.remove("/" + nama); berhasil++;
-            Serial.printf("🗑️  Dihapus. Progress: %d/%d\n", berhasil, total);
+            if (!ensureSdReady("sync_audio_remove", true) || !SD.remove("/" + nama)) {
+                kirimStatusSync("error", "SD hilang/gagal hapus: " + nama, total, berhasil);
+                audioSyncAktif = false;
+                return;
+            }
+            berhasil++;
         } else {
             kirimStatusSync("error",
                 "Gagal upload: " + nama + ". Ulangi atau batalkan?", total, berhasil);
@@ -764,7 +832,6 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
             }
         }
     }
-    Serial.printf("\n🎉 Audio sync selesai! %d/%d\n", berhasil, total);
     kirimStatusSync("selesai", "Semua audio berhasil dikirim.", total, berhasil);
     audioSyncAktif = false;
 }
@@ -773,9 +840,20 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
 //  prosesSinkronisasiSD — semua TXT via MQTT
 // ════════════════════════════════════════════════
 void prosesSinkronisasiSD(const String& targetKelas) {
-    Serial.println("\n🔄 Sinkronisasi TXT → kelas: " + targetKelas);
+
+    if (!ensureSdReady("sync_txt_start", true)) {
+        kirimStatusSync("error", "SD Card tidak siap.", 0, 0);
+        sdSyncAktif = false;
+        return;
+    }
 
     File root = SD.open("/");
+    if (!root) {
+        markSdLost("sync_txt_root");
+        kirimStatusSync("error", "SD Card gagal dibaca.", 0, 0);
+        sdSyncAktif = false;
+        return;
+    }
     std::vector<String> daftarFile;
     while (true) {
         File entry = root.openNextFile();
@@ -784,8 +862,7 @@ void prosesSinkronisasiSD(const String& targetKelas) {
         if (isDir) continue;
         if (isFormatDSNTxt(nama) || isFormatMHSTxt(nama)) {
             daftarFile.push_back(nama);
-            Serial.println("📄 Ditemukan: " + nama);
-        } else { Serial.println("⏭️  Skip: " + nama); }
+        }
     }
     root.close();
 
@@ -794,11 +871,9 @@ void prosesSinkronisasiSD(const String& targetKelas) {
         kirimStatusSync("selesai", "Tidak ada file untuk dikirim. SD Card kosong.", 0, 0);
         sdSyncAktif = false; return;
     }
-    Serial.printf("📦 Total TXT: %d file\n", total);
 
     for (int i = 0; i < total; i++) {
         String namaFile = daftarFile[i];
-        Serial.printf("\n📤 [%d/%d] %s\n", i + 1, total, namaFile.c_str());
 
         String jsonData = bacaFileSdKeJson(namaFile, targetKelas);
         if (jsonData == "") {
@@ -828,7 +903,6 @@ void prosesSinkronisasiSD(const String& targetKelas) {
             continue;
         }
 
-        Serial.println("⏳ Menunggu ACK server (maks 15 detik)...");
         unsigned long tw = millis();
         while (!sdAckDiterima && !sdAckBatalkan && millis() - tw < 15000)
             { mqttClient.loop(); delay(100); }
@@ -845,11 +919,14 @@ void prosesSinkronisasiSD(const String& targetKelas) {
                 { kirimStatusSync("dibatalkan", "Dihentikan (timeout).", total, berhasil); sdSyncAktif = false; return; }
         }
 
-        SD.remove("/" + namaFile); berhasil++;
-        Serial.printf("✅ Dihapus. Progress: %d/%d\n", berhasil, total);
+        if (!ensureSdReady("sync_txt_remove", true) || !SD.remove("/" + namaFile)) {
+            kirimStatusSync("error", "SD hilang/gagal hapus: " + namaFile, total, berhasil);
+            sdSyncAktif = false;
+            return;
+        }
+        berhasil++;
     }
 
-    Serial.printf("\n🎉 TXT sync selesai! %d/%d\n", berhasil, total);
     kirimStatusSync("selesai", "Semua file berhasil dikirim.", total, berhasil);
     sdSyncAktif = false;
 }

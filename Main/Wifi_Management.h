@@ -8,7 +8,6 @@
 
 // ── Fungsi ──
 void initWifiPortal();
-void handleResetButton();
 void bukaPortal();
 void handleWifiPortal();
 void stopWifiPortal();

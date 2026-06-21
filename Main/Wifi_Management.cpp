@@ -9,6 +9,7 @@
 #include "Config.h"
 #include "Buzzer_Module.h"
 #include "LCD_Helper.h"
+#include "I2C_Handler.h"
 
 extern LiquidCrystal_I2C lcd;
 Preferences preferences;
@@ -47,9 +48,12 @@ static void handlePortalButton() {
 
   // Tahan tombol 2 detik di portal = restart
   if (pressed && pressStart > 0 && millis() - pressStart > 2000) {
-    lcd.clear();
-    lcdPrint16(0, "  RESTARTING   ");
-    lcdPrint16(1, "MOHON TUNGGU...");
+    if (lockI2C(50)) {
+      lcd.clear();
+      lcdPrint16(0, "  RESTARTING   ");
+      lcdPrint16(1, "MOHON TUNGGU...");
+      unlockI2C();
+    }
 
     playBuzzer(1, 300, 80);
     waitBuzzerDone();
@@ -63,26 +67,28 @@ bool isWifiPortalActive() {
 
 //  bukaPortal
 void bukaPortal() {
-  Serial.println("🌐 Membuka portal konfigurasi...");
-
-  // 1. BACA DATA TERAKHIR UNTUK PRE-FILL
-  preferences.begin("catch_note", true); 
-  String saved_nim_str      = preferences.getString("nim", "");
-  String saved_eap_pass_str = preferences.getString("eap_pass", "");
-  String saved_ssid_str     = preferences.getString("ssid", ""); // Meski tadi dihapus di NVS, kita bisa tetap pakai variabel global saved_ssid jika mau, tapi ini aman jika kosong.
-  String saved_type_str     = preferences.getString("wifi_type", "biasa");
-  preferences.end();
-
-  String chk_biasa   = (saved_type_str == "biasa")   ? "active" : "";
-  String chk_eduroam = (saved_type_str == "eduroam") ? "active" : "";
-  String sec_biasa   = (saved_type_str == "biasa")   ? "show"   : "";
-  String sec_eduroam = (saved_type_str == "eduroam") ? "show"   : "";
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP("CatchNote");
   IPAddress apIP = WiFi.softAPIP();
-  Serial.printf("📡 Portal aktif! IP: %s\n", apIP.toString().c_str());
   dnsServer.start(DNS_PORT, "*", apIP);
+
+  // HTML portal (dengan pre-fill dari Preferences) hanya dibangun sekali per boot.
+  // Nilai pre-fill cuma berubah lewat /save, dan /save selalu diakhiri ESP.restart(),
+  // jadi aman untuk dipakai ulang tanpa rebuild setiap kali portal dibuka.
+  if (!portalRoutesReady) {
+    // 1. BACA DATA TERAKHIR UNTUK PRE-FILL
+    preferences.begin("catch_note", true);
+    String saved_nim_str      = preferences.getString("nim", "");
+    String saved_eap_pass_str = preferences.getString("eap_pass", "");
+    String saved_ssid_str     = preferences.getString("ssid", ""); // Meski tadi dihapus di NVS, kita bisa tetap pakai variabel global saved_ssid jika mau, tapi ini aman jika kosong.
+    String saved_type_str     = preferences.getString("wifi_type", "biasa");
+    preferences.end();
+
+    String chk_biasa   = (saved_type_str == "biasa")   ? "active" : "";
+    String chk_eduroam = (saved_type_str == "eduroam") ? "active" : "";
+    String sec_biasa   = (saved_type_str == "biasa")   ? "show"   : "";
+    String sec_eduroam = (saved_type_str == "eduroam") ? "show"   : "";
 
   // 2. BANGUN HTML DENGAN PRE-FILL
   portalHtml = R"rawhtml(
@@ -180,7 +186,6 @@ void bukaPortal() {
 </html>
 )rawhtml";
 
-  if (!portalRoutesReady) {
     server.on("/", HTTP_GET, []() {
       server.send(200, "text/html", portalHtml);
     });
@@ -202,9 +207,12 @@ void bukaPortal() {
 
     server.send(200, "text/html", "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial,sans-serif;background:#fdf4f7;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:white;border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 4px 40px rgba(232,99,140,.1);}h2{color:#e8638c;font-size:20px;}</style></head><body><div class='box'><h2>✅ Konfigurasi tersimpan!</h2><p>ESP32 akan restart...</p></div></body></html>");
 
-    lcd.clear();
-    lcdPrint16(0, "KONFIG TERSIMPAN");
-    lcdPrint16(1, "RESTART SISTEM");
+    if (lockI2C(50)) {
+      lcd.clear();
+      lcdPrint16(0, "KONFIG TERSIMPAN");
+      lcdPrint16(1, "RESTART SISTEM");
+      unlockI2C();
+    }
 
     unsigned long restartAt = millis() + 2000;
     while (millis() < restartAt) {
@@ -244,7 +252,6 @@ void bukaPortal() {
   server.begin();
   portalActive = true;
 
-  Serial.println("✅ Portal non-blocking aktif.");
 }
 
 void handleWifiPortal() {
@@ -256,8 +263,6 @@ void handleWifiPortal() {
 
 void stopWifiPortal() {
   if (!portalActive) return;
-
-  Serial.println("🛑 Menutup portal konfigurasi...");
 
   server.stop();
   dnsServer.stop();
@@ -292,13 +297,7 @@ void initWifiPortal() {
 
   preferences.end();
 
-  Serial.println("\n=== KONFIGURASI ===");
-  Serial.printf("SSID      : %s\n", saved_ssid);
-  Serial.printf("WiFi Type : %s\n", wifi_type);
-  Serial.println("===================\n");
-
   if (cekSSID == "" || cekSSID == " " || cekSSID.length() < 2) {
-    Serial.println("SSID kosong → lanjut tanpa WiFi.");
 
     saved_ssid[0] = '\0';
     wifi_pass[0]  = '\0';
@@ -307,8 +306,5 @@ void initWifiPortal() {
     lcdPrint16(0, " MODE: OFFLINE ");
     lcdPrint16(1, "WIFI BELUM DISET");
     delay(1500);
-
-  } else {
-    Serial.println("✅ Config ditemukan, lanjut boot.");
   }
 }

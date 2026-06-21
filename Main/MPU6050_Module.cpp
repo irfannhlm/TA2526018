@@ -6,8 +6,23 @@ Adafruit_MPU6050 mpu;
 
 volatile bool throwDetected = false;  // Dibaca oleh loop rekam
 
+static bool mpuReady = false;
 static TaskHandle_t throwTaskHandle = nullptr;
 static volatile bool taskShouldRun = false;
+
+static const unsigned long VAD_MOTION_SAMPLE_INTERVAL_MS = 50UL;
+static const unsigned long VAD_MOTION_EVIDENCE_WINDOW_MS = 120UL;
+static const unsigned long VAD_MOTION_HOLD_MS = 180UL;
+static const float VAD_MOTION_GYRO_DPS = 220.0f;
+static const float VAD_MOTION_TOTAL_G_DELTA = 0.35f;
+
+static unsigned long vadMotionLastReadAt = 0;
+static unsigned long vadMotionFirstEvidenceAt = 0;
+static unsigned long vadMotionLastEvidenceAt = 0;
+static uint8_t vadMotionEvidenceCount = 0;
+static bool vadMotionLastReadValid = false;
+static float vadMotionLastTotalG = 1.0f;
+static float vadMotionLastGyroDps = 0.0f;
 
 enum ThrowDetectionState {
   THROW_STATE_IDLE,
@@ -24,49 +39,9 @@ static float gyroMagnitudeDps(const sensors_event_t &g) {
   return sqrtf(gx * gx + gy * gy + gz * gz);
 }
 
-#if THROW_DEBUG
-static const char* throwStateName(ThrowDetectionState state) {
-  switch (state) {
-    case THROW_STATE_IDLE:
-      return "IDLE";
-    case THROW_STATE_AIRBORNE_CANDIDATE:
-      return "AIRBORNE";
-    case THROW_STATE_WAIT_IMPACT:
-      return "WAIT_IMPACT";
-  }
-
-  return "UNKNOWN";
-}
-
-static void logThrowEvent(const char* event,
-                          ThrowDetectionState state,
-                          const char* reason,
-                          float totalG,
-                          float gyroDps,
-                          unsigned long lowGMs,
-                          unsigned long spinMs,
-                          float minTotalG,
-                          float peakGyroDps,
-                          float peakImpactG) {
-  Serial.printf(
-    "[MPU] %s state=%s reason=%s totalG=%.2f gyroDps=%.0f lowMs=%lu spinMs=%lu minG=%.2f peakGyro=%.0f peakImpact=%.2f\n",
-    event,
-    throwStateName(state),
-    reason,
-    totalG,
-    gyroDps,
-    lowGMs,
-    spinMs,
-    minTotalG,
-    peakGyroDps,
-    peakImpactG
-  );
-}
-#endif
-
 void initMPU6050() {
   if (!mpu.begin()) {
-    Serial.println("MPU6050 Gagal");
+    mpuReady = false;
     return;
   }
 
@@ -75,7 +50,84 @@ void initMPU6050() {
   mpu.setGyroRange(MPU6050_RANGE_2000_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_44_HZ);
 
-  Serial.println("MPU6050 Ready");
+  mpuReady = true;
+}
+
+bool isVadMotionGateActive(float *totalGOut, float *gyroDpsOut) {
+  unsigned long now = millis();
+
+  if (!mpuReady) {
+    if (totalGOut != nullptr) {
+      *totalGOut = 0.0f;
+    }
+    if (gyroDpsOut != nullptr) {
+      *gyroDpsOut = 0.0f;
+    }
+    return false;
+  }
+
+  if (vadMotionLastReadAt == 0 || now - vadMotionLastReadAt >= VAD_MOTION_SAMPLE_INTERVAL_MS) {
+    vadMotionLastReadAt = now;
+
+    sensors_event_t a, g, temp;
+    bool readOK = false;
+
+    if (lockI2C(5)) {
+      mpu.getEvent(&a, &g, &temp);
+      unlockI2C();
+      readOK = true;
+    }
+
+    if (readOK) {
+      float ax = a.acceleration.x / 9.81f;
+      float ay = a.acceleration.y / 9.81f;
+      float az = a.acceleration.z / 9.81f;
+      float totalG = sqrtf(ax * ax + ay * ay + az * az);
+      float gyroDps = gyroMagnitudeDps(g);
+
+      vadMotionLastReadValid =
+        !isnan(totalG) && !isnan(gyroDps) &&
+        totalG >= 0.02f && totalG <= 8.5f &&
+        gyroDps <= 4000.0f;
+
+      if (vadMotionLastReadValid) {
+        vadMotionLastTotalG = totalG;
+        vadMotionLastGyroDps = gyroDps;
+
+        bool motionEvidence =
+          gyroDps >= VAD_MOTION_GYRO_DPS ||
+          fabsf(totalG - 1.0f) >= VAD_MOTION_TOTAL_G_DELTA;
+
+        if (motionEvidence) {
+          if (vadMotionFirstEvidenceAt == 0 ||
+              now - vadMotionFirstEvidenceAt > VAD_MOTION_EVIDENCE_WINDOW_MS) {
+            vadMotionFirstEvidenceAt = now;
+            vadMotionEvidenceCount = 1;
+          } else if (vadMotionEvidenceCount < 2) {
+            vadMotionEvidenceCount++;
+          }
+
+          vadMotionLastEvidenceAt = now;
+        } else if (vadMotionLastEvidenceAt == 0 ||
+                   now - vadMotionLastEvidenceAt > VAD_MOTION_HOLD_MS) {
+          vadMotionFirstEvidenceAt = 0;
+          vadMotionEvidenceCount = 0;
+        }
+      }
+    }
+  }
+
+  if (totalGOut != nullptr) {
+    *totalGOut = vadMotionLastReadValid ? vadMotionLastTotalG : 0.0f;
+  }
+  if (gyroDpsOut != nullptr) {
+    *gyroDpsOut = vadMotionLastReadValid ? vadMotionLastGyroDps : 0.0f;
+  }
+
+  return vadMotionLastReadValid &&
+         vadMotionEvidenceCount >= 2 &&
+         vadMotionLastEvidenceAt > 0 &&
+         now - vadMotionLastEvidenceAt <= VAD_MOTION_HOLD_MS;
 }
 
 static void throwDetectionTask(void* param) {
@@ -83,13 +135,13 @@ static void throwDetectionTask(void* param) {
   unsigned long stateStartedAt = 0;
   unsigned long impactWindowStartedAt = 0;
   unsigned long lastValidSampleAt = 0;
-  unsigned long lastDebugAt = 0;
   unsigned long lowGMs = 0;
   unsigned long spinMs = 0;
+  unsigned long strongSpinMs = 0;
   float minTotalG = 99.0f;
   float peakGyroDps = 0.0f;
   float peakImpactG = 0.0f;
-  bool spinRejectLogged = false;
+  float previousTotalG = 1.0f;
 
   while (taskShouldRun) {
     sensors_event_t a, g, temp;
@@ -124,7 +176,8 @@ static void throwDetectionTask(void* param) {
 
         bool lowGEvidence = totalG < THROW_LOW_G_THRESHOLD;
         bool spinEvidence = gyroDps > THROW_SPIN_DPS && totalG < THROW_SPIN_MAX_G;
-        bool airborneEvidence = lowGEvidence || spinEvidence;
+        bool strongSpinEvidence = gyroDps > THROW_STRONG_SPIN_DPS && totalG < THROW_STRONG_SPIN_MAX_G;
+        bool airborneEvidence = lowGEvidence || spinEvidence || strongSpinEvidence;
 
         if (state != THROW_STATE_IDLE) {
           if (totalG < minTotalG) minTotalG = totalG;
@@ -133,6 +186,7 @@ static void throwDetectionTask(void* param) {
 
           if (lowGEvidence) lowGMs += sampleDeltaMs;
           if (spinEvidence) spinMs += sampleDeltaMs;
+          if (strongSpinEvidence) strongSpinMs += sampleDeltaMs;
         }
 
         switch (state) {
@@ -142,14 +196,11 @@ static void throwDetectionTask(void* param) {
               stateStartedAt = now;
               lowGMs = lowGEvidence ? sampleDeltaMs : 0;
               spinMs = spinEvidence ? sampleDeltaMs : 0;
+              strongSpinMs = strongSpinEvidence ? sampleDeltaMs : 0;
               minTotalG = totalG;
               peakGyroDps = gyroDps;
               peakImpactG = totalG;
-              spinRejectLogged = false;
 
-#if THROW_DEBUG
-              logThrowEvent("ENTER", state, lowGEvidence ? "low_g" : "gyro_spin", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
             }
             break;
 
@@ -157,56 +208,37 @@ static void throwDetectionTask(void* param) {
             bool cleanLowGValid = lowGMs >= THROW_MIN_LOW_G_MS && minTotalG <= THROW_CLEAN_LOW_G_THRESHOLD;
             bool sustainedLowGValid = lowGMs >= THROW_MIN_FLIGHT_MS;
             bool lowGValid = cleanLowGValid || sustainedLowGValid;
-            bool spinDurationValid = spinMs >= THROW_MIN_SPIN_MS;
-            bool spinReleaseEvidence = minTotalG <= THROW_SPIN_RELEASE_G || lowGMs >= THROW_SPIN_MIN_LOW_G_MS;
-            bool spinValid = spinDurationValid && spinReleaseEvidence;
+            bool normalSpinDurationValid = spinMs >= THROW_MIN_SPIN_MS;
+            bool normalSpinReleaseEvidence = minTotalG <= THROW_SPIN_RELEASE_G || lowGMs >= THROW_SPIN_MIN_LOW_G_MS;
+            bool normalSpinValid = normalSpinDurationValid && normalSpinReleaseEvidence;
+            bool strongSpinDurationValid = strongSpinMs >= THROW_MIN_STRONG_SPIN_MS;
+            bool strongSpinReleaseEvidence = minTotalG <= THROW_STRONG_SPIN_RELEASE_G;
+            bool strongSpinValid = strongSpinDurationValid && strongSpinReleaseEvidence;
 
-#if THROW_DEBUG
-            if (spinDurationValid && !spinReleaseEvidence && !spinRejectLogged) {
-              logThrowEvent("REJECT", state, "spin_rejected_no_release", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-              spinRejectLogged = true;
-            }
-#endif
-
-            if (lowGValid || spinValid) {
+            if (lowGValid || normalSpinValid || strongSpinValid) {
               state = THROW_STATE_WAIT_IMPACT;
               impactWindowStartedAt = now;
 
-#if THROW_DEBUG
-              const char* validReason = "spin_valid_release";
-              if (cleanLowGValid) {
-                validReason = "low_g_valid";
-              } else if (sustainedLowGValid) {
-                validReason = "low_g_sustained";
-              }
-              logThrowEvent("ENTER", state, validReason, totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
             } else if (!airborneEvidence && totalG > THROW_EXIT_LOW_G) {
-#if THROW_DEBUG
-              logThrowEvent("RESET", state, "candidate_lost", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
               state = THROW_STATE_IDLE;
               stateStartedAt = 0;
               impactWindowStartedAt = 0;
               lowGMs = 0;
               spinMs = 0;
+              strongSpinMs = 0;
               minTotalG = 99.0f;
               peakGyroDps = 0.0f;
               peakImpactG = 0.0f;
-              spinRejectLogged = false;
             } else if (now - stateStartedAt > THROW_IMPACT_WINDOW_MS) {
-#if THROW_DEBUG
-              logThrowEvent("RESET", state, "candidate_timeout", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
               state = THROW_STATE_IDLE;
               stateStartedAt = 0;
               impactWindowStartedAt = 0;
               lowGMs = 0;
               spinMs = 0;
+              strongSpinMs = 0;
               minTotalG = 99.0f;
               peakGyroDps = 0.0f;
               peakImpactG = 0.0f;
-              spinRejectLogged = false;
             }
             break;
           }
@@ -215,51 +247,50 @@ static void throwDetectionTask(void* param) {
             if (totalG >= THROW_IMPACT_G) {
               unsigned long flightMs = now - stateStartedAt;
               unsigned long impactDelayMs = now - impactWindowStartedAt;
+              float impactRiseG = totalG - previousTotalG;
+              bool impactSharp = impactRiseG >= THROW_IMPACT_RISE_G;
+              bool hardImpact = totalG >= THROW_HARD_IMPACT_G;
 
               if (flightMs < THROW_MIN_FLIGHT_MS || impactDelayMs < THROW_MIN_IMPACT_DELAY_MS) {
-#if THROW_DEBUG
-                logThrowEvent("RESET", state, "impact_too_soon", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
                 state = THROW_STATE_IDLE;
                 stateStartedAt = 0;
                 impactWindowStartedAt = 0;
                 lowGMs = 0;
                 spinMs = 0;
+                strongSpinMs = 0;
                 minTotalG = 99.0f;
                 peakGyroDps = 0.0f;
                 peakImpactG = 0.0f;
-                spinRejectLogged = false;
+              } else if (!impactSharp && !hardImpact) {
+                state = THROW_STATE_IDLE;
+                stateStartedAt = 0;
+                impactWindowStartedAt = 0;
+                lowGMs = 0;
+                spinMs = 0;
+                strongSpinMs = 0;
+                minTotalG = 99.0f;
+                peakGyroDps = 0.0f;
+                peakImpactG = 0.0f;
               } else {
                 throwDetected = true;
                 taskShouldRun = false;
 
-#if THROW_DEBUG
-                logThrowEvent("TRIGGER", state, "impact", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
               }
             } else if (now - impactWindowStartedAt > THROW_IMPACT_WINDOW_MS) {
-#if THROW_DEBUG
-              logThrowEvent("RESET", state, "impact_timeout", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-#endif
               state = THROW_STATE_IDLE;
               stateStartedAt = 0;
               impactWindowStartedAt = 0;
               lowGMs = 0;
               spinMs = 0;
+              strongSpinMs = 0;
               minTotalG = 99.0f;
               peakGyroDps = 0.0f;
               peakImpactG = 0.0f;
-              spinRejectLogged = false;
             }
             break;
         }
 
-#if THROW_DEBUG
-        if (now - lastDebugAt >= 100UL) {
-          lastDebugAt = now;
-          logThrowEvent("SAMPLE", state, "periodic", totalG, gyroDps, lowGMs, spinMs, minTotalG, peakGyroDps, peakImpactG);
-        }
-#endif
+        previousTotalG = totalG;
       }
     }
 
@@ -287,7 +318,6 @@ void startThrowDetectionTask() {
   );
 
   if (result != pdPASS) {
-    Serial.println("[MPU] Gagal membuat task ThrowDetect");
     throwTaskHandle = nullptr;
     taskShouldRun = false;
   }

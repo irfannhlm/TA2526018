@@ -12,42 +12,15 @@
 #include "Adafruit_MAX1704X.h"
 #include <Preferences.h>
 #include <SD.h>
-#include "IdentTiming.h"
 #include "I2C_Handler.h"
 #include "Buzzer_Module.h"
 #include "LCD_Helper.h"
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/task.h>
 
 #define MAX_PESERTA        100
 #define ERROR_DISPLAY_TIME 2000
-
-#include <sys/time.h>
-
-uint64_t t1EpochMs = 0;
-uint64_t t2EpochMs = 0;
-
-uint64_t getEpochMs() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return ((uint64_t)tv.tv_sec * 1000ULL) + (tv.tv_usec / 1000);
-}
-
-String getTimestampMs() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-
-  struct tm timeinfo;
-  localtime_r(&tv.tv_sec, &timeinfo);
-
-  char tanggalJam[30];
-  strftime(tanggalJam, sizeof(tanggalJam), "%d-%m-%Y %H:%M:%S", &timeinfo);
-
-  char finalTime[40];
-  snprintf(finalTime, sizeof(finalTime), "%s.%03ld", tanggalJam, tv.tv_usec / 1000);
-
-  return String(finalTime);
-}
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -60,11 +33,11 @@ Adafruit_MAX17048 maxlipo;
 float batteryVoltage = 0.0;
 float batteryPercent = 0.0;
 
-volatile int buttonClicks = 0;
-volatile unsigned long lastClickTime = 0;
-volatile bool holdRequested = false;
-volatile bool buttonIgnoreUntilReleased = false;
+volatile unsigned long buttonCooldownUntil = 0;
+volatile bool buttonSuppressUntilReleased = false;
+volatile uint32_t buttonResetSeq = 0;
 static TaskHandle_t buttonTaskHandle = nullptr;
+static QueueHandle_t buttonEventQueue = nullptr;
 static portMUX_TYPE buttonMux = portMUX_INITIALIZER_UNLOCKED;
 
 unsigned long lastBatteryCheck = 0;
@@ -78,14 +51,20 @@ int    jumlahPeserta = 0;
 enum OperatingMode { MODE_KOMUNIKASI, MODE_DOSEN, MODE_MAHASISWA };
 volatile OperatingMode currentMode = MODE_KOMUNIKASI;
 
-enum SystemState { STANDBY, INVALID, UNREGISTERED, BANNED, SD_ERROR, AUTHORIZED, TIMEOUT, RECORDING, NO_QUESTION };
+enum SystemState { STANDBY, INVALID, UNREGISTERED, BANNED, SD_ERROR, RFID_ERROR, DATA_ERROR, AUTHORIZED_BEEP, AUTHORIZED_SETTLE, AUTHORIZED, TIMEOUT, RECORDING, NO_QUESTION };
 SystemState state     = STANDBY;
 SystemState lastState = (SystemState)-1;
 
 const unsigned long BUTTON_POLL_MS           = 10;
-const unsigned long BUTTON_DEBOUNCE_MS       = 60;
-const unsigned long CLICK_EVALUATE_MS        = 500;
+const unsigned long BUTTON_DEBOUNCE_MS       = 30;
+const unsigned long BUTTON_MIN_CLICK_MS      = 20;
+const unsigned long CLICK_EVALUATE_MS        = 300;
+const unsigned long BUTTON_POST_ACTION_COOLDOWN_MS = 350;
 const unsigned long LONG_PRESS_TIME          = 3000;
+const int BUTTON_MAX_CLICK_COUNT             = 3;
+const uint16_t AUTHORIZED_BEEP_ON_MS         = 150;
+const uint16_t AUTHORIZED_BEEP_OFF_MS        = 40;
+const unsigned long AUTHORIZED_SETTLE_MS     = 200;
 
 bool pendingWifiReconnect = false;
 
@@ -95,6 +74,7 @@ unsigned long stateTimer    = 0;
 String        currentUID    = "";
 unsigned long waktuMulai    = 0;
 unsigned long waktuRespon   = 0;
+unsigned long authorizedSettleStarted = 0;
 int           lastCountdown = -1;
 unsigned long lastRegTime   = 0;
 static String lastWifiLine = "";
@@ -103,15 +83,73 @@ static String lastWifiLine = "";
 static unsigned long lastHeartbeatTime = 0;
 const  unsigned long HEARTBEAT_MS      = 10000;
 
-void clearButtonState() {
-  bool ignoreRelease = (digitalRead(BUTTON_PIN) == LOW);
+enum ButtonEventType : uint8_t {
+  BUTTON_EVENT_CLICKS = 1,
+  BUTTON_EVENT_HOLD   = 2
+};
+
+struct ButtonEvent {
+  uint8_t type;
+  uint8_t clicks;
+  unsigned long at;
+};
+
+void resetButtonInput(const char* reason, unsigned long cooldownMs) {
+  unsigned long now = millis();
+  bool pressed = (digitalRead(BUTTON_PIN) == LOW);
 
   portENTER_CRITICAL(&buttonMux);
-  buttonClicks = 0;
-  lastClickTime = 0;
-  holdRequested = false;
-  buttonIgnoreUntilReleased = ignoreRelease;
+  buttonSuppressUntilReleased = pressed;
+  buttonCooldownUntil = (cooldownMs > 0) ? (now + cooldownMs) : 0;
+  buttonResetSeq++;
   portEXIT_CRITICAL(&buttonMux);
+
+  if (buttonEventQueue != nullptr) {
+    xQueueReset(buttonEventQueue);
+  }
+}
+
+void clearButtonState() {
+  resetButtonInput("clear", 0);
+}
+
+void consumeButtonGesture(const char* reason) {
+  resetButtonInput(reason, BUTTON_POST_ACTION_COOLDOWN_MS);
+}
+
+// Buang gesture yang ditolak/diabaikan TANPA penalti cooldown panjang,
+// supaya klik berikutnya tidak ikut "kena hukum" (penyebab harus klik berkali-kali).
+void dropButtonGesture(const char* reason) {
+  resetButtonInput(reason, 0);
+}
+
+// Beep penanda ganti mode: switch (1/2 click) = 1 beep pendek, cycle (3 click) = 2 beep.
+// Non-blocking; akan di-flush oleh waitBuzzerDone() di setOperatingMode sebelum init.
+void beepSwitch(bool isCycle) {
+  playBuzzer(isCycle ? 2 : 1, 60, 60);
+}
+
+// Dipanggil dari loop rekam (rekamSuara, AudioSD_Module.cpp) untuk mendeteksi
+// permintaan stop manual: double click atau lebih (>=2). Non-blocking.
+bool pollManualStopRecording() {
+  if (buttonEventQueue == nullptr) return false;
+
+  ButtonEvent event;
+  if (xQueueReceive(buttonEventQueue, &event, 0) != pdPASS) return false;
+
+  return (event.type == BUTTON_EVENT_CLICKS && event.clicks >= 2);
+}
+
+void queueButtonEvent(uint8_t type, uint8_t clicks) {
+  if (buttonEventQueue == nullptr) return;
+
+  ButtonEvent event = {
+    type,
+    clicks,
+    millis()
+  };
+
+  xQueueSend(buttonEventQueue, &event, 0);
 }
 
 void buttonPollingTask(void* param) {
@@ -119,11 +157,32 @@ void buttonPollingTask(void* param) {
   bool stableState = rawLast;
   unsigned long rawChangedAt = millis();
   unsigned long pressStartedAt = (stableState == LOW) ? millis() : 0;
+  unsigned long lastReleaseAt = 0;
+  uint8_t clickCount = 0;
+  bool sequenceNoise = false;
   bool holdReported = false;
+  uint32_t localResetSeq = buttonResetSeq;
 
   while (true) {
     unsigned long now = millis();
     bool raw = digitalRead(BUTTON_PIN);
+    uint32_t resetSeqSnapshot = 0;
+
+    portENTER_CRITICAL(&buttonMux);
+    resetSeqSnapshot = buttonResetSeq;
+    portEXIT_CRITICAL(&buttonMux);
+
+    if (resetSeqSnapshot != localResetSeq) {
+      localResetSeq = resetSeqSnapshot;
+      rawLast = raw;
+      stableState = raw;
+      rawChangedAt = now;
+      pressStartedAt = (stableState == LOW) ? now : 0;
+      lastReleaseAt = 0;
+      clickCount = 0;
+      sequenceNoise = false;
+      holdReported = false;
+    }
 
     if (raw != rawLast) {
       rawLast = raw;
@@ -137,39 +196,83 @@ void buttonPollingTask(void* param) {
         pressStartedAt = now;
         holdReported = false;
       } else {
-        bool ignoreRelease = false;
+        bool suppressed = false;
+        bool cooldownActive = false;
+        unsigned long pressDuration = (pressStartedAt > 0) ? (now - pressStartedAt) : 0;
 
         portENTER_CRITICAL(&buttonMux);
-        ignoreRelease = buttonIgnoreUntilReleased;
-        if (buttonIgnoreUntilReleased) {
-          buttonIgnoreUntilReleased = false;
+        suppressed = buttonSuppressUntilReleased;
+        if (buttonSuppressUntilReleased) {
+          buttonSuppressUntilReleased = false;
+        }
+        cooldownActive = (buttonCooldownUntil != 0 && now < buttonCooldownUntil);
+        portEXIT_CRITICAL(&buttonMux);
+
+        if (!holdReported &&
+            !suppressed &&
+            !cooldownActive &&
+            pressDuration >= BUTTON_MIN_CLICK_MS) {
+          if (clickCount < BUTTON_MAX_CLICK_COUNT + 1) {
+            clickCount++;
+          }
+          lastReleaseAt = now;
+
+          if (clickCount > BUTTON_MAX_CLICK_COUNT) {
+            sequenceNoise = true;
+          }
         }
 
-        if (!holdReported && !ignoreRelease) {
-          if (buttonClicks < 10) {
-            buttonClicks++;
-          }
-          lastClickTime = now;
+        if (suppressed || cooldownActive) {
+          clickCount = 0;
+          lastReleaseAt = 0;
+          sequenceNoise = false;
         }
-        portEXIT_CRITICAL(&buttonMux);
 
         pressStartedAt = 0;
         holdReported = false;
       }
     }
 
+    bool suppressBlocksHold = false;
+    bool cooldownBlocksHold = false;
+    portENTER_CRITICAL(&buttonMux);
+    suppressBlocksHold = buttonSuppressUntilReleased;
+    cooldownBlocksHold = (buttonCooldownUntil != 0 && now < buttonCooldownUntil);
+    portEXIT_CRITICAL(&buttonMux);
+
     if (stableState == LOW &&
         pressStartedAt > 0 &&
         !holdReported &&
+        !suppressBlocksHold &&
+        !cooldownBlocksHold &&
         now - pressStartedAt >= LONG_PRESS_TIME) {
       portENTER_CRITICAL(&buttonMux);
-      holdRequested = true;
-      buttonClicks = 0;
-      lastClickTime = 0;
-      buttonIgnoreUntilReleased = true;
+      buttonSuppressUntilReleased = true;
+      buttonCooldownUntil = now + BUTTON_POST_ACTION_COOLDOWN_MS;
       portEXIT_CRITICAL(&buttonMux);
 
+      if (buttonEventQueue != nullptr) {
+        xQueueReset(buttonEventQueue);
+      }
+
+      queueButtonEvent(BUTTON_EVENT_HOLD, 0);
+      clickCount = 0;
+      lastReleaseAt = 0;
+      sequenceNoise = false;
       holdReported = true;
+    }
+
+    if (stableState == HIGH &&
+        clickCount > 0 &&
+        lastReleaseAt > 0 &&
+        now - lastReleaseAt > CLICK_EVALUATE_MS) {
+      if (!sequenceNoise && clickCount <= BUTTON_MAX_CLICK_COUNT) {
+        queueButtonEvent(BUTTON_EVENT_CLICKS, clickCount);
+      }
+
+      clickCount = 0;
+      lastReleaseAt = 0;
+      sequenceNoise = false;
     }
 
     vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_MS));
@@ -179,12 +282,20 @@ void buttonPollingTask(void* param) {
 void startButtonTask() {
   if (buttonTaskHandle != nullptr) return;
 
-  bool ignoreRelease = (digitalRead(BUTTON_PIN) == LOW);
+  if (buttonEventQueue == nullptr) {
+    buttonEventQueue = xQueueCreate(4, sizeof(ButtonEvent));
+    if (buttonEventQueue == nullptr) {
+      return;
+    }
+  } else {
+    xQueueReset(buttonEventQueue);
+  }
+
+  bool pressed = (digitalRead(BUTTON_PIN) == LOW);
   portENTER_CRITICAL(&buttonMux);
-  buttonClicks = 0;
-  lastClickTime = 0;
-  holdRequested = false;
-  buttonIgnoreUntilReleased = ignoreRelease;
+  buttonSuppressUntilReleased = pressed;
+  buttonCooldownUntil = 0;
+  buttonResetSeq++;
   portEXIT_CRITICAL(&buttonMux);
 
   BaseType_t ok = xTaskCreatePinnedToCore(
@@ -199,7 +310,6 @@ void startButtonTask() {
 
   if (ok != pdPASS) {
     buttonTaskHandle = nullptr;
-    Serial.println("[BUTTON] Gagal membuat task polling.");
   }
 }
 
@@ -215,18 +325,38 @@ void simpanHistory(String uid) {
 }
 
 bool isModeChangeAllowed() {
-  // Tombol mode hanya boleh diproses saat sistem idle
-  if (state != STANDBY) return false;
+  switch (state) {
+    case STANDBY:
+    case INVALID:
+    case UNREGISTERED:
+    case BANNED:
+    case SD_ERROR:
+    case RFID_ERROR:
+    case DATA_ERROR:
+    case TIMEOUT:
+    case NO_QUESTION:
+    // Saat authorized / menunggu suara, double/triple click tetap boleh
+    // switch atau cycle mode (membatalkan sesi authorized berjalan).
+    case AUTHORIZED_BEEP:
+    case AUTHORIZED_SETTLE:
+    case AUTHORIZED:
+      return true;
 
-  return true;
+    // Saat rekaman: tidak pindah mode. Double click ditangani sebagai
+    // stop manual di dalam loop rekam (lihat pollManualStopRecording).
+    case RECORDING:
+      return false;
+  }
+
+  return false;
 }
 
 void masukModeDebug() {
   lcd.clear();
   lcdPrint16(0, "   MODE SETUP  ");
   lcdPrint16(1, "  WIFI CONFIG  ");
-  
-  playBuzzer(2, 100, 100);
+
+  playBuzzer(1, 60, 60); // switch (1/2 click) = 1 beep pendek
   waitBuzzerDone();
 
   stopMQTT();
@@ -252,39 +382,49 @@ void prepareDeepSleep() {
   playBuzzer(1, 500, 80);
   waitBuzzerDone();
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
-  // powerDownPN532();
-  Serial.println("Entering Deep Sleep...");
   esp_deep_sleep_start();
 }
 
-void muatDaftarEligible() {
-  jumlahTerdaftar = 0; // Reset isi array
-  
+DataLoadStatus muatDaftarEligible() {
+  if (!ensureSdReady("load_eligible", true)) {
+    return DATA_LOAD_SD_ERROR;
+  }
+
   if (!SD.exists("/eligible.txt")) {
-    Serial.println("File /eligible.txt tidak ditemukan. Daftar kelas kosong!");
-    return;
+    jumlahTerdaftar = 0;
+    return DATA_LOAD_EMPTY;
   }
 
   File file = SD.open("/eligible.txt", FILE_READ);
   if (!file) {
-    Serial.println("Gagal membaca /eligible.txt");
-    return;
+    markSdLost("load_eligible_open");
+    return DATA_LOAD_SD_ERROR;
   }
 
-  while (file.available() && jumlahTerdaftar < MAX_PESERTA) {
+  String loadedList[MAX_PESERTA];
+  int loadedCount = 0;
+
+  while (file.available() && loadedCount < MAX_PESERTA) {
     String line = file.readStringUntil('\n');
     line.trim(); 
     
     if (line.length() > 0) {
-      listTerdaftar[jumlahTerdaftar] = line;
-      jumlahTerdaftar++;
+      loadedList[loadedCount] = line;
+      loadedCount++;
     }
   }
   file.close();
-  
-  Serial.println("====================================");
-  Serial.printf("Berhasil memuat %d UID ke memori Kelas\n", jumlahTerdaftar);
-  Serial.println("====================================");
+
+  if (!ensureSdReady("load_eligible_done", true)) {
+    return DATA_LOAD_SD_ERROR;
+  }
+
+  jumlahTerdaftar = loadedCount;
+  for (int i = 0; i < loadedCount; i++) {
+    listTerdaftar[i] = loadedList[i];
+  }
+
+  return (jumlahTerdaftar > 0) ? DATA_LOAD_OK : DATA_LOAD_EMPTY;
 }
 
 // Fungsi Pengecekan UID di daftar kelas
@@ -298,33 +438,74 @@ bool cekTerdaftar(String uid) {
 
 int jumlahBanned = 0;
 
-void muatDaftarBanned() {
-  jumlahBanned = 0; // Reset isi array
-  
+DataLoadStatus muatDaftarBanned() {
+  if (!ensureSdReady("load_banned", true)) {
+    return DATA_LOAD_SD_ERROR;
+  }
+
   if (!SD.exists("/banned.txt")) {
-    Serial.println("ℹ️ File /banned.txt kosong/tidak ada. Semua mahasiswa diizinkan.");
-    return;
+    jumlahBanned = 0;
+    return DATA_LOAD_EMPTY;
   }
 
   File file = SD.open("/banned.txt", FILE_READ);
   if (!file) {
-    Serial.println("Gagal membaca /banned.txt");
-    return;
+    markSdLost("load_banned_open");
+    return DATA_LOAD_SD_ERROR;
   }
 
-  while (file.available() && jumlahBanned < MAX_PESERTA) {
+  String loadedList[MAX_PESERTA];
+  int loadedCount = 0;
+
+  while (file.available() && loadedCount < MAX_PESERTA) {
     String line = file.readStringUntil('\n');
     line.trim(); 
     
     if (line.length() > 0) {
-      listBanned[jumlahBanned] = line;
-      jumlahBanned++;
+      loadedList[loadedCount] = line;
+      loadedCount++;
     }
   }
   file.close();
 
-  Serial.printf("Berhasil memuat %d UID ke memori BANNED\n", jumlahBanned);
+  if (!ensureSdReady("load_banned_done", true)) {
+    return DATA_LOAD_SD_ERROR;
+  }
 
+  jumlahBanned = loadedCount;
+  for (int i = 0; i < loadedCount; i++) {
+    listBanned[i] = loadedList[i];
+  }
+
+  return (jumlahBanned > 0) ? DATA_LOAD_OK : DATA_LOAD_EMPTY;
+}
+
+void masukSdError(const char* konteks) {
+  currentUID = "";
+  resetVadState();
+  stateTimer = millis();
+  state = SD_ERROR;
+  lastState = (SystemState)-1;
+}
+
+bool pastikanSdOperasional(const char* konteks, bool forceProbe) {
+  if (ensureSdReady(konteks, forceProbe)) return true;
+
+  masukSdError(konteks);
+  return false;
+}
+
+void tandaiDataMahasiswaKosong() {
+  if (jumlahTerdaftar > 0) return;
+
+  if (!isSdReady()) {
+    masukSdError("eligible_cache_without_sd");
+    return;
+  }
+
+  stateTimer = millis();
+  state = DATA_ERROR;
+  lastState = (SystemState)-1;
 }
 
 bool cekBanned(String uid) {
@@ -507,6 +688,16 @@ void updateLCD() {
       lcdPrint16(1, "BATAL DALAM " + twoDigit(timeoutSekarang) + "s");
       break;
 
+    case AUTHORIZED_BEEP:
+      lcdPrint16(0, "  IZIN REKAM  ");
+      lcdPrint16(1, " MOHON TUNGGU ");
+      break;
+
+    case AUTHORIZED_SETTLE:
+      lcdPrint16(0, " SIAPKAN SUARA ");
+      lcdPrint16(1, " MOHON TUNGGU ");
+      break;
+
     case RECORDING:
       lcdPrint16(0, " SEDANG MEREKAM");
       lcdPrint16(1, "    ------      ");
@@ -535,6 +726,16 @@ void updateLCD() {
     case SD_ERROR:
       lcdPrint16(0, "  SISTEM ERROR  ");
       lcdPrint16(1, " SD CARD GAGAL ");
+      break;
+
+    case RFID_ERROR:
+      lcdPrint16(0, "  RFID ERROR   ");
+      lcdPrint16(1, "  CEK SENSOR   ");
+      break;
+
+    case DATA_ERROR:
+      lcdPrint16(0, " DATA KLS KOSONG");
+      lcdPrint16(1, "  SYNC DULU    ");
       break;
 
     case NO_QUESTION:
@@ -575,72 +776,82 @@ void setOperatingMode(int nextModeValue) {
     updateLCD();
   }
 
-  playBuzzer((uint8_t)currentMode + 1, 40, 40);
+  // Selesaikan dulu beep pendek yang dipicu pemanggil (mis. beepSwitch / beep
+  // thrown) supaya nada tidak nyangkut ON selama blocking init di bawah —
+  // updateBuzzer() baru jalan lagi setelah kembali ke loop().
   waitBuzzerDone();
 
   if (currentMode == MODE_DOSEN) {
     stopWiFi();
-    delay(200);
+    delay(50); // jeda settle radio sebelum power-up SD/I2C, jangan dihapus total
+    resumeSdRecovery();
     initAudioSD();
+    pastikanSdOperasional("mode_dosen", true);
   }
   else if (currentMode == MODE_MAHASISWA) {
     stopWiFi();
-    delay(200);
+    delay(50); // jeda settle radio sebelum power-up SD/I2C, jangan dihapus total
+    resumeSdRecovery();
+    // PN532 di-init lazy oleh state machine STANDBY (lihat scan di MODE_MAHASISWA),
+    // tidak di-eager-init di sini supaya ganti mode tidak blocking.
     initAudioSD();
-    muatDaftarEligible();
-    muatDaftarBanned();
+
+    if (pastikanSdOperasional("mode_mahasiswa", true)) {
+      DataLoadStatus eligibleStatus = muatDaftarEligible();
+      DataLoadStatus bannedStatus = muatDaftarBanned();
+
+      if (eligibleStatus == DATA_LOAD_SD_ERROR || bannedStatus == DATA_LOAD_SD_ERROR) {
+        masukSdError("mode_mahasiswa_load");
+      } else if (eligibleStatus == DATA_LOAD_EMPTY) {
+        tandaiDataMahasiswaKosong();
+      }
+    }
   }
   else if (currentMode == MODE_KOMUNIKASI) {
     deinitAudio();
+    pauseSdRecovery();
+    // PN532 di-init lazy oleh state machine STANDBY KOMUNIKASI saat scan,
+    // tidak di-eager-init di sini supaya ganti mode tidak blocking.
     startWiFi();
     lastRegTime       = 0;
     lastHeartbeatTime = 0;
   }
 
   lastState = (SystemState)-1;
+  consumeButtonGesture("mode_change");
 }
 
 void checkModeButton() {
-  bool shouldSleep = false;
-  int queuedClicks = 0;
-  unsigned long queuedAt = 0;
+  if (buttonEventQueue == nullptr) return;
 
-  portENTER_CRITICAL(&buttonMux);
-  shouldSleep = holdRequested;
-  if (shouldSleep) {
-    holdRequested = false;
-    buttonClicks = 0;
-    lastClickTime = 0;
-  } else {
-    queuedClicks = buttonClicks;
-    queuedAt = lastClickTime;
-  }
-  portEXIT_CRITICAL(&buttonMux);
+  ButtonEvent event;
+  if (xQueueReceive(buttonEventQueue, &event, 0) != pdPASS) return;
 
-  if (shouldSleep) {
+  if (event.type == BUTTON_EVENT_HOLD) {
+    resetButtonInput("hold_deep_sleep", BUTTON_POST_ACTION_COOLDOWN_MS);
     prepareDeepSleep();
     return;
   }
 
-  unsigned long now = millis();
-  if (queuedClicks <= 0 || now - queuedAt <= CLICK_EVALUATE_MS) return;
+  if (event.type != BUTTON_EVENT_CLICKS || event.clicks == 0) return;
 
-  int clicks = 0;
-  portENTER_CRITICAL(&buttonMux);
-  if (buttonClicks > 0 && now - lastClickTime > CLICK_EVALUATE_MS) {
-    clicks = buttonClicks;
-    buttonClicks = 0;
-    lastClickTime = 0;
+  int clicks = event.clicks;
+  if (clicks > BUTTON_MAX_CLICK_COUNT) {
+    dropButtonGesture("noise_clicks");
+    return;
   }
-  portEXIT_CRITICAL(&buttonMux);
 
-  if (clicks <= 0) return;
-  if (!isModeChangeAllowed()) return;
+  if (!isModeChangeAllowed()) {
+    // Tidak menghukum klik dengan cooldown panjang: cukup buang.
+    dropButtonGesture("state_busy");
+    return;
+  }
 
   if ((clicks == 1 || clicks == 2) && currentMode == MODE_KOMUNIKASI) {
     // Single/double click di MODE_KOMUNIKASI: ONLINE <-> SET WIFI
     if (isWifiPortalActive()) {
       // SET WIFI -> MODE ONLINE
+      consumeButtonGesture("comm_portal_to_online");
       stopWifiPortal();
 
       lcd.clear();
@@ -658,17 +869,20 @@ void checkModeButton() {
     } 
     else {
       // MODE ONLINE -> SET WIFI
+      consumeButtonGesture("comm_online_to_portal");
       masukModeDebug();
     }
   }
 
   else if (clicks == 1) {
-    Serial.println("1 click diabaikan di mode utama");
+    dropButtonGesture("single_ignored");
   }
 
   else if (clicks == 2) {
     // Double click di mode utama non-komunikasi:
-    // DOSEN <-> MAHASISWA
+    // DOSEN <-> MAHASISWA (switch = 1 beep pendek)
+    consumeButtonGesture("double_mode_action");
+    beepSwitch(false);
     if (currentMode == MODE_DOSEN) {
       setOperatingMode(MODE_MAHASISWA);
     }
@@ -677,10 +891,12 @@ void checkModeButton() {
     }
   }
 
-  else if (clicks >= 3) {
-    // Triple click:
+  else if (clicks == 3) {
+    // Triple click (cycle = 2 beep pendek):
     // Mode utama -> KOMUNIKASI
     // KOMUNIKASI -> DOSEN
+    consumeButtonGesture("triple_mode_action");
+    beepSwitch(true);
     if (currentMode == MODE_KOMUNIKASI) {
       if (isWifiPortalActive()) {
         stopWifiPortal();
@@ -799,17 +1015,11 @@ void checkBattery() {
       }
 
       // --- Cetak status hanya kalau pembacaan berhasil ---
-      // Serial.println("=== STATUS BATERAI ===");
-      // Serial.printf("Raw Voltage : %.2f V\n", batteryVoltage);
-      // Serial.printf("Smooth Volt : %.2f V\n", smoothedVoltage);
 
       if (isnan(batteryPercent)) {
-        // Serial.println("Battery : USB Power / No Battery");
       } else {
-        // Serial.printf("Battery : %.1f %%\n", batteryPercent);
       }
 
-      // Serial.println("======================");
     }
   }
 
@@ -840,6 +1050,7 @@ void checkBattery() {
 
 void mulaiAuthorizedWindow(const String &uid) {
   currentUID = uid;
+  authorizedSettleStarted = 0;
 
   resetVadState();
   clearPreRecordBuffer();
@@ -847,21 +1058,25 @@ void mulaiAuthorizedWindow(const String &uid) {
 
   waktuMulai = millis();
 
-  // Timestamp absolut hanya untuk log/debug.
-  // Interval utama tetap pakai millis().
-  t1EpochMs = getEpochMs();
-
   lastCountdown = -1;
   lastState = (SystemState)-1;
 
   state = AUTHORIZED;
+}
 
-  Serial.println("------------- T1 -------------");
-  Serial.printf("[T1] Authorized UID : %s\n", currentUID.c_str());
-  Serial.printf("[T1] Timestamp      : %s\n", getTimestampMs().c_str());
-  Serial.printf("[T1] epoch_ms       : %llu\n", (unsigned long long)t1EpochMs);
-  Serial.printf("[T1] millis         : %lu\n", waktuMulai);
-  Serial.println("------------------------------");
+void mulaiAuthorizedBeep(const String &uid) {
+  currentUID = uid;
+
+  resetVadState();
+  clearPreRecordBuffer();
+  resetAudioFilters();
+
+  lastCountdown = -1;
+  lastState = (SystemState)-1;
+
+  authorizedSettleStarted = 0;
+  state = AUTHORIZED_BEEP;
+  playBuzzer(1, AUTHORIZED_BEEP_ON_MS, AUTHORIZED_BEEP_OFF_MS);
 }
 
 // ════════════════════════════════════════════════
@@ -870,8 +1085,6 @@ void mulaiAuthorizedWindow(const String &uid) {
 void setup() {
   pinMode(EN_POWER, OUTPUT);
   digitalWrite(EN_POWER, HIGH); // nyalakan power rail
-
-  Serial.begin(115200);
 
   // 1. NVS wajib pertama
   esp_err_t ret = nvs_flash_init();
@@ -892,17 +1105,11 @@ void setup() {
 
   // Init MAX17048
   if (!maxlipo.begin()) {
-    Serial.println("MAX17048 tidak terdeteksi!");
   } else {
-    Serial.println("MAX17048 Ready");
   }
     
   batteryVoltage = maxlipo.cellVoltage();
   batteryPercent = maxlipo.cellPercent();
-
-  Serial.printf("Battery awal: %.1f%% | %.2fV\n",
-                batteryPercent,
-                batteryVoltage);
 
   lcd.init();
   lcd.backlight();
@@ -927,42 +1134,31 @@ void setup() {
   maxRecordMs = prefs.getULong("max_record_ms", 300000); 
   active_threshold = prefs.getInt("threshold", 300);
   prefs.end();
-  Serial.printf("Batas Waktu Bicara aktif: %lu ms\n", maxRecordMs);
 
   // 3. Setup MQTT server (dari nilai yang disimpan portal)
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
 
-  // 4. Default mulai di MODE_KOMUNIKASI
+  // 4. Default boot mulai di MODE_KOMUNIKASI
+  currentMode = MODE_KOMUNIKASI;
   state = STANDBY;
   
-  // Karena masuk mode komunikasi, bebaskan RAM dari modul Audio
+  // Mode komunikasi memakai WiFi/MQTT; audio dilepas agar RAM longgar.
   deinitAudio();
-  
-  // Pastikan WiFi menyala dan siap terkoneksi
-  startWiFi(); 
-  
-  // Reset timer komunikasi
+  ensurePN532Ready(0);
+  startWiFi();
+  pendingWifiReconnect = false;
+  wifiDibatalkan = false;
+  lastWifiLine = "";
+  lastMqttStatus = mqttClient.connected();
+  waktuMulai = millis();
+
+  // Reset timer komunikasi untuk heartbeat/registrasi awal.
   lastRegTime = 0;
   lastHeartbeatTime = 0;
   
   // Paksa layar untuk update di putaran loop pertama
   lastState = (SystemState)-1; 
 } 
-
-void printListTerdaftar() {
-  Serial.println("===== LIST TERDAFTAR =====");
-  Serial.printf("Jumlah terdaftar: %d\n", jumlahTerdaftar);
-
-  for (int i = 0; i < jumlahTerdaftar; i++) {
-    Serial.print(i);
-    Serial.print(" | [");
-    Serial.print(listTerdaftar[i]);
-    Serial.print("] len=");
-    Serial.println(listTerdaftar[i].length());
-  }
-
-  Serial.println("==========================");
-}
 
 void loop() {
   if (currentMode == MODE_KOMUNIKASI && isWifiPortalActive()) {
@@ -1013,13 +1209,17 @@ void loop() {
   }
 
   // ── VAD (Voice Activity Detection) pre-buffer ──
-  // Pre-buffer tetap aktif di luar MODE_KOMUNIKASI.
+  // Pre-buffer tetap aktif di luar MODE_KOMUNIKASI, kecuali saat beep/settle.
   // Trigger VAD hanya dipakai saat state == AUTHORIZED.
   float maxLoudness = 0;
   bool vadTriggered = false;
   unsigned long vadFirstSpeechMsThisLoop = 0;
+  unsigned long vadFirstSoftSpeechMsThisLoop = 0;
+  unsigned long vadHardTriggerMsThisLoop = 0;
 
   if (currentMode != MODE_KOMUNIKASI && state != RECORDING &&
+      state != AUTHORIZED_BEEP &&
+      state != AUTHORIZED_SETTLE &&
       rx_handle != nullptr &&
       raw_i2s_buffer != nullptr &&
       processed_buffer != nullptr &&
@@ -1038,9 +1238,11 @@ void loop() {
       // Di STANDBY, suara luar tetap masuk pre-buffer, tapi tidak boleh membangun skor trigger.
       if (state == AUTHORIZED && frameTriggered) {
         vadTriggered = true;
+        vadHardTriggerMsThisLoop = millis();
 
         // Ambil waktu awal suara secepat mungkin.
         vadFirstSpeechMsThisLoop = getVadFirstSpeechMs();
+        vadFirstSoftSpeechMsThisLoop = getVadFirstSoftSpeechMs();
 
         if (vadFirstSpeechMsThisLoop == 0) {
           vadFirstSpeechMsThisLoop = millis();
@@ -1056,7 +1258,6 @@ void loop() {
     }
   }
 
-
   //  STATE MACHINE
   switch (state) {
 
@@ -1064,31 +1265,47 @@ void loop() {
       switch (currentMode) {
 
         case MODE_MAHASISWA: {
-          identTimer_start();
-          // printListTerdaftar();
+          if (!pastikanSdOperasional("mhs_standby", false)) {
+            break;
+          }
+
+          if (!ensurePN532Ready()) {
+            playBuzzer(3, 80, 80);
+            stateTimer = millis();
+            state = RFID_ERROR;
+            break;
+          }
+
           String idKartu = scanUID();
           if (idKartu != "") {
-            
-            // CEK 0: Apakah SD Card terbaca dengan baik?
-            if (SD.cardType() == CARD_NONE) {
-              // Feedback error panjang
-              identTimer_stop(DEC_SD_ERROR);
-              playBuzzer(1, 300, 80);
-              stateTimer = millis();
-              state = SD_ERROR;
+
+            QuestionStatus questionStatus = QUESTION_SD_ERROR;
+            if (pastikanSdOperasional("mhs_uid", true)) {
+              questionStatus = cekStatusPertanyaan();
             }
 
-            // CEK 0.5: Apakah Dosen sudah bikin soal? 
-            else if (!cekAdaPertanyaan()) {
-              identTimer_stop(DEC_NO_QUESTION);
+            // CEK 0: Apakah SD Card terbaca dengan baik?
+            if (questionStatus == QUESTION_SD_ERROR) {
+              playBuzzer(1, 300, 80);
+              masukSdError("mhs_uid_or_question");
+            }
+
+            // CEK 0.5: Apakah Dosen sudah bikin soal?
+            else if (questionStatus == QUESTION_NONE) {
               playBuzzer(2, 150, 100);
               stateTimer = millis();
               state = NO_QUESTION;
             }
 
+            // CEK 0.75: Cache kelas wajib ada agar mode Mahasiswa tetap strict.
+            else if (jumlahTerdaftar == 0) {
+              playBuzzer(2, 80, 80);
+              stateTimer = millis();
+              state = DATA_ERROR;
+            }
+
             // CEK 1: Apakah dia peserta kelas ini
             else if (!cekTerdaftar(idKartu)) {
-              identTimer_stop(DEC_UNREGISTERED);
               playBuzzer(2, 80, 80);
               stateTimer = millis();
               state = UNREGISTERED;
@@ -1096,10 +1313,9 @@ void loop() {
 
             // CEK 2: Apakah dia kena BANNED dari web
             else if (cekBanned(idKartu)) {
-              identTimer_stop(DEC_BANNED);
               playBuzzer(2, 80, 80);
               stateTimer = millis();
-              state = BANNED; 
+              state = BANNED;
             }
 
             // CEK 3: Apakah dia sudah bicara di sesi lokal SAAT INI
@@ -1112,8 +1328,7 @@ void loop() {
 
             // LOLOS SEMUA CEK: Izinkan Merekam
             else {
-              identTimer_stop(DEC_AUTHORIZED);
-              mulaiAuthorizedWindow(idKartu);
+              mulaiAuthorizedBeep(idKartu);
             }
           }
           break;
@@ -1125,10 +1340,8 @@ void loop() {
           if (millis() - waktuMulai > (unsigned long)(DOSEN_COUNTDOWN * 1000)) {
             
             // CEK SD CARD
-            if (SD.cardType() == CARD_NONE) {
+            if (!pastikanSdOperasional("dosen_record_start", true)) {
               playBuzzer(1, 300, 80);
-              stateTimer = millis();
-              state = SD_ERROR;
               waktuMulai = millis(); // Reset countdown dosen setelah error
             } 
             else {
@@ -1173,23 +1386,26 @@ void loop() {
           }
 
           // 3. Scan RFID → kirim registrasi
+          if (!ensurePN532Ready()) {
+            playBuzzer(3, 80, 80);
+            stateTimer = millis();
+            state = RFID_ERROR;
+            break;
+          }
+
           String idKartu = scanUIDPeriodik(100);
           if (idKartu != "") {
             if (millis() - lastRegTime > 2000) { // Anti-spam 2 detik
               if (WiFi.status() == WL_CONNECTED && mqttClient.connected()) {
                 sendRegistration(idKartu);
                 lastRegTime = millis();
-                Serial.println("Registrasi terkirim: " + idKartu);
                 playBuzzer(1, 60, 60);
               } else {
-                Serial.println("Gagal! Cek koneksi WiFi/MQTT.");
                 lcd.setCursor(0, 1); lcd.print("  CONN ERROR!   ");
                 playBuzzer(3, 80, 80);
                 delay(1000);
                 lastState = (SystemState)-1;
               }
-            } else {
-              Serial.println("Anti-spam aktif, tunggu sebentar...");
             }
           }
           break;
@@ -1215,6 +1431,38 @@ void loop() {
     }
 
     case SD_ERROR: { 
+      if (millis() - stateTimer > ERROR_DISPLAY_TIME) {
+        if (!isSdReady()) {
+          requestSdRecovery("sd_error_recovery");
+          break;
+        }
+
+        if (currentMode == MODE_MAHASISWA) {
+          DataLoadStatus eligibleStatus = muatDaftarEligible();
+          DataLoadStatus bannedStatus = muatDaftarBanned();
+
+          if (eligibleStatus == DATA_LOAD_SD_ERROR || bannedStatus == DATA_LOAD_SD_ERROR) {
+            masukSdError("sd_recovery_load");
+          } else if (eligibleStatus == DATA_LOAD_EMPTY) {
+            tandaiDataMahasiswaKosong();
+          } else {
+            state = STANDBY;
+            lastState = (SystemState)-1;
+          }
+        } else {
+          state = STANDBY;
+          lastState = (SystemState)-1;
+        }
+      }
+      break;
+    }
+
+    case RFID_ERROR: {
+      if (millis() - stateTimer > ERROR_DISPLAY_TIME) state = STANDBY;
+      break;
+    }
+
+    case DATA_ERROR: {
       if (millis() - stateTimer > ERROR_DISPLAY_TIME) state = STANDBY;
       break;
     }
@@ -1224,16 +1472,89 @@ void loop() {
       break;
     }
 
+    case AUTHORIZED_BEEP: {
+      if (!isBuzzerBusy()) {
+        if (!pastikanSdOperasional("authorized_beep", true)) {
+          break;
+        }
+
+        String uid = currentUID;
+        if (uid == "") {
+          authorizedSettleStarted = 0;
+          state = STANDBY;
+        } else {
+          authorizedSettleStarted = millis();
+          drainAudioInput();
+          clearPreRecordBuffer();
+          resetVadState();
+          resetAudioFilters();
+          lastState = (SystemState)-1;
+          state = AUTHORIZED_SETTLE;
+        }
+      }
+      break;
+    }
+
+    case AUTHORIZED_SETTLE: {
+      if (!pastikanSdOperasional("authorized_settle", false)) {
+        break;
+      }
+
+      drainAudioInput();
+      clearPreRecordBuffer();
+
+      if (currentUID == "") {
+        authorizedSettleStarted = 0;
+        state = STANDBY;
+        break;
+      }
+
+      if (authorizedSettleStarted == 0) {
+        authorizedSettleStarted = millis();
+      }
+
+      if (millis() - authorizedSettleStarted >= AUTHORIZED_SETTLE_MS) {
+        String uid = currentUID;
+        authorizedSettleStarted = 0;
+        drainAudioInput();
+        clearPreRecordBuffer();
+        resetVadState();
+        resetAudioFilters();
+        mulaiAuthorizedWindow(uid);
+      }
+      break;
+    }
+
     case AUTHORIZED: {
+      if (!pastikanSdOperasional("authorized_wait", false)) {
+        break;
+      }
+
       if (vadTriggered) {
-        unsigned long firstSpeechMs = vadFirstSpeechMsThisLoop;
+        unsigned long softFirstSpeechMs = vadFirstSoftSpeechMsThisLoop;
+        unsigned long hardFirstSpeechMs = vadFirstSpeechMsThisLoop;
+        unsigned long hardTriggerMs = vadHardTriggerMsThisLoop;
+
+        if (softFirstSpeechMs == 0) {
+          softFirstSpeechMs = getVadFirstSoftSpeechMs();
+        }
+
+        if (hardFirstSpeechMs == 0) {
+          hardFirstSpeechMs = getVadFirstSpeechMs();
+        }
+
+        if (hardTriggerMs == 0) {
+          hardTriggerMs = millis();
+        }
+
+        unsigned long firstSpeechMs = softFirstSpeechMs;
 
         if (firstSpeechMs == 0) {
-          firstSpeechMs = getVadFirstSpeechMs();
+          firstSpeechMs = hardFirstSpeechMs;
         }
 
         if (firstSpeechMs == 0) {
-          firstSpeechMs = millis();
+          firstSpeechMs = hardTriggerMs;
         }
 
         // Kalau karena edge case firstSpeechMs lebih kecil dari waktuMulai,
@@ -1249,19 +1570,9 @@ void loop() {
         if (kandidatWaktuRespon <= TIMEOUT_BICARA) {
           waktuRespon = kandidatWaktuRespon;
 
-          t2EpochMs = t1EpochMs + waktuRespon;
-
-          Serial.println("------------- T2 -------------");
-          Serial.printf("[T2] Suara mulai terdeteksi\n");
-          Serial.printf("[T2] firstSpeechMs : %lu\n", firstSpeechMs);
-          Serial.printf("[T2] epoch_ms est.  : %llu\n", (unsigned long long)t2EpochMs);
-          Serial.println("------------ HASIL -----------");
-          Serial.printf("[RESULT] waktuRespon : %lu ms\n", waktuRespon);
-          Serial.println("==============================");
-
           resetVadState();
           state = RECORDING;
-        } 
+        }
         else {
           currentUID = "";
           stateTimer = millis();
@@ -1296,16 +1607,22 @@ void loop() {
     case RECORDING: {
       clearButtonState(); // buang input tombol sebelum rekaman
 
-      bool alatDilempar = rekamSuara(currentUID, waktuRespon);
+      RecordingResult recordingResult = rekamSuara(currentUID, waktuRespon);
 
       clearButtonState(); // buang tombol yang kepencet selama rekaman
       resetAudioFilters();
+
+      if (recordingResult == RECORDING_SD_ERROR) {
+        playBuzzer(1, 300, 80);
+        masukSdError("recording_result");
+        break;
+      }
 
       playBuzzer(2, 60, 60);
 
       if (currentMode == MODE_MAHASISWA) simpanHistory(currentUID);
 
-      if (alatDilempar && currentMode == MODE_DOSEN) {
+      if (recordingResult == RECORDING_THROWN && currentMode == MODE_DOSEN) {
           setOperatingMode(MODE_MAHASISWA);
       } else {
           currentUID    = "";

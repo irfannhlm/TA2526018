@@ -20,6 +20,7 @@
 // Extra Pins
 #define MPU_INT_PIN 32 // External interrupt MPU6050
 #define BUZZER_PIN 13 // Pin untuk indikator audio
+#define BUZZER_TONE_HZ 2500
 #define BUTTON_PIN 27  // Button untuk switching mode
 #define LED_BATTERY 25
 #define LED_WIFI    26
@@ -54,10 +55,15 @@
 #define THROW_SPIN_MAX_G 1.60f
 #define THROW_SPIN_RELEASE_G 1.05f
 #define THROW_SPIN_MIN_LOW_G_MS 40UL
+#define THROW_STRONG_SPIN_DPS 700.0f
+#define THROW_MIN_STRONG_SPIN_MS 60UL
+#define THROW_STRONG_SPIN_MAX_G 2.20f
+#define THROW_STRONG_SPIN_RELEASE_G 1.35f
 #define THROW_IMPACT_G 2.25f
+#define THROW_IMPACT_RISE_G 0.45f
+#define THROW_HARD_IMPACT_G 3.20f
 #define THROW_IMPACT_WINDOW_MS 800UL
 #define THROW_SAMPLE_INTERVAL_MS 10UL
-#define THROW_DEBUG 1
 
 // MQTT CONFIG
 #define MQTT_PORT 8883           

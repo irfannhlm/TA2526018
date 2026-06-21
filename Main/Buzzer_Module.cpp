@@ -14,9 +14,18 @@ struct BuzzerState {
 
 static BuzzerState buzzer;
 
+static void buzzerToneOn() {
+  tone(BUZZER_PIN, BUZZER_TONE_HZ);
+}
+
+static void buzzerToneOff() {
+  noTone(BUZZER_PIN);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
 void initBuzzer() {
   pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
+  buzzerToneOff();
 }
 
 void playBuzzer(uint8_t count, uint16_t onMs, uint16_t offMs) {
@@ -32,7 +41,7 @@ void playBuzzer(uint8_t count, uint16_t onMs, uint16_t offMs) {
   buzzer.offMs = offMs;
   buzzer.lastChange = millis();
 
-  digitalWrite(BUZZER_PIN, HIGH);
+  buzzerToneOn();
 }
 
 void updateBuzzer() {
@@ -42,7 +51,7 @@ void updateBuzzer() {
 
   if (buzzer.isOn) {
     if (now - buzzer.lastChange >= buzzer.onMs) {
-      digitalWrite(BUZZER_PIN, LOW);
+      buzzerToneOff();
       buzzer.isOn = false;
       buzzer.lastChange = now;
 
@@ -56,7 +65,7 @@ void updateBuzzer() {
     }
   } else {
     if (now - buzzer.lastChange >= buzzer.offMs) {
-      digitalWrite(BUZZER_PIN, HIGH);
+      buzzerToneOn();
       buzzer.isOn = true;
       buzzer.lastChange = now;
     }
@@ -67,7 +76,7 @@ void stopBuzzer() {
   buzzer.active = false;
   buzzer.isOn = false;
   buzzer.remainingBeeps = 0;
-  digitalWrite(BUZZER_PIN, LOW);
+  buzzerToneOff();
 }
 
 void waitBuzzerDone() {

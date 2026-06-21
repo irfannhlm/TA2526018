@@ -6,7 +6,7 @@
 #include "Config.h"
 
 void initPN532();
-void powerDownPN532();
+bool ensurePN532Ready(uint32_t minRetryMs = 2000);
 String scanUID(); // Fungsi untuk mendapatkan ID kartu sebagai String
 String scanUIDPeriodik(uint32_t intervalMs = 100);
 
