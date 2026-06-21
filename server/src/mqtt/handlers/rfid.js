@@ -1,10 +1,16 @@
 "use strict";
 
-// Topik: kelas/alat/rfid — tap kartu RFID: catat ke daftar scan sesi,
-// lalu (bila terdaftar & punya kelas) buat log diskusi (question + answer).
-// Logika sama persis dengan blok lama di server.js (behavior-preserving).
+// Topik: kelas/alat/rfid — catat tap kartu RFID ke daftar scan sesi
+// (in-memory) untuk ditampilkan di dashboard secara real-time.
+//
+// Catatan desain: handler ini sengaja TIDAK menulis ke tabel `questions`
+// maupun `answers`. Pembuatan baris pada kedua tabel tersebut sepenuhnya
+// digerakkan oleh alur audio (HTTP upload `/api/upload-audio-sd` dan MQTT
+// `kelas/alat/audio_data`), bukan oleh tap kartu. Dengan demikian tap RFID
+// hanya berperan sebagai sinyal kehadiran real-time, tanpa menimbulkan
+// efek samping persisten pada basis data.
 module.exports = async function rfid(payload, ctx) {
-  const { sbSelect, sbInsert, state } = ctx;
+  const { state } = ctx;
 
   const { uid, action } = payload;
   if (action === "tap_rfid" && uid) {
@@ -15,38 +21,5 @@ module.exports = async function rfid(payload, ctx) {
       uid,
       time: new Date().toLocaleTimeString(),
     });
-
-    const students = await sbSelect("students", { rfid_uid: uid });
-    if (students.length > 0) {
-      const student = students[0];
-      const classRel = await sbSelect("class_students", {
-        student_id: student.student_id,
-      });
-      if (classRel.length > 0) {
-        const classId = classRel[0].class_id;
-        const questions = await sbSelect(
-          "questions",
-          { class_id: classId },
-          "*",
-          { order: { col: "created_at", asc: false }, limit: 1 },
-        );
-        let qId = questions.length > 0 ? questions[0].question_id : null;
-        if (!qId) {
-          const newQ = await sbInsert("questions", {
-            class_id: classId,
-            device_id: null,
-            transcript_text: "Pertanyaan baru",
-          });
-          qId = newQ.question_id;
-        }
-        await sbInsert("answers", {
-          question_id: qId,
-          student_id: student.student_id,
-          transcript_text: "",
-          class_id: classId,
-        });
-        console.log(`✅ Log diskusi tersimpan untuk: ${student.name}`);
-      }
-    }
   }
 };

@@ -78,7 +78,14 @@ const manageUidSchema = z.object({
   action: z.enum(["delete", "delete_all", "add_single", "add_date"]),
   uid: optStr,
   entry_id: z.union([z.literal(""), z.coerce.number().int()]).optional(),
-  student_id: z.union([z.literal(""), z.coerce.number().int()]).optional(),
+  // student_id boleh tunggal (legacy) atau array (multi-checklist).
+  student_id: z
+    .union([
+      z.literal(""),
+      z.coerce.number().int(),
+      z.array(z.coerce.number().int()),
+    ])
+    .optional(),
   target_date: optStr,
   current_class: optStr,
 });

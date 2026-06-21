@@ -43,18 +43,15 @@ test("MQTT status: update status & battery device", async () => {
   }
 });
 
-test("MQTT rfid tap: catat scan + buat question & answer", async () => {
+test("MQTT rfid tap: catat scan in-memory tanpa menulis ke questions/answers", async () => {
   const ctx = await loadApp({ seed: seedBase });
   try {
     await ctx.mqtt.deliver("kelas/alat/rfid", {
       action: "tap_rfid",
       uid: "UID-A",
     });
-    assert.equal(ctx.supabase.rows("questions").length, 1);
-    const answers = ctx.supabase.rows("answers");
-    assert.equal(answers.length, 1);
-    assert.equal(answers[0].student_id, 1);
-    assert.equal(answers[0].class_id, 10);
+    assert.equal(ctx.supabase.rows("questions").length, 0);
+    assert.equal(ctx.supabase.rows("answers").length, 0);
 
     const res = await ctx.request("GET", "/api/realtime-data?kelas=K1");
     assert.equal(res.status, 200);
