@@ -46,7 +46,7 @@ const int device_id = 1;
 #define RESET_BUTTON 0
 #define SDA_PIN 21
 #define SCL_PIN 22
-#define SD_CS_PIN 15
+#define SD_CS_PIN 5
 
 // ================= TOPIK MQTT =================
 const char* topic_status      = "kelas/alat/status";
@@ -178,49 +178,70 @@ void kirimStatusSync(const String& status, const String& pesan, int total = 0, i
   Serial.println("📤 Status Sync → " + String(buf));
 }
 
-// ================= VALIDASI NAMA FILE =================
-bool isFormatMHS(const String& nama) {
-  if (!nama.startsWith("MHS_") || !nama.endsWith(".txt")) return false;
-  String tengah = nama.substring(4, nama.length() - 4);
-  int us = tengah.indexOf('_');
-  if (us <= 0) return false;
-  if (tengah.indexOf('_', us + 1) != -1) return false;
-  String b1 = tengah.substring(0, us);
-  String b2 = tengah.substring(us + 1);
-  if (b1.length() == 0 || b2.length() == 0) return false;
-  for (char c : b1) if (!isDigit(c)) return false;
-  for (char c : b2) if (!isDigit(c)) return false;
+bool allDigits(const String& s) {
+  if (s.length() == 0) return false;
+  for (char c : s) {
+    if (!isDigit(c)) return false;
+  }
   return true;
 }
 
 bool isFormatDSN(const String& nama) {
   if (!nama.startsWith("DSN_") || !nama.endsWith(".txt")) return false;
+
   String tengah = nama.substring(4, nama.length() - 4);
-  if (tengah.length() == 0) return false;
-  for (char c : tengah) if (!isDigit(c)) return false;
-  return true;
+  int us = tengah.indexOf('_');
+
+  if (us <= 0) return false;
+  if (tengah.indexOf('_', us + 1) != -1) return false;
+
+  return allDigits(tengah.substring(0, us)) &&
+         allDigits(tengah.substring(us + 1));
+}
+
+bool isFormatMHS(const String& nama) {
+  if (!nama.startsWith("MHS_") || !nama.endsWith(".txt")) return false;
+
+  String tengah = nama.substring(4, nama.length() - 4);
+  int us1 = tengah.indexOf('_');
+  if (us1 <= 0) return false;
+
+  int us2 = tengah.indexOf('_', us1 + 1);
+  if (us2 <= us1 + 1) return false;
+  if (tengah.indexOf('_', us2 + 1) != -1) return false;
+
+  return allDigits(tengah.substring(0, us1)) &&
+         allDigits(tengah.substring(us1 + 1, us2)) &&
+         allDigits(tengah.substring(us2 + 1));
 }
 
 bool isFormatDSNWav(const String& nama) {
   if (!nama.startsWith("DSN_") || !nama.endsWith(".wav")) return false;
+
   String tengah = nama.substring(4, nama.length() - 4);
-  if (tengah.length() == 0) return false;
-  for (char c : tengah) if (!isDigit(c)) return false;
-  return true;
+  int us = tengah.indexOf('_');
+
+  if (us <= 0) return false;
+  if (tengah.indexOf('_', us + 1) != -1) return false;
+
+  return allDigits(tengah.substring(0, us)) &&
+         allDigits(tengah.substring(us + 1));
 }
 
 bool isFormatMHSWav(const String& nama) {
   if (!nama.startsWith("MHS_") || !nama.endsWith(".wav")) return false;
+
   String tengah = nama.substring(4, nama.length() - 4);
-  int us = tengah.indexOf('_');
-  if (us <= 0) return false;
-  if (tengah.indexOf('_', us + 1) != -1) return false;
-  String b1 = tengah.substring(0, us);
-  String b2 = tengah.substring(us + 1);
-  if (b1.length() == 0 || b2.length() == 0) return false;
-  for (char c : b1) if (!isDigit(c)) return false;
-  for (char c : b2) if (!isDigit(c)) return false;
-  return true;
+  int us1 = tengah.indexOf('_');
+  if (us1 <= 0) return false;
+
+  int us2 = tengah.indexOf('_', us1 + 1);
+  if (us2 <= us1 + 1) return false;
+  if (tengah.indexOf('_', us2 + 1) != -1) return false;
+
+  return allDigits(tengah.substring(0, us1)) &&
+         allDigits(tengah.substring(us1 + 1, us2)) &&
+         allDigits(tengah.substring(us2 + 1));
 }
 
 // ================= BACA FILE TXT → JSON =================
@@ -1227,14 +1248,8 @@ void setup() {
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
 
-  Wire.begin(SDA_PIN, SCL_PIN);
-  nfc.begin();
-  if (!nfc.getFirmwareVersion()) {
-    Serial.println("❌ PN532 tidak ditemukan! Cek kabel.");
-    while (1);
-  }
-  nfc.SAMConfig();
-  Serial.println("✅ Sistem siap! Menunggu kartu...\n");
+  Serial.println("⏭️ PN532 dilewati untuk test upload file.");
+  Serial.println("✅ Sistem siap untuk test MQTT/upload.\n");
 }
 
 // ================= LOOP =================

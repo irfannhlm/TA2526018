@@ -79,7 +79,7 @@ int           lastCountdown = -1;
 unsigned long lastRegTime   = 0;
 static String lastWifiLine = "";
 
-// ── Heartbeat: kirim status setiap 10 detik di MODE_KOMUNIKASI ──
+// Heartbeat: kirim status setiap 10 detik di MODE_KOMUNIKASI
 static unsigned long lastHeartbeatTime = 0;
 const  unsigned long HEARTBEAT_MS      = 10000;
 
@@ -91,7 +91,6 @@ enum ButtonEventType : uint8_t {
 struct ButtonEvent {
   uint8_t type;
   uint8_t clicks;
-  unsigned long at;
 };
 
 void resetButtonInput(const char* reason, unsigned long cooldownMs) {
@@ -117,19 +116,17 @@ void consumeButtonGesture(const char* reason) {
   resetButtonInput(reason, BUTTON_POST_ACTION_COOLDOWN_MS);
 }
 
-// Buang gesture yang ditolak/diabaikan TANPA penalti cooldown panjang,
-// supaya klik berikutnya tidak ikut "kena hukum" (penyebab harus klik berkali-kali).
 void dropButtonGesture(const char* reason) {
   resetButtonInput(reason, 0);
 }
 
 // Beep penanda ganti mode: switch (1/2 click) = 1 beep pendek, cycle (3 click) = 2 beep.
-// Non-blocking; akan di-flush oleh waitBuzzerDone() di setOperatingMode sebelum init.
+// Non-blocking, di-flush oleh waitBuzzerDone() di setOperatingMode sebelum init.
 void beepSwitch(bool isCycle) {
   playBuzzer(isCycle ? 2 : 1, 60, 60);
 }
 
-// Dipanggil dari loop rekam (rekamSuara, AudioSD_Module.cpp) untuk mendeteksi
+// Dipanggil dari loop rekam untuk mendeteksi
 // permintaan stop manual: double click atau lebih (>=2). Non-blocking.
 bool pollManualStopRecording() {
   if (buttonEventQueue == nullptr) return false;
@@ -145,8 +142,7 @@ void queueButtonEvent(uint8_t type, uint8_t clicks) {
 
   ButtonEvent event = {
     type,
-    clicks,
-    millis()
+    clicks
   };
 
   xQueueSend(buttonEventQueue, &event, 0);
@@ -335,15 +331,12 @@ bool isModeChangeAllowed() {
     case DATA_ERROR:
     case TIMEOUT:
     case NO_QUESTION:
-    // Saat authorized / menunggu suara, double/triple click tetap boleh
-    // switch atau cycle mode (membatalkan sesi authorized berjalan).
     case AUTHORIZED_BEEP:
     case AUTHORIZED_SETTLE:
     case AUTHORIZED:
       return true;
 
-    // Saat rekaman: tidak pindah mode. Double click ditangani sebagai
-    // stop manual di dalam loop rekam (lihat pollManualStopRecording).
+    // Saat rekaman bukan switch mode, tapi manual stop rekam
     case RECORDING:
       return false;
   }
@@ -377,8 +370,6 @@ void prepareDeepSleep() {
   lcd.setCursor(0, 0); lcd.print("  MEMATIKAN...  ");
   delay(1000);
   stopWiFi();
-  // lcd.noBacklight();
-  // lcd.noDisplay();
   playBuzzer(1, 500, 80);
   waitBuzzerDone();
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
@@ -431,7 +422,7 @@ DataLoadStatus muatDaftarEligible() {
 bool cekTerdaftar(String uid) {
   if (jumlahTerdaftar == 0) return false; // Tolak semua jika daftar kosong
   for (int i = 0; i < jumlahTerdaftar; i++) {
-    if (listTerdaftar[i] == uid) return true; // Ditemukan!
+    if (listTerdaftar[i] == uid) return true; 
   }
   return false;
 }
@@ -511,7 +502,7 @@ void tandaiDataMahasiswaKosong() {
 bool cekBanned(String uid) {
   if (jumlahBanned == 0) return false; 
   for (int i = 0; i < jumlahBanned; i++) {
-    if (listBanned[i] == uid) return true; // Ditemukan di daftar blacklist!
+    if (listBanned[i] == uid) return true; 
   }
   return false;
 }
@@ -534,6 +525,21 @@ void updateLCD() {
 
   static bool portalScreenShown = false;
 
+  // OVERLAY notifikasi "PENGATURAN DIPERBARUI" 3 detik (non-blocking)
+  static unsigned long pengaturanShownUntil = 0;
+  if (pengaturanDiperbarui) {
+    pengaturanDiperbarui = false;
+    pengaturanShownUntil = millis() + 3000;   // tampil 3 detik
+    playBuzzer(1, 60, 60);                     // 1 beep pendek halus
+    lcd.clear();
+    lcdPrint16(0, "   PENGATURAN   ");
+    lcdPrint16(1, "   DIPERBARUI   ");
+    lastState = (SystemState)-1;               // paksa refresh layar normal setelahnya
+  }
+  if (millis() < pengaturanShownUntil) {
+    return;   // tahan overlay, jangan render layar lain
+  }
+
   if (currentMode == MODE_KOMUNIKASI && isWifiPortalActive()) {
     if (!portalScreenShown) {
       lcd.clear();
@@ -555,14 +561,14 @@ void updateLCD() {
   return;
   }
 
-  // ── WIFI RETRY / BELUM CONNECT ──
+  // WIFI RETRY / BELUM CONNECT
   if (currentMode == MODE_KOMUNIKASI &&
       state == STANDBY &&
       isWiFiConnecting()) {
 
     if (animFrame != lastAnimFrame || state != lastState) {
       lcdPrint16(0, "  MODE: ONLINE  ");
-      lcdPrint16(1, " KONEK WIFI" + animDots());
+      lcdPrint16(1, "  KONEK WIFI" + animDots());
 
       lastAnimFrame = animFrame;
       lastState = state;
@@ -608,32 +614,35 @@ void updateLCD() {
     return;
   }
 
-  // ── MQTT / SERVER CONNECTING, WIFI SUDAH CONNECT ──
+  bool mqttBusy    = isMQTTConnecting();
+  bool mqttOkForUi = (!mqttBusy) && mqttClient.connected();   
+
+  // MQTT / SERVER CONNECTING, WIFI SUDAH CONNECT
   if (currentMode == MODE_KOMUNIKASI &&
       state == STANDBY &&
       WiFi.status() == WL_CONNECTED &&
       !wifiDibatalkan &&
-      !mqttClient.connected()) {
+      !mqttOkForUi) {
 
     if (animFrame != lastAnimFrame ||
         state != lastState ||
-        lastMqttStatus != mqttClient.connected()) {
+        lastMqttStatus != mqttOkForUi) {
 
       lcdPrint16(0, "  KONEK SERVER  ");
       lcdPrint16(1, " MOHON TUNGGU" + animDots());
 
       lastAnimFrame = animFrame;
-      lastMqttStatus = mqttClient.connected();
+      lastMqttStatus = mqttOkForUi;
       lastState = state;
     }
 
     return;
   }
 
-  // ── EARLY-RETURN GATE ──
+  // EARLY-RETURN GATE
   bool mqttChanged = (currentMode == MODE_KOMUNIKASI) &&
                      !wifiDibatalkan &&
-                     (mqttClient.connected() != lastMqttStatus);
+                     (mqttOkForUi != lastMqttStatus);
 
   bool isCountdownDosen = (state == STANDBY &&
                            currentMode == MODE_DOSEN &&
@@ -648,7 +657,7 @@ void updateLCD() {
   }
 
   if (currentMode == MODE_KOMUNIKASI) {
-    lastMqttStatus = mqttClient.connected();
+    lastMqttStatus = mqttOkForUi;
   }
 
   lastWifiLine = "";
@@ -663,8 +672,7 @@ void updateLCD() {
 
     case STANDBY:
       if (currentMode == MODE_MAHASISWA) {
-        lcdPrint16(0, "MODE: MAHASISWA");
-        lcdPrint16(1, "SCAN KARTU ANDA ");
+        lcdShowModeMahasiswa();
       }
 
       else if (currentMode == MODE_DOSEN) {
@@ -677,8 +685,7 @@ void updateLCD() {
           lcdPrint16(0, "  DIBATALKAN   ");
           lcdPrint16(1, " MOHON TUNGGU" + animDots());
         } else {
-          lcdPrint16(0, "  MODE: ONLINE  ");
-          lcdPrint16(1, "   TAP KARTU  ");
+          lcdShowModeOnline();
         }
       }
       break;
@@ -734,8 +741,8 @@ void updateLCD() {
       break;
 
     case DATA_ERROR:
-      lcdPrint16(0, " DATA KLS KOSONG");
-      lcdPrint16(1, "  SYNC DULU    ");
+      lcdPrint16(0, "DATA KLS KOSONG.");
+      lcdPrint16(1, "   SYNC DULU    ");
       break;
 
     case NO_QUESTION:
@@ -776,24 +783,21 @@ void setOperatingMode(int nextModeValue) {
     updateLCD();
   }
 
-  // Selesaikan dulu beep pendek yang dipicu pemanggil (mis. beepSwitch / beep
-  // thrown) supaya nada tidak nyangkut ON selama blocking init di bawah —
   // updateBuzzer() baru jalan lagi setelah kembali ke loop().
   waitBuzzerDone();
 
   if (currentMode == MODE_DOSEN) {
     stopWiFi();
-    delay(50); // jeda settle radio sebelum power-up SD/I2C, jangan dihapus total
+    delay(50); // jeda settle radio sebelum power-up SD/I2C
     resumeSdRecovery();
     initAudioSD();
     pastikanSdOperasional("mode_dosen", true);
   }
   else if (currentMode == MODE_MAHASISWA) {
     stopWiFi();
-    delay(50); // jeda settle radio sebelum power-up SD/I2C, jangan dihapus total
+    delay(50); // jeda settle radio sebelum power-up SD/I2C
     resumeSdRecovery();
-    // PN532 di-init lazy oleh state machine STANDBY (lihat scan di MODE_MAHASISWA),
-    // tidak di-eager-init di sini supaya ganti mode tidak blocking.
+    // PN532 di-init lazy oleh state machine STANDBY supaya ganti mode tidak blocking.
     initAudioSD();
 
     if (pastikanSdOperasional("mode_mahasiswa", true)) {
@@ -810,8 +814,6 @@ void setOperatingMode(int nextModeValue) {
   else if (currentMode == MODE_KOMUNIKASI) {
     deinitAudio();
     pauseSdRecovery();
-    // PN532 di-init lazy oleh state machine STANDBY KOMUNIKASI saat scan,
-    // tidak di-eager-init di sini supaya ganti mode tidak blocking.
     startWiFi();
     lastRegTime       = 0;
     lastHeartbeatTime = 0;
@@ -842,7 +844,6 @@ void checkModeButton() {
   }
 
   if (!isModeChangeAllowed()) {
-    // Tidak menghukum klik dengan cooldown panjang: cukup buang.
     dropButtonGesture("state_busy");
     return;
   }
@@ -856,7 +857,7 @@ void checkModeButton() {
 
       lcd.clear();
       lcdPrint16(0, "  MODE: ONLINE  ");
-      lcdPrint16(1, " KONEK WIFI");
+      lcdPrint16(1, "  KONEK WIFI");
 
       playBuzzer(1, 60, 60);
       waitBuzzerDone();
@@ -879,7 +880,7 @@ void checkModeButton() {
   }
 
   else if (clicks == 2) {
-    // Double click di mode utama non-komunikasi:
+    // Double click di cycle rekam:
     // DOSEN <-> MAHASISWA (switch = 1 beep pendek)
     consumeButtonGesture("double_mode_action");
     beepSwitch(false);
@@ -892,8 +893,8 @@ void checkModeButton() {
   }
 
   else if (clicks == 3) {
-    // Triple click (cycle = 2 beep pendek):
-    // Mode utama -> KOMUNIKASI
+    // Triple click (switch cycle = 2 beep pendek):
+    // CYCLE PEREKAMAN -> KOMUNIKASI
     // KOMUNIKASI -> DOSEN
     consumeButtonGesture("triple_mode_action");
     beepSwitch(true);
@@ -909,21 +910,13 @@ void checkModeButton() {
   }
 }
 
-// ==========================================
-// 1. VARIABEL GLOBAL & KONFIGURASI BATERAI
-// ==========================================
+// VARIABEL GLOBAL & KONFIGURASI BATERAI
 
 // Variabel untuk filter dan memori persentase
 float smoothedVoltage = 0.0;
 float lastReportedPercent = 100.0; 
 
-// (Asumsi variabel ini sudah ada di kodemu sebelumnya)
-// float batteryVoltage;
-// float batteryPercent;
-
-// ==========================================
-// 2. LOOK-UP TABLE (LUT) BATERAI
-// ==========================================
+// LOOK-UP TABLE (LUT) BATERAI
 struct BatteryProfile {
   float voltage;
   float percentage;
@@ -944,9 +937,7 @@ const BatteryProfile lipo_LUT[NUM_LUT_POINTS] = {
   {3.20, 0.0}   // Batas bawah / cutoff baterai
 };
 
-// ==========================================
-// 3. FUNGSI INTERPOLASI
-// ==========================================
+// FUNGSI INTERPOLASI
 float getBatteryPercentageFromLUT(float v) {
   if (v >= lipo_LUT[0].voltage) return 100.0;
   if (v <= lipo_LUT[NUM_LUT_POINTS - 1].voltage) return 0.0;
@@ -964,12 +955,10 @@ float getBatteryPercentageFromLUT(float v) {
   return 0.0; 
 }
 
-// ==========================================
-// 4. FUNGSI UTAMA PENGECEKAN BATERAI
-// ==========================================
+// FUNGSI UTAMA PENGECEKAN BATERAI
 void checkBattery() {
 
-  // --- A. PEMBACAAN DAN PENGOLAHAN SENSOR (Tiap 5 Detik) ---
+  // PEMBACAAN DAN PENGOLAHAN SENSOR (Tiap 5 Detik)
   if (millis() - lastBatteryCheck >= BATTERY_CHECK_INTERVAL) {
     lastBatteryCheck = millis();
 
@@ -982,8 +971,8 @@ void checkBattery() {
       batteryReadOK = true;
     }
 
-    // Kalau I2C sedang sibuk, skip pembacaan baterai siklus ini.
-    // LED tetap lanjut pakai nilai terakhir.
+    // Kalau I2C sedang sibuk, skip pembacaan baterai siklus
+    // LED lanjut pakai nilai terakhir
     if (batteryReadOK) {
       if (isnan(batteryVoltage)) {
         // Jika tidak ada baterai / USB power
@@ -992,17 +981,17 @@ void checkBattery() {
         lastReportedPercent = 100.0;
       } 
       else {
-        // 1. Low-pass filter / EMA pada tegangan
+        // Low-pass filter / EMA pada tegangan
         if (smoothedVoltage == 0.0) {
           smoothedVoltage = batteryVoltage;
         } else {
           smoothedVoltage = (0.1 * batteryVoltage) + (0.9 * smoothedVoltage);
         }
 
-        // 2. Hitung persentase dari LUT
+        // Hitung persentase dari LUT
         float rawPercent = getBatteryPercentageFromLUT(smoothedVoltage);
 
-        // 3. Monotonic logic agar persentase tidak naik-turun sendiri
+        // Monotonic logic agar persentase tidak naik-turun sendiri
         if (rawPercent < lastReportedPercent) {
           lastReportedPercent = rawPercent;
         } 
@@ -1014,7 +1003,7 @@ void checkBattery() {
         batteryPercent = lastReportedPercent;
       }
 
-      // --- Cetak status hanya kalau pembacaan berhasil ---
+      // Cetak status hanya kalau pembacaan berhasil
 
       if (isnan(batteryPercent)) {
       } else {
@@ -1023,7 +1012,7 @@ void checkBattery() {
     }
   }
 
-  // --- B. UPDATE LED BATERAI (Jalan terus di loop) ---
+  // UPDATE LED BATERAI (Jalan terus di loop)
   if (!isnan(batteryPercent) && batteryPercent < 20.0) {
     // Mode baterai lemah: kedip tiap 500 ms
     static unsigned long lastBlinkTime = 0;
@@ -1040,7 +1029,7 @@ void checkBattery() {
     digitalWrite(LED_BATTERY, HIGH);
   }
 
-  // --- C. UPDATE LED WIFI ---
+  // UPDATE LED WIFI
   if (WiFi.status() == WL_CONNECTED) {
     digitalWrite(LED_WIFI, HIGH);
   } else {
@@ -1079,14 +1068,15 @@ void mulaiAuthorizedBeep(const String &uid) {
   playBuzzer(1, AUTHORIZED_BEEP_ON_MS, AUTHORIZED_BEEP_OFF_MS);
 }
 
-// ════════════════════════════════════════════════
 //  SETUP
-// ════════════════════════════════════════════════
 void setup() {
+  Serial.begin(115200);
+  delay(50);   // beri waktu monitor attach
+
   pinMode(EN_POWER, OUTPUT);
   digitalWrite(EN_POWER, HIGH); // nyalakan power rail
 
-  // 1. NVS wajib pertama
+  // NVS wajib pertama
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     nvs_flash_erase();
@@ -1113,7 +1103,10 @@ void setup() {
 
   lcd.init();
   lcd.backlight();
-  lcd.print("   BOOTING...   ");
+  lcdInitCustomChars();
+  lcd.clear();
+  lcdPrint16(0, "   BOOTING...   ");
+  lcdPrint16(1, "                ");
 
   initPN532();
   initAudioSD();
@@ -1126,7 +1119,7 @@ void setup() {
   startButtonTask();
   delay(1000);
 
-  // 2. Portal konfigurasi WiFi
+  // Portal konfigurasi WiFi
   initWifiPortal();
 
   Preferences prefs;
@@ -1135,10 +1128,10 @@ void setup() {
   active_threshold = prefs.getInt("threshold", 300);
   prefs.end();
 
-  // 3. Setup MQTT server (dari nilai yang disimpan portal)
+  // Setup MQTT server (dari nilai yang disimpan portal)
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
 
-  // 4. Default boot mulai di MODE_KOMUNIKASI
+  // Default boot mulai di MODE_KOMUNIKASI
   currentMode = MODE_KOMUNIKASI;
   state = STANDBY;
   
@@ -1187,7 +1180,7 @@ void loop() {
   checkBattery();
   updateLCD();
 
-  // ── MODE_KOMUNIKASI: MQTT + heartbeat ──
+  // MODE_KOMUNIKASI: MQTT + heartbeat
   if (currentMode == MODE_KOMUNIKASI) {
     if (isWifiPortalActive()) {
       handleWifiPortal();
@@ -1208,7 +1201,7 @@ void loop() {
     }
   }
 
-  // ── VAD (Voice Activity Detection) pre-buffer ──
+  // VAD (Voice Activity Detection) pre-buffer
   // Pre-buffer tetap aktif di luar MODE_KOMUNIKASI, kecuali saat beep/settle.
   // Trigger VAD hanya dipakai saat state == AUTHORIZED.
   float maxLoudness = 0;
@@ -1234,13 +1227,12 @@ void loop() {
 
       bool frameTriggered = updateAudioPreBufferAndVad(samples, maxLoudness);
 
-      // VAD score hanya boleh berlaku ketika user/dosen sudah authorized.
-      // Di STANDBY, suara luar tetap masuk pre-buffer, tapi tidak boleh membangun skor trigger.
+      // VAD score hanya berlaku ketika sudah authorized.
+      // Di STANDBY, suara luar tetap masuk pre-buffer, tapi tidak membangun skor trigger.
       if (state == AUTHORIZED && frameTriggered) {
         vadTriggered = true;
         vadHardTriggerMsThisLoop = millis();
 
-        // Ambil waktu awal suara secepat mungkin.
         vadFirstSpeechMsThisLoop = getVadFirstSpeechMs();
         vadFirstSoftSpeechMsThisLoop = getVadFirstSoftSpeechMs();
 
@@ -1248,8 +1240,6 @@ void loop() {
           vadFirstSpeechMsThisLoop = millis();
         }
 
-        // Begitu sudah trigger, tidak perlu drain semua frame lagi.
-        // Lebih cepat masuk ke state RECORDING.
         break;
       } 
       else if (state != AUTHORIZED) {
@@ -1334,7 +1324,7 @@ void loop() {
           break;
         }
 
-        // ── MODE DOSEN ──
+        // MODE DOSEN
         case MODE_DOSEN: {
           currentUID = "DOSEN";
           if (millis() - waktuMulai > (unsigned long)(DOSEN_COUNTDOWN * 1000)) {
@@ -1351,13 +1341,13 @@ void loop() {
           break;
         }
 
-        // ── MODE KOMUNIKASI ──
+        // MODE KOMUNIKASI
         case MODE_KOMUNIKASI: {
           if (isWifiPortalActive()) {
             break;
           }
 
-          // 1. Sinkronisasi TXT (trigger dari mqttCallback)
+          // Sinkronisasi TXT (trigger dari mqttCallback)
           if (sdSyncAktif && sdTargetKelas != "") {
             lcd.clear();
             lcdPrint16(0, "   SYNC DATA   ");
@@ -1371,7 +1361,7 @@ void loop() {
             lastState = (SystemState)-1; // Paksa refresh LCD setelah sync
           }
 
-          // 2. Sinkronisasi Audio WAV (trigger dari mqttCallback) ← BARU
+          // Sinkronisasi Audio WAV (trigger dari mqttCallback)
           if (audioSyncAktif && audioTargetKelas != "") {
             lcd.clear();
             lcdPrint16(0, "  SYNC AUDIO   ");
@@ -1385,7 +1375,15 @@ void loop() {
             lastState = (SystemState)-1; // Paksa refresh LCD setelah sync
           }
 
-          // 3. Scan RFID → kirim registrasi
+          // Mencegah PN532 mengganggu I2C LCD saat layar masih "KONEK SERVER".
+          if (WiFi.status() != WL_CONNECTED || isTimeSyncing() || isMQTTConnecting()) {
+            break;
+          }
+          if (!mqttClient.connected()) {
+            break;
+          }
+
+          // Scan RFID → kirim registrasi
           if (!ensurePN532Ready()) {
             playBuzzer(3, 80, 80);
             stateTimer = millis();
@@ -1401,9 +1399,9 @@ void loop() {
                 lastRegTime = millis();
                 playBuzzer(1, 60, 60);
               } else {
-                lcd.setCursor(0, 1); lcd.print("  CONN ERROR!   ");
-                playBuzzer(3, 80, 80);
-                delay(1000);
+                lcdPrint16(1, " Koneksi Gagal! ");
+                playBuzzer(2, 60, 90);   // 2 beep pendek
+                waitBuzzerDone();        
                 lastState = (SystemState)-1;
               }
             }
@@ -1557,16 +1555,12 @@ void loop() {
           firstSpeechMs = hardTriggerMs;
         }
 
-        // Kalau karena edge case firstSpeechMs lebih kecil dari waktuMulai,
-        // jangan sampai unsigned underflow.
         if (firstSpeechMs < waktuMulai) {
           firstSpeechMs = waktuMulai;
         }
 
         unsigned long kandidatWaktuRespon = firstSpeechMs - waktuMulai;
 
-        // Suara dianggap sah kalau awal suaranya masih dalam batas timeout.
-        // Ini lebih adil daripada mengecek waktu saat VAD baru trigger.
         if (kandidatWaktuRespon <= TIMEOUT_BICARA) {
           waktuRespon = kandidatWaktuRespon;
 

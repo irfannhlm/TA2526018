@@ -147,7 +147,7 @@ static void throwDetectionTask(void* param) {
     sensors_event_t a, g, temp;
     bool readOK = false;
 
-    // WAJIB mutex karena mpu.getEvent() akses I2C
+    // mutex karena mpu.getEvent() akses I2C
     if (lockI2C(5)) {
       mpu.getEvent(&a, &g, &temp);
       unlockI2C();

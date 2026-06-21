@@ -27,40 +27,6 @@ char saved_ssid[40] = "";
 char wifi_type[20]  = "biasa";
 char wifi_pass[64]  = "";
 
-unsigned long buttonPressTime = 0;
-bool          isButtonPressed = false;
-
-static void handlePortalButton() {
-  static unsigned long pressStart = 0;
-  static bool wasPressed = false;
-
-  bool pressed = (digitalRead(BUTTON_PIN) == LOW);
-
-  if (pressed && !wasPressed) {
-    wasPressed = true;
-    pressStart = millis();
-  }
-
-  if (!pressed) {
-    wasPressed = false;
-    pressStart = 0;
-  }
-
-  // Tahan tombol 2 detik di portal = restart
-  if (pressed && pressStart > 0 && millis() - pressStart > 2000) {
-    if (lockI2C(50)) {
-      lcd.clear();
-      lcdPrint16(0, "  RESTARTING   ");
-      lcdPrint16(1, "MOHON TUNGGU...");
-      unlockI2C();
-    }
-
-    playBuzzer(1, 300, 80);
-    waitBuzzerDone();
-    ESP.restart();
-  }
-}
-
 bool isWifiPortalActive() {
   return portalActive;
 }
@@ -75,13 +41,12 @@ void bukaPortal() {
 
   // HTML portal (dengan pre-fill dari Preferences) hanya dibangun sekali per boot.
   // Nilai pre-fill cuma berubah lewat /save, dan /save selalu diakhiri ESP.restart(),
-  // jadi aman untuk dipakai ulang tanpa rebuild setiap kali portal dibuka.
   if (!portalRoutesReady) {
     // 1. BACA DATA TERAKHIR UNTUK PRE-FILL
     preferences.begin("catch_note", true);
     String saved_nim_str      = preferences.getString("nim", "");
     String saved_eap_pass_str = preferences.getString("eap_pass", "");
-    String saved_ssid_str     = preferences.getString("ssid", ""); // Meski tadi dihapus di NVS, kita bisa tetap pakai variabel global saved_ssid jika mau, tapi ini aman jika kosong.
+    String saved_ssid_str     = preferences.getString("ssid", ""); 
     String saved_type_str     = preferences.getString("wifi_type", "biasa");
     preferences.end();
 
@@ -200,7 +165,7 @@ void bukaPortal() {
     preferences.putString("wifi_type", wifiType);
     preferences.putString("nim", server.arg("nim"));
     
-    // Jangan overwrite password SSO jika field dikosongkan (artinya user pakai password lama)
+    // Jangan overwrite password SSO jika field dikosongkan
     if (eapPass.length() > 0) preferences.putString("eap_pass", eapPass);
     if (server.arg("wifi_pass").length() > 0) preferences.putString("wifi_pass", server.arg("wifi_pass"));
     preferences.end();
@@ -273,8 +238,6 @@ void stopWifiPortal() {
 
 //  initWifiPortal
 void initWifiPortal() {
-  pinMode(RESET_BUTTON, INPUT_PULLUP);
-
   preferences.begin("catch_note", false);
 
   // Ambil SSID

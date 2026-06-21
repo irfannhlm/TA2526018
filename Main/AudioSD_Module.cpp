@@ -25,8 +25,8 @@ extern int active_threshold;
 // Didefinisikan di Main.ino. Cek permintaan stop manual rekaman (double click+).
 extern bool pollManualStopRecording();
 
-int bufferHead = 0;
-bool bufferIsFull = false;
+static int bufferHead = 0;
+static bool bufferIsFull = false;
 static volatile bool isSdInitialized = false;
 static volatile bool sdRecoveryRequested = false;
 static volatile bool sdRecoveryRunning = false;
@@ -164,6 +164,11 @@ static const float VAD_THUMP_ZCR_MAX    = 0.070f;
 static const float VAD_THUMP_CREST_MAX  = 3.5f;
 static const float VAD_HIGH_ZCR_THRESHOLD_MULT = 1.8f;
 static const float RECORDING_WAV_GAIN = 3.0f;
+
+// Tail trim: potong noise di ekor rekaman (gedebuk tangkapan / klik tombol stop manual)
+static const unsigned long RECORDING_THROW_TAIL_TRIM_MS  = 500UL; // tangkapan lebih keras/panjang
+static const unsigned long RECORDING_MANUAL_TAIL_TRIM_MS = 350UL; // klik tombol lebih singkat
+
 static const unsigned long VAD_IMPACT_MUTE_MS = 320UL;
 static const unsigned long VAD_MOTION_MUTE_MS = 120UL;
 static const unsigned long VAD_RECORD_MIN_SILENCE_MS = 400UL;
@@ -235,10 +240,6 @@ static const char *classifyImpactFrame(const VadFeatures &vf) {
     return nullptr;
 }
 
-static bool isImpactLikeFrame(const VadFeatures &vf) {
-    return classifyImpactFrame(vf) != nullptr;
-}
-
 static bool classifySpeechFrame(const VadFeatures &vf, const char **reasonOut) {
     const char *reason = "reject";
     bool speechLike = false;
@@ -283,10 +284,6 @@ static bool classifySpeechFrame(const VadFeatures &vf, const char **reasonOut) {
         *reasonOut = reason;
     }
     return speechLike;
-}
-
-bool isSpeechLikeFrame(const VadFeatures &vf) {
-    return classifySpeechFrame(vf, nullptr);
 }
 
 static const char *recordingVadReasonName(RecordingVadReason reason) {
@@ -558,6 +555,20 @@ void writeWavHeader(File &file, int dataSize) {
     file.write((uint8_t *)&header, sizeof(WavHeader));
 }
 
+// Hitung berapa byte audio yang dipotong dari ekor (untuk buang noise tangkapan/klik).
+// Selalu menyisakan minimal 1 detik audio, dan align 2 byte (16-bit mono).
+static size_t audioTailTrimBytes(unsigned long trimMs, size_t totalDataWritten) {
+    const size_t minKeepBytes = (size_t)SAMPLE_RATE * sizeof(int16_t); // simpan min 1 detik audio
+    if (totalDataWritten <= minKeepBytes) return 0;                    // rekaman pendek: jangan trim
+
+    uint64_t bytes = ((uint64_t)trimMs * SAMPLE_RATE * sizeof(int16_t)) / 1000ULL;
+    bytes -= (bytes % sizeof(int16_t));                                // align 2 byte (16-bit)
+
+    size_t maxTrim = totalDataWritten - minKeepBytes;
+    if (bytes > maxTrim) bytes = maxTrim;
+    return (size_t)bytes;
+}
+
 // Tracker
 bool saveTracker() {
     if (!ensureSdReady("saveTracker", true)) {
@@ -748,10 +759,6 @@ void requestSdRecovery(const char* context) {
     startSdRecoveryTask();
 }
 
-bool isSdRecoveryRunning() {
-    return sdRecoveryRunning;
-}
-
 void pauseSdRecovery() {
     sdRecoveryPaused = true;
 }
@@ -834,10 +841,6 @@ QuestionStatus cekStatusPertanyaan() {
 
     root.close();
     return adaDSN ? QUESTION_OK : QUESTION_NONE;
-}
-
-bool cekAdaPertanyaan() {
-    return cekStatusPertanyaan() == QUESTION_OK;
 }
 
 // Init / Deinit Audio
@@ -999,11 +1002,6 @@ float processAudioBufferVAD(
     vf.samples = samples;
 
     return avgAbs;
-}
-
-float processAudioBuffer(int32_t *input, int16_t *output, int samples, long &sumLoudness) {
-    VadFeatures vf;
-    return processAudioBufferVAD(input, output, samples, sumLoudness, vf);
 }
 
 static void recordingCaptureTask(void *param) {
@@ -1451,9 +1449,7 @@ bool updateAudioPreBufferAndVad(int samples, float &maxLoudness) {
     return vadTriggered;
 }
 
-// =========================
 // Metadata
-// =========================
 bool tulisMetadata(String filename, String uid, unsigned long waktuBerpikir, int currentQ, int currentA) {
     if (!ensureSdReady("metadata_start", true)) {
         return false;
@@ -1498,9 +1494,7 @@ bool tulisMetadata(String filename, String uid, unsigned long waktuBerpikir, int
     return true;
 }
 
-// =========================
 // Rekam Suara
-// =========================
 RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
     if (!ensureSdReady("record_start", true)) {
         return RECORDING_SD_ERROR;
@@ -1662,8 +1656,15 @@ RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
     }
 
     if (totalDataWritten > 0) {
-        long dataSize = file.size() - 44;
-        writeWavHeader(file, dataSize);
+        // Potong ekor rekaman saat berhenti karena lemparan/stop manual,
+        // supaya noise tangkapan ("gedebuk") atau klik tombol tidak ikut terbaca.
+        unsigned long trimMs = thrown        ? RECORDING_THROW_TAIL_TRIM_MS
+                             : manualStopped ? RECORDING_MANUAL_TAIL_TRIM_MS
+                             : 0UL;
+        size_t trimBytes     = audioTailTrimBytes(trimMs, totalDataWritten);
+        size_t finalDataSize = totalDataWritten - trimBytes;
+
+        writeWavHeader(file, (int)finalDataSize);
         file.flush();
     }
 

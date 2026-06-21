@@ -14,8 +14,6 @@ extern i2s_chan_handle_t rx_handle;
 extern int16_t *preRecordBuffer;
 extern int16_t *processed_buffer;
 extern int32_t *raw_i2s_buffer;
-extern int bufferHead;
-extern bool bufferIsFull;
 
 enum QuestionStatus : uint8_t {
   QUESTION_OK = 0,
@@ -39,17 +37,13 @@ void initAudioSD();
 void deinitAudio();
 bool ensureSdReady(const char* context, bool forceProbe = false);
 bool isSdReady();
-bool isSdRecoveryRunning();
 void pauseSdRecovery();
 void resumeSdRecovery();
 void requestSdRecovery(const char* context);
 void markSdLost(const char* reason);
-float processAudioBuffer(int32_t *input, int16_t *output, int samples, long &sumLoudness);
 void clearPreRecordBuffer();
 void drainAudioInput();
-String getFastFilename(String prefix);
 QuestionStatus cekStatusPertanyaan();
-bool cekAdaPertanyaan();
 RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir);
 bool tulisMetadata(String filename, String uid, unsigned long waktuBerpikir, int currentQ, int currentA);
 void resetAudioFilters();

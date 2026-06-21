@@ -18,7 +18,6 @@
 #define SD_CS 5
 
 // Extra Pins
-#define MPU_INT_PIN 32 // External interrupt MPU6050
 #define BUZZER_PIN 13 // Pin untuk indikator audio
 #define BUZZER_TONE_HZ 2500
 #define BUTTON_PIN 27  // Button untuk switching mode
@@ -26,16 +25,11 @@
 #define LED_WIFI    26
 #define EN_POWER 33
 
-// Pin untuk tombol reset WiFi (Tombol BOOT bawaan ESP32)
-#define RESET_BUTTON 0
-
 // Audio & SD Config
 #define SAMPLE_RATE       16000 
 #define I2S_READ_LEN      1024 
-#define BIT_SHIFT         14    
-#define SILENCE_THRESHOLD 300   
-#define SILENCE_LIMIT_MS  3000
-// #define MAX_DURASI_DETIK  300   
+#define BIT_SHIFT         14
+// #define MAX_DURASI_DETIK  300
 #define PRE_BUFFER_SEC    1.5     
 #define PRE_BUFFER_SIZE   (SAMPLE_RATE * PRE_BUFFER_SEC)
 // #define MAX_RECORD_SECONDS 300
@@ -67,7 +61,7 @@
 
 // MQTT CONFIG
 #define MQTT_PORT 8883           
-#define DEVICE_ID "2"
+#define DEVICE_ID "1"
 #define MQTT_SERVER "c4bbf4787735464dadc96ca13e4a9c6b.s1.eu.hivemq.cloud"
 #define MQTT_USER "catchnote"
 #define MQTT_PASS "Ta2526018"

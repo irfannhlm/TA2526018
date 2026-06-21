@@ -6,7 +6,7 @@
 #include <Arduino.h>
 #include "Config.h"
 
-// ── Fungsi ──
+// Fungsi
 void initWifiPortal();
 void bukaPortal();
 void handleWifiPortal();

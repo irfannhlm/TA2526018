@@ -5,21 +5,11 @@
 extern LiquidCrystal_I2C lcd;
 
 String animDots() {
-  static unsigned long lastAnim = 0;
-  static int dotCount = 0;
-  static String dots = "";
+  int dotCount = (millis() / 500) % 4; // 0,1,2,3 berbasis waktu (stateless)
 
-  unsigned long now = millis();
-
-  if (now - lastAnim >= 500) {
-    lastAnim = now;
-
-    dotCount = (dotCount + 1) % 4; // 0, 1, 2, 3, balik 0
-
-    dots = "";
-    for (int i = 0; i < dotCount; i++) {
-      dots += ".";
-    }
+  String dots = "";
+  for (int i = 0; i < dotCount; i++) {
+    dots += ".";
   }
 
   return dots;
@@ -41,4 +31,53 @@ void lcdPrint16(uint8_t row, String text) {
 
   lcd.setCursor(0, row);
   lcd.print(text);
+}
+
+// ── Custom char panah bawah (CGRAM slot 0) ──
+static byte arrowDown[8] = {
+  B00100,
+  B00100,
+  B00100,
+  B00100,
+  B10101,
+  B01110,
+  B00100,
+  B00000
+};
+
+void lcdInitCustomChars() {
+  lcd.createChar(0, arrowDown);
+}
+
+// Cetak panah bawah di kolom 0, lalu teks setelahnya (tanpa alokasi String),
+// dipadkan spasi sampai 16 kolom.
+void lcdPrintArrow16(uint8_t row, const char* textAfterArrow) {
+  lcd.setCursor(0, row);
+  lcd.write(byte(0));
+
+  uint8_t col = 1;
+  while (*textAfterArrow && col < 16) {
+    lcd.print(*textAfterArrow);
+    textAfterArrow++;
+    col++;
+  }
+
+  while (col < 16) {
+    lcd.print(' ');
+    col++;
+  }
+}
+
+void lcdShowModeMahasiswa() {
+  lcdPrint16(0, " MODE:MAHASISWA ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("  ");        // kolom 0-1
+  lcd.write(byte(0));     // kolom 2: panah bawah custom
+  lcd.print(" SCAN KARTU  ");
+}
+
+void lcdShowModeOnline() {
+  lcdPrint16(0, "  MODE: ONLINE  ");
+  lcdPrintArrow16(1, " REGISTER KARTU");
 }
