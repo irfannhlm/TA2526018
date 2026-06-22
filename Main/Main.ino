@@ -32,6 +32,7 @@ Adafruit_MAX17048 maxlipo;
 
 float batteryVoltage = 0.0;
 float batteryPercent = 0.0;
+float batteryOffset = 0.058; // Offset tegangan untuk kalibrasi (~58mV)
 
 volatile unsigned long buttonCooldownUntil = 0;
 volatile bool buttonSuppressUntilReleased = false;
@@ -922,19 +923,30 @@ struct BatteryProfile {
   float percentage;
 };
 
-const int NUM_LUT_POINTS = 11;
+// Calibrated for Wintonic 2500mAh + MAX17048 ~50mV offset
+const int NUM_LUT_POINTS = 21; 
 const BatteryProfile lipo_LUT[NUM_LUT_POINTS] = {
-  {4.20, 100.0},
-  {4.06, 90.0},
-  {3.98, 80.0},
-  {3.92, 70.0},
-  {3.87, 60.0},
-  {3.82, 50.0},
-  {3.79, 40.0},
-  {3.77, 30.0},
-  {3.74, 20.0},
-  {3.68, 10.0},
-  {3.20, 0.0}   // Batas bawah / cutoff baterai
+  {4.220, 100.0},
+  {4.124, 95.0},
+  {4.086, 90.0},
+  {4.065, 85.0},
+  {4.034, 80.0},
+  {3.995, 75.0},
+  {3.950, 70.0},
+  {3.903, 65.0},
+  {3.852, 60.0},
+  {3.800, 55.0},
+  {3.751, 50.0},
+  {3.706, 45.0},
+  {3.668, 40.0},
+  {3.636, 35.0},
+  {3.611, 30.0},
+  {3.584, 25.0},
+  {3.554, 20.0},
+  {3.498, 15.0},
+  {3.428, 10.0},
+  {3.214, 5.0},
+  {3.000, 0.0}    // Batas bawah / cutoff baterai
 };
 
 // FUNGSI INTERPOLASI
@@ -966,7 +978,7 @@ void checkBattery() {
 
     // Baca MAX17048 dengan proteksi mutex I2C
     if (lockI2C(20)) {
-      batteryVoltage = maxlipo.cellVoltage();
+      batteryVoltage = maxlipo.cellVoltage() + batteryOffset;
       unlockI2C();
       batteryReadOK = true;
     }
@@ -1098,7 +1110,7 @@ void setup() {
   } else {
   }
     
-  batteryVoltage = maxlipo.cellVoltage();
+  batteryVoltage = maxlipo.cellVoltage() + batteryOffset;
   batteryPercent = maxlipo.cellPercent();
 
   lcd.init();

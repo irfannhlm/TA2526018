@@ -19,7 +19,7 @@
 
 // Extra Pins
 #define BUZZER_PIN 13 // Pin untuk indikator audio
-#define BUZZER_TONE_HZ 2700
+#define BUZZER_TONE_HZ 2600
 #define BUTTON_PIN 27  // Button untuk switching mode
 #define LED_BATTERY 25
 #define LED_WIFI    26
@@ -61,7 +61,7 @@
 
 // MQTT CONFIG
 #define MQTT_PORT 8883           
-#define DEVICE_ID "1"
+#define DEVICE_ID "2"
 #define MQTT_SERVER "c4bbf4787735464dadc96ca13e4a9c6b.s1.eu.hivemq.cloud"
 #define MQTT_USER "catchnote"
 #define MQTT_PASS "Ta2526018"
