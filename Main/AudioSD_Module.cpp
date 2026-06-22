@@ -123,6 +123,7 @@ struct RecordingVadStats {
 static QueueHandle_t recordingCaptureQueue = nullptr;
 static TaskHandle_t recordingCaptureTaskHandle = nullptr;
 static volatile bool recordingCaptureShouldRun = false;
+static volatile uint32_t recordingDroppedChunks = 0; // diagnosis: chunk dibuang saat queue penuh
 static volatile UBaseType_t recordingCaptureDepth = RECORDING_CAPTURE_QUEUE_DEPTH;
 static uint8_t recordingSdWriteBuffer[RECORDING_SD_WRITE_BUFFER_BYTES];
 
@@ -166,12 +167,11 @@ static const float VAD_HIGH_ZCR_THRESHOLD_MULT = 1.8f;
 static const float RECORDING_WAV_GAIN = 3.0f;
 
 // Tail trim: potong noise di ekor rekaman (gedebuk tangkapan / klik tombol stop manual)
-static const unsigned long RECORDING_THROW_TAIL_TRIM_MS  = 500UL; // tangkapan lebih keras/panjang
-static const unsigned long RECORDING_MANUAL_TAIL_TRIM_MS = 350UL; // klik tombol lebih singkat
+static const unsigned long RECORDING_THROW_TAIL_TRIM_MS  = 700UL; // tangkapan (gedebuk) bisa memantul/lag queue
+static const unsigned long RECORDING_MANUAL_TAIL_TRIM_MS = 600UL; // klik + 300ms CLICK_EVALUATE_MS sebelum loop berhenti
 
 static const unsigned long VAD_IMPACT_MUTE_MS = 320UL;
-static const unsigned long VAD_MOTION_MUTE_MS = 120UL;
-static const unsigned long VAD_RECORD_MIN_SILENCE_MS = 400UL;
+static const unsigned long VAD_RECORD_MIN_SILENCE_MS = 600UL;
 static const unsigned long VAD_RECORD_SPEECH_CONFIRM_MS = 160UL;
 
 static int16_t recordingGainBuffer[RECORDING_CAPTURE_SAMPLES];
@@ -196,24 +196,6 @@ void muteVad(unsigned long ms) {
 
 static bool isVadMuted() {
     return millis() < vadMuteUntil;
-}
-
-static bool suppressVadByMotionGate() {
-    float totalG = 0.0f;
-    float gyroDps = 0.0f;
-
-    if (!isVadMotionGateActive(&totalG, &gyroDps)) {
-        return false;
-    }
-
-    (void)totalG;
-    (void)gyroDps;
-
-    vadScore = 0;
-    vadFirstSpeechMs = 0;
-    vadFirstSoftSpeechMs = 0;
-    muteVad(VAD_MOTION_MUTE_MS);
-    return true;
 }
 
 static const char *classifyImpactFrame(const VadFeatures &vf) {
@@ -1041,7 +1023,10 @@ static void recordingCaptureTask(void *param) {
         processAudioBufferVAD(localRaw, chunk.pcm, samples, sumLoudness, chunk.vf);
         chunk.samples = samples;
 
-        xQueueSend(recordingCaptureQueue, &chunk, pdMS_TO_TICKS(RECORDING_CAPTURE_SEND_WAIT_MS));
+        if (xQueueSend(recordingCaptureQueue, &chunk,
+                       pdMS_TO_TICKS(RECORDING_CAPTURE_SEND_WAIT_MS)) != pdTRUE) {
+            recordingDroppedChunks++;   // queue penuh → chunk dibuang (penyebab klik)
+        }
     }
 
     recordingCaptureTaskHandle = nullptr;
@@ -1434,8 +1419,7 @@ bool updateAudioPreBufferAndVad(int samples, float &maxLoudness) {
         maxLoudness = chunkLoudness;
     }
 
-    bool motionGate = suppressVadByMotionGate();
-    bool vadTriggered = motionGate ? false : updateVadTrigger(vf);
+    bool vadTriggered = updateVadTrigger(vf);
 
     for (int i = 0; i < samples; i++) {
         preRecordBuffer[bufferHead] = processed_buffer[i];
@@ -1517,6 +1501,7 @@ RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
         filename = "/MHS_" + String(DEVICE_ID) + "_" + String(currentQ) + "_" + String(currentA) + ".wav";
     }
 
+    recordingDroppedChunks = 0;
     bool useCaptureQueue = startRecordingCaptureTask();
     unsigned long startTime = millis();
 
@@ -1655,13 +1640,14 @@ RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
         sdWriteFailed = true;
     }
 
+    size_t trimBytes = 0;
     if (totalDataWritten > 0) {
         // Potong ekor rekaman saat berhenti karena lemparan/stop manual,
         // supaya noise tangkapan ("gedebuk") atau klik tombol tidak ikut terbaca.
         unsigned long trimMs = thrown        ? RECORDING_THROW_TAIL_TRIM_MS
                              : manualStopped ? RECORDING_MANUAL_TAIL_TRIM_MS
                              : 0UL;
-        size_t trimBytes     = audioTailTrimBytes(trimMs, totalDataWritten);
+        trimBytes            = audioTailTrimBytes(trimMs, totalDataWritten);
         size_t finalDataSize = totalDataWritten - trimBytes;
 
         writeWavHeader(file, (int)finalDataSize);
@@ -1673,6 +1659,16 @@ RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
     if (sdWriteFailed || !ensureSdReady("record_finalize", true)) {
         markSdLost("record_write_failed");
         return RECORDING_SD_ERROR;
+    }
+
+    // Selaraskan waktuBerpikir dengan audio ter-trim: jeda diam di ekor yang dipotong jangan dihitung.
+    if (trimBytes > 0) {
+        const size_t bytesPerMs = (size_t)SAMPLE_RATE * sizeof(int16_t) / 1000; // 32 byte/ms
+        unsigned long trimMsEff = (unsigned long)(trimBytes / bytesPerMs);
+        if (silenceTracker.pendingSilenceMs > trimMsEff)
+            silenceTracker.pendingSilenceMs -= trimMsEff;
+        else
+            silenceTracker.pendingSilenceMs = 0;
     }
 
     finishRecordingSilenceSegment(silenceTracker, vadStats, totalWaktuBerpikir);
@@ -1694,6 +1690,15 @@ RecordingResult rekamSuara(String uid, unsigned long waktuBerpikir) {
         aIndex = oldA;
         return RECORDING_SD_ERROR;
     }
+
+    // Diagnosis "spiky": bukti clipping (gain) vs chunk ke-drop (queue).
+    Serial.printf(
+        "[REC] bytes=%u clipped=%u/%u (%.1f%%) maxPreGain=%d maxPostGain=%d dropped=%u\n",
+        (unsigned)totalDataWritten,
+        (unsigned)gainStats.clippedSamples, (unsigned)gainStats.samplesProcessed,
+        gainStats.samplesProcessed ? (100.0f * gainStats.clippedSamples / gainStats.samplesProcessed) : 0.0f,
+        gainStats.maxAbsBeforeGain, gainStats.maxAbsAfterGain,
+        (unsigned)recordingDroppedChunks);
 
     lcd.clear();
 

@@ -9,7 +9,6 @@
 
 void initMPU6050();
 void resetFlyingFlag();
-bool isVadMotionGateActive(float *totalGOut = nullptr, float *gyroDpsOut = nullptr);
 
 void startThrowDetectionTask();     // Untuk dipanggil saat mulai rekam
 void stopThrowDetectionTask();      // Untuk dipanggil setelah rekam

@@ -19,7 +19,7 @@
 
 // Extra Pins
 #define BUZZER_PIN 13 // Pin untuk indikator audio
-#define BUZZER_TONE_HZ 2500
+#define BUZZER_TONE_HZ 2700
 #define BUTTON_PIN 27  // Button untuk switching mode
 #define LED_BATTERY 25
 #define LED_WIFI    26

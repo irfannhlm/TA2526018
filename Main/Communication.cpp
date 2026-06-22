@@ -339,13 +339,13 @@ void stopWiFi() {
 // ════════════════════════════════════════════════
 static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas) {
     if (!ensureSdReady("sync_txt_read", true)) {
-        Serial.println("❌ SD tidak siap saat baca TXT: " + namaFile);
+        Serial.println("SD tidak siap saat baca TXT: " + namaFile);
         return "";
     }
 
     File f = SD.open("/" + namaFile, FILE_READ);
     if (!f) {
-        Serial.println("❌ Gagal buka file TXT: " + namaFile);
+        Serial.println("Gagal buka file TXT: " + namaFile);
         return "";
     }
 
@@ -363,7 +363,7 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
         f.close();
 
         if (idx < 2) {
-            Serial.println("⚠️ DSN TXT tidak lengkap (butuh 2 baris): " + namaFile);
+            Serial.println("DSN TXT tidak lengkap (butuh 2 baris): " + namaFile);
             return "";
         }
 
@@ -381,7 +381,7 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
         f.close();
 
         if (idx < 4) {
-            Serial.println("⚠️ MHS TXT tidak lengkap (butuh 4 baris): " + namaFile);
+            Serial.println("MHS TXT tidak lengkap (butuh 4 baris): " + namaFile);
             return "";
         }
 
@@ -396,7 +396,7 @@ static String bacaFileSdKeJson(const String& namaFile, const String& targetKelas
     }
     else {
         f.close();
-        Serial.println("⚠️ Format nama TXT tidak dikenal: " + namaFile);
+        Serial.println("Format nama TXT tidak dikenal: " + namaFile);
         return "";
     }
 
@@ -419,7 +419,7 @@ void handleWiFi() {
         wifiDibatalkan = false;
 
         if (wifiConnecting) {
-            Serial.print("\n✅ WiFi terhubung! IP: ");
+            Serial.print("\nWiFi terhubung! IP: ");
             Serial.println(WiFi.localIP());
             wifiConnecting = false;
             lcdPrint16(0, "WIFI TERHUBUNG ");
@@ -444,7 +444,7 @@ void handleWiFi() {
         }
 
         if (millis() - wifiConnectStarted >= WIFI_CONNECT_TIMEOUT_MS) {
-            Serial.print("\n❌ WiFi timeout! Status: ");
+            Serial.print("\nWiFi timeout! Status: ");
             Serial.println(WiFi.status());
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
@@ -479,7 +479,7 @@ static void kirimStatusSync(const String& status, const String& pesan,
 
     bool ok = mqttClient.publish(MQTT_TOPIC_SYNC_STATUS, buf);
 
-    Serial.print("📤 Status Sync ");
+    Serial.print("Status Sync ");
     Serial.print(ok ? "OK" : "GAGAL");
     Serial.print(" → ");
     Serial.println(buf);
@@ -495,7 +495,7 @@ static bool writeAll(WiFiClientSecure& client, const uint8_t* data, size_t len, 
 
     while (sent < len) {
         if (!client.connected()) {
-            Serial.println("❌ HTTPS putus saat writeAll().");
+            Serial.println("HTTPS putus saat writeAll().");
             return false;
         }
 
@@ -506,7 +506,7 @@ static bool writeAll(WiFiClientSecure& client, const uint8_t* data, size_t len, 
             start = millis();
         } else {
             if (millis() - start > timeoutMs) {
-                Serial.println("❌ Timeout writeAll().");
+                Serial.println("Timeout writeAll().");
                 return false;
             }
             delay(1);
@@ -520,23 +520,23 @@ static bool writeAll(WiFiClientSecure& client, const uint8_t* data, size_t len, 
 //  Pakai WiFiClientSecure terpisah dari MQTT client
 static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int index, int total) {
     if (!ensureSdReady("sync_audio_read", true)) {
-        Serial.println("❌ SD tidak siap saat upload audio.");
+        Serial.println("SD tidak siap saat upload audio.");
         lcdSyncMsg("SD CARD ERROR", "BACA GAGAL");
         return -1;
     }
 
     File f = SD.open("/" + namaFile, FILE_READ);
     if (!f) {
-        Serial.println("❌ Gagal buka audio: /" + namaFile);
+        Serial.println("Gagal buka audio: /" + namaFile);
         lcdSyncMsg("GAGAL BUKA", shortFileName(namaFile));
         return -1;
     }
 
     size_t ukuranFile = f.size();
-    Serial.printf("📂 Buka: %s (%u bytes)\n", namaFile.c_str(), (unsigned int)ukuranFile);
+    Serial.printf("Buka: %s (%u bytes)\n", namaFile.c_str(), (unsigned int)ukuranFile);
 
     if (ukuranFile <= 44) {
-        Serial.println("⚠️ Ukuran WAV terlalu kecil / kemungkinan rusak.");
+        Serial.println("Ukuran WAV terlalu kecil / kemungkinan rusak.");
         lcdSyncMsg("FILE RUSAK", shortFileName(namaFile));
         f.close();
         return -1;
@@ -555,7 +555,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
         "\r\n--" + boundary + "--\r\n";
 
     size_t contentLength = partHeader.length() + ukuranFile + partMid.length();
-    Serial.printf("📦 Content-Length: %u bytes\n", (unsigned int)contentLength);
+    Serial.printf("Content-Length: %u bytes\n", (unsigned int)contentLength);
 
     // Gunakan client HTTPS terpisah (bukan espClient yang dipakai MQTT)
     WiFiClientSecure httpClient;
@@ -563,15 +563,15 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     httpClient.setTimeout(15000);
 
     lcdSyncMsg("AUDIO " + String(index) + "/" + String(total), "KONEK SERVER");
-    Serial.printf("🔌 Menghubungkan ke %s:443 ...\n", BACKEND_SERVER);
+    Serial.printf("Menghubungkan ke %s:443 ...\n", BACKEND_SERVER);
     if (!httpClient.connect(BACKEND_SERVER, 443)) {
-        Serial.println("❌ Gagal konek ke " + String(BACKEND_SERVER) + ":443");
+        Serial.println("Gagal konek ke " + String(BACKEND_SERVER) + ":443");
         lcdSyncMsg("SERVER GAGAL", "CEK INTERNET");
         f.close();
         return -1;
     }
 
-    Serial.println("🔌 Terhubung ke Render, mulai stream...");
+    Serial.println("Terhubung ke Render, mulai stream...");
 
     httpClient.printf(
         "POST /api/upload-audio-sd HTTP/1.1\r\n"
@@ -583,7 +583,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     );
 
     if (!httpClient.print(partHeader)) {
-        Serial.println("❌ Gagal kirim multipart header.");
+        Serial.println("Gagal kirim multipart header.");
         lcdSyncMsg("UPLOAD GAGAL", shortFileName(namaFile));
         f.close();
         httpClient.stop();
@@ -601,7 +601,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
         if (baca == 0) break;
 
         if (!writeAll(httpClient, chunkBuf, baca)) {
-            Serial.printf("❌ Stream audio gagal pada %u/%u bytes.\n",
+            Serial.printf("Stream audio gagal pada %u/%u bytes.\n",
                           (unsigned int)terkirim, (unsigned int)ukuranFile);
             lcdSyncMsg("UPLOAD GAGAL", shortFileName(namaFile));
             f.close();
@@ -623,7 +623,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
         }
 
         if (millis() - lastPrint > 2000) {
-            Serial.printf("   ⏳ Progress: %u/%u bytes (%.0f%%)\n",
+            Serial.printf("   Progress: %u/%u bytes (%.0f%%)\n",
                 (unsigned int)terkirim, (unsigned int)ukuranFile,
                 ukuranFile > 0 ? ((float)terkirim / ukuranFile * 100.0f) : 0.0f);
             lastPrint = millis();
@@ -631,10 +631,10 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     }
 
     f.close();
-    Serial.printf("✅ File selesai distream: %u bytes\n", (unsigned int)terkirim);
+    Serial.printf("File selesai distream: %u bytes\n", (unsigned int)terkirim);
 
     if (terkirim != ukuranFile) {
-        Serial.printf("❌ Byte terkirim tidak sama! terkirim=%u, ukuran=%u\n",
+        Serial.printf("Byte terkirim tidak sama! terkirim=%u, ukuran=%u\n",
                       (unsigned int)terkirim, (unsigned int)ukuranFile);
         lcdSyncMsg("UPLOAD GAGAL", shortFileName(namaFile));
         httpClient.stop();
@@ -642,7 +642,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     }
 
     if (!httpClient.print(partMid)) {
-        Serial.println("❌ Gagal kirim multipart penutup/metadata.");
+        Serial.println("Gagal kirim multipart penutup/metadata.");
         lcdSyncMsg("UPLOAD GAGAL", shortFileName(namaFile));
         httpClient.stop();
         return -1;
@@ -661,7 +661,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
             responseLine.trim();
             if (responseLine.startsWith("HTTP/")) {
                 httpCode = responseLine.substring(9, 12).toInt();
-                Serial.printf("📡 HTTP %d untuk: %s\n", httpCode, namaFile.c_str());
+                Serial.printf("HTTP %d untuk: %s\n", httpCode, namaFile.c_str());
                 break;
             }
         }
@@ -669,7 +669,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     }
 
     if (httpCode == -1) {
-        Serial.println("⏱️ Timeout baca response dari server.");
+        Serial.println("Timeout baca response dari server.");
     }
 
     String body = "";
@@ -713,12 +713,12 @@ static bool tulisUidCacheAtomik(const char* finalPath,
     count = 0;
 
     if (!ensureSdReady("uid_cache_write", true)) {
-        Serial.println("❌ SD tidak siap saat tulis cache UID.");
+        Serial.println("SD tidak siap saat tulis cache UID.");
         return false;
     }
 
     if (uids.isNull()) {
-        Serial.println("❌ Array UID kosong/null.");
+        Serial.println("Array UID kosong/null.");
         return false;
     }
 
@@ -726,7 +726,7 @@ static bool tulisUidCacheAtomik(const char* finalPath,
 
     File file = SD.open(tempPath, FILE_WRITE);
     if (!file) {
-        Serial.println("❌ Gagal buka file temp UID: " + String(tempPath));
+        Serial.println("Gagal buka file temp UID: " + String(tempPath));
         return false;
     }
 
@@ -851,6 +851,24 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
             prefs.end();
 
             Serial.printf("✅ Durasi rekaman disimpan: %lu ms\n", maxRecordMs);
+
+            pengaturanDiperbarui = true;
+        }
+    }
+    else if (perintah == "set_threshold") {
+        int nilai = doc["nilai"] | -1;
+
+        Serial.printf("🎚️ set_threshold diterima: %d\n", nilai);
+
+        if (nilai > 0) {
+            active_threshold = nilai;
+
+            Preferences prefs;
+            prefs.begin("catch_note", false);
+            prefs.putInt("threshold", active_threshold);
+            prefs.end();
+
+            Serial.printf("✅ Threshold disimpan: %d\n", active_threshold);
 
             pengaturanDiperbarui = true;
         }

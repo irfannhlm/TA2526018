@@ -10,20 +10,6 @@ static bool mpuReady = false;
 static TaskHandle_t throwTaskHandle = nullptr;
 static volatile bool taskShouldRun = false;
 
-static const unsigned long VAD_MOTION_SAMPLE_INTERVAL_MS = 50UL;
-static const unsigned long VAD_MOTION_EVIDENCE_WINDOW_MS = 120UL;
-static const unsigned long VAD_MOTION_HOLD_MS = 180UL;
-static const float VAD_MOTION_GYRO_DPS = 220.0f;
-static const float VAD_MOTION_TOTAL_G_DELTA = 0.35f;
-
-static unsigned long vadMotionLastReadAt = 0;
-static unsigned long vadMotionFirstEvidenceAt = 0;
-static unsigned long vadMotionLastEvidenceAt = 0;
-static uint8_t vadMotionEvidenceCount = 0;
-static bool vadMotionLastReadValid = false;
-static float vadMotionLastTotalG = 1.0f;
-static float vadMotionLastGyroDps = 0.0f;
-
 enum ThrowDetectionState {
   THROW_STATE_IDLE,
   THROW_STATE_AIRBORNE_CANDIDATE,
@@ -51,83 +37,6 @@ void initMPU6050() {
   mpu.setFilterBandwidth(MPU6050_BAND_44_HZ);
 
   mpuReady = true;
-}
-
-bool isVadMotionGateActive(float *totalGOut, float *gyroDpsOut) {
-  unsigned long now = millis();
-
-  if (!mpuReady) {
-    if (totalGOut != nullptr) {
-      *totalGOut = 0.0f;
-    }
-    if (gyroDpsOut != nullptr) {
-      *gyroDpsOut = 0.0f;
-    }
-    return false;
-  }
-
-  if (vadMotionLastReadAt == 0 || now - vadMotionLastReadAt >= VAD_MOTION_SAMPLE_INTERVAL_MS) {
-    vadMotionLastReadAt = now;
-
-    sensors_event_t a, g, temp;
-    bool readOK = false;
-
-    if (lockI2C(5)) {
-      mpu.getEvent(&a, &g, &temp);
-      unlockI2C();
-      readOK = true;
-    }
-
-    if (readOK) {
-      float ax = a.acceleration.x / 9.81f;
-      float ay = a.acceleration.y / 9.81f;
-      float az = a.acceleration.z / 9.81f;
-      float totalG = sqrtf(ax * ax + ay * ay + az * az);
-      float gyroDps = gyroMagnitudeDps(g);
-
-      vadMotionLastReadValid =
-        !isnan(totalG) && !isnan(gyroDps) &&
-        totalG >= 0.02f && totalG <= 8.5f &&
-        gyroDps <= 4000.0f;
-
-      if (vadMotionLastReadValid) {
-        vadMotionLastTotalG = totalG;
-        vadMotionLastGyroDps = gyroDps;
-
-        bool motionEvidence =
-          gyroDps >= VAD_MOTION_GYRO_DPS ||
-          fabsf(totalG - 1.0f) >= VAD_MOTION_TOTAL_G_DELTA;
-
-        if (motionEvidence) {
-          if (vadMotionFirstEvidenceAt == 0 ||
-              now - vadMotionFirstEvidenceAt > VAD_MOTION_EVIDENCE_WINDOW_MS) {
-            vadMotionFirstEvidenceAt = now;
-            vadMotionEvidenceCount = 1;
-          } else if (vadMotionEvidenceCount < 2) {
-            vadMotionEvidenceCount++;
-          }
-
-          vadMotionLastEvidenceAt = now;
-        } else if (vadMotionLastEvidenceAt == 0 ||
-                   now - vadMotionLastEvidenceAt > VAD_MOTION_HOLD_MS) {
-          vadMotionFirstEvidenceAt = 0;
-          vadMotionEvidenceCount = 0;
-        }
-      }
-    }
-  }
-
-  if (totalGOut != nullptr) {
-    *totalGOut = vadMotionLastReadValid ? vadMotionLastTotalG : 0.0f;
-  }
-  if (gyroDpsOut != nullptr) {
-    *gyroDpsOut = vadMotionLastReadValid ? vadMotionLastGyroDps : 0.0f;
-  }
-
-  return vadMotionLastReadValid &&
-         vadMotionEvidenceCount >= 2 &&
-         vadMotionLastEvidenceAt > 0 &&
-         now - vadMotionLastEvidenceAt <= VAD_MOTION_HOLD_MS;
 }
 
 static void throwDetectionTask(void* param) {
