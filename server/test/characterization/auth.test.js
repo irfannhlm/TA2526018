@@ -129,3 +129,45 @@ test("POST /logout -> 302 ke /", async () => {
     await ctx.close();
   }
 });
+
+test("TC-AUTH-10 rate limit: percobaan ke-11 -> 429 + pesan tunggu", async () => {
+  const ctx = await loadApp({ seed: seedUsers });
+  try {
+    let last;
+    for (let i = 0; i < 11; i++) {
+      last = await ctx.request("POST", "/login", {
+        form: { username: "admin", password: "salah" },
+      });
+    }
+    assert.equal(last.status, 429);
+    assert.match(last.text, /Coba lagi dalam/);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-AUTH-11 login sukses -> cookie sesi httpOnly", async () => {
+  const ctx = await loadApp({ seed: seedUsers });
+  try {
+    const res = await ctx.request("POST", "/login", {
+      form: { username: "admin", password: "admin123" },
+    });
+    const setCookie = res.headers.get("set-cookie");
+    assert.ok(setCookie, "harus ada set-cookie");
+    assert.match(setCookie, /HttpOnly/i);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-AUTH-12 /dosen tanpa ?kelas -> redirect /pilih-kelas", async () => {
+  const ctx = await loadApp({ seed: seedUsers });
+  try {
+    const cookie = await ctx.loginAs("dosen1", "dosen123");
+    const res = await ctx.request("GET", "/dosen", { cookie });
+    assert.equal(res.status, 302);
+    assert.equal(res.location, "/pilih-kelas");
+  } finally {
+    await ctx.close();
+  }
+});

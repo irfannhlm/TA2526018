@@ -46,9 +46,12 @@ const updateSettingsSchema = z.object({
     .union([z.literal(""), z.coerce.number().int().positive()])
     .optional(),
   threshold: z
-    .enum(["hening", "normal", "agak_bising", "sangat_bising"])
+    .enum(["hening", "normal", "bising", "custom"])
     .optional()
     .or(z.literal("").transform(() => undefined)),
+  threshold_custom: z
+    .union([z.literal(""), z.coerce.number().int().positive()])
+    .optional(),
   current_class: optStr,
 });
 
@@ -75,7 +78,13 @@ const addStudentSchema = z.object({
 });
 
 const manageUidSchema = z.object({
-  action: z.enum(["delete", "delete_all", "add_single", "add_date"]),
+  action: z.enum([
+    "delete",
+    "delete_all",
+    "add_single",
+    "add_date",
+    "add_to_class",
+  ]),
   uid: optStr,
   entry_id: z.union([z.literal(""), z.coerce.number().int()]).optional(),
   // student_id boleh tunggal (legacy) atau array (multi-checklist).

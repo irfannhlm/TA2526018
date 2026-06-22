@@ -15,12 +15,12 @@ const TABLE_PK = {
   duplicate_queue: "qid",
 };
 
-// Nilai ambang kebisingan (dikirim ke alat seperti set_timer).
+// Nilai ambang kebisingan preset (dikirim ke alat seperti set_timer).
+// Selain preset ini, dosen bisa memilih "custom" dan memasukkan nilai sendiri.
 const THRESHOLD_VALUES = {
-  hening: 175,
+  hening: 200,
   normal: 300,
-  agak_bising: 400,
-  sangat_bising: 750,
+  bising: 400,
 };
 
 // Bucket Supabase Storage untuk file audio.

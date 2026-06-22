@@ -12,6 +12,7 @@ const state = {
     mode: "dosen_rec",
     maxTime: 5,
     threshold: "normal",
+    thresholdCustom: null,
     scannedList: [],
   },
   scanCounter: 0,

@@ -118,6 +118,78 @@ test("POST /api/upload-audio-sd duplikat WAV -> pending di queue", async () => {
   }
 });
 
+const PERINTAH = "kelas/alat/perintah";
+
+test("TC-UP-10 duplikat WAV -> resolve replace -> upload + simpan DB + resolved", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedClass(sb);
+      sb.seedStorage(BUCKET, ["K1/DSN_2_1.wav"]);
+    },
+  });
+  try {
+    const up = await ctx.requestMultipart("POST", "/api/upload-audio-sd", {
+      fields: { nama_file: "DSN_2_1.wav", target_kelas: "K1" },
+      file: { filename: "DSN_2_1.wav" },
+    });
+    const qid = up.json().qid;
+
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const res = await ctx.request("POST", "/api/duplicate-resolve", {
+      cookie,
+      body: { qid, action: "replace" },
+    });
+    assert.equal(res.json().action, "replace");
+
+    // Question DSN dibuat dengan audio (lewat simpanAudioKeDB)
+    const qs = ctx.supabase.rows("questions");
+    assert.equal(qs.length, 1);
+    assert.match(qs[0].audio_file_path, /^https:\/\/fake\.storage\//);
+
+    // Antrian sudah kosong (resolved)
+    const { pending } = (
+      await ctx.request("GET", "/api/duplicate-queue", { cookie })
+    ).json();
+    assert.equal(pending.length, 0);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-UP-11 duplikat WAV -> resolve skip -> dibuang, DB tak berubah, tanpa ACK", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedClass(sb);
+      sb.seedStorage(BUCKET, ["K1/DSN_2_1.wav"]);
+    },
+  });
+  try {
+    const up = await ctx.requestMultipart("POST", "/api/upload-audio-sd", {
+      fields: { nama_file: "DSN_2_1.wav", target_kelas: "K1" },
+      file: { filename: "DSN_2_1.wav" },
+    });
+    const qid = up.json().qid;
+
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const res = await ctx.request("POST", "/api/duplicate-resolve", {
+      cookie,
+      body: { qid, action: "skip" },
+    });
+    assert.equal(res.json().action, "skip");
+
+    // Tidak ada question dibuat; WAV skip tidak mengirim ACK
+    assert.equal(ctx.supabase.rows("questions").length, 0);
+    assert.equal(ctx.mqtt.lastPublished(PERINTAH), null);
+
+    const { pending } = (
+      await ctx.request("GET", "/api/duplicate-queue", { cookie })
+    ).json();
+    assert.equal(pending.length, 0);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("POST /api/upload-audio (manual) -> update answers.audio_file_path", async () => {
   const ctx = await loadApp({
     seed(sb) {

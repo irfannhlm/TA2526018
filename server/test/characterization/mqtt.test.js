@@ -232,6 +232,137 @@ test("MQTT sync_status: perbarui state yang bisa dipolling", async () => {
   }
 });
 
+test("TC-MQTT-10 audio_data MHS duplikat (sudah ada student) -> queue, TANPA ACK", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedBase(sb);
+      sb.seed("questions", [{ question_id: 50, class_id: 10, number_q: 1 }]);
+      sb.seed("answers", [
+        { answer_id: 70, question_id: 50, number_a: 3, student_id: 1, duration_answer: 4 },
+      ]);
+    },
+  });
+  try {
+    await ctx.mqtt.deliver("kelas/alat/audio_data", {
+      file: "MHS_2_1_3.txt",
+      target_kelas: "K1",
+      no_pertanyaan: 1,
+      no_jawaban: 3,
+      uid: "UID-A",
+      waktu_diam_ms: 9000,
+    });
+    assert.equal(ctx.mqtt.lastPublished(PERINTAH), null, "tidak boleh ACK");
+
+    const cookie = await ctx.loginAs("admin", "admin123");
+    const { pending } = (
+      await ctx.request("GET", "/api/duplicate-queue", { cookie })
+    ).json();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].tipe, "txt_mhs");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-MQTT-11 audio_data DSN ada tapi date_id kosong -> update date_id + ACK", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedBase(sb);
+      sb.seed("questions", [
+        { question_id: 50, class_id: 10, number_q: 1, transcript_text: "" },
+      ]);
+    },
+  });
+  try {
+    await ctx.mqtt.deliver("kelas/alat/audio_data", {
+      file: "DSN_2_1.txt",
+      target_kelas: "K1",
+      no_pertanyaan: 1,
+      tanggal: "13-05-2026",
+      uid: "DOSEN",
+    });
+    const q = ctx.supabase.rows("questions").find((x) => x.question_id === 50);
+    assert.equal(q.date_id, "2026-05-13");
+    assert.equal(q.device_id, 2); // device_id terisi dari nama file
+    const ack = ctx.mqtt.lastPublished(PERINTAH);
+    assert.equal(ack.payload.perintah, "ack_file");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-MQTT-12 audio_data MHS ada tapi kosong -> update student+duration + ACK", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedBase(sb);
+      sb.seed("questions", [{ question_id: 50, class_id: 10, number_q: 1 }]);
+      sb.seed("answers", [
+        { answer_id: 70, question_id: 50, number_a: 3, student_id: null, duration_answer: null },
+      ]);
+    },
+  });
+  try {
+    await ctx.mqtt.deliver("kelas/alat/audio_data", {
+      file: "MHS_2_1_3.txt",
+      target_kelas: "K1",
+      no_pertanyaan: 1,
+      no_jawaban: 3,
+      uid: "UID-A",
+      waktu_diam_ms: 5000,
+    });
+    const a = ctx.supabase.rows("answers").find((x) => x.answer_id === 70);
+    assert.equal(a.student_id, 1);
+    assert.equal(a.duration_answer, 5);
+    const ack = ctx.mqtt.lastPublished(PERINTAH);
+    assert.equal(ack.payload.perintah, "ack_file");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-MQTT-13 audio_data MHS uid tak terdaftar -> answer student_id null + ACK", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      seedBase(sb);
+      sb.seed("questions", [{ question_id: 50, class_id: 10, number_q: 1 }]);
+    },
+  });
+  try {
+    await ctx.mqtt.deliver("kelas/alat/audio_data", {
+      file: "MHS_2_1_3.txt",
+      target_kelas: "K1",
+      no_pertanyaan: 1,
+      no_jawaban: 3,
+      uid: "GHOST",
+      waktu_diam_ms: 2000,
+    });
+    const answers = ctx.supabase.rows("answers");
+    assert.equal(answers.length, 1);
+    assert.equal(answers[0].student_id, null);
+    const ack = ctx.mqtt.lastPublished(PERINTAH);
+    assert.equal(ack.payload.perintah, "ack_file");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-MQTT-14 sync_status: error -> error, dibatalkan -> cancelled", async () => {
+  const ctx = await loadApp({ seed: seedBase });
+  try {
+    const cookie = await ctx.loginAs("admin", "admin123");
+
+    await ctx.mqtt.deliver("kelas/alat/sync_status", { status: "error", pesan: "gagal" });
+    let res = await ctx.request("GET", "/api/sync-status", { cookie });
+    assert.equal(res.json().state, "error");
+
+    await ctx.mqtt.deliver("kelas/alat/sync_status", { status: "dibatalkan", pesan: "batal" });
+    res = await ctx.request("GET", "/api/sync-status", { cookie });
+    assert.equal(res.json().state, "cancelled");
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("MQTT payload rusak: tidak melempar error (di-catch)", async () => {
   const ctx = await loadApp({ seed: seedBase });
   try {

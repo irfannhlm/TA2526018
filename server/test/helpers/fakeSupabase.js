@@ -197,13 +197,28 @@ class QueryBuilder {
     let rows = this._rows().filter((r) => this._matches(r));
     rows = rows.map((r) => resolveEmbedded(db, this._table, r, this._columns));
 
-    // filter berdasarkan kolom embedded (mis. classes.class_name)
+    // filter berdasarkan kolom embedded (mis. classes.class_name,
+    // questions.created_at). Hormati tipe filter eq/gte/lte/neq agar
+    // query rentang tanggal (add_date) bisa diuji.
     for (const f of this._embeddedColFilters()) {
       const [rel, col] = f.col.split(".");
       rows = rows.filter((r) => {
         const emb = r[rel];
         const list = Array.isArray(emb) ? emb : emb ? [emb] : [];
-        return list.some((e) => e && e[col] == f.val);
+        return list.some((e) => {
+          if (!e) return false;
+          const cell = e[col];
+          switch (f.type) {
+            case "gte":
+              return cell >= f.val;
+            case "lte":
+              return cell <= f.val;
+            case "neq":
+              return cell != f.val;
+            default:
+              return cell == f.val;
+          }
+        });
       });
     }
 
