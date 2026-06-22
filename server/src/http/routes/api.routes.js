@@ -64,15 +64,48 @@ router.get(
 
     const allStudents = await sbSelect("students");
 
+    // Sama dengan handler GET /dosen: cari class_id lalu ambil anggota dari
+    // class_students. Pola ini andal saat keanggotaan baru ditambahkan
+    // (mis. lewat aksi "Tambah ke kelas") — beda dengan join sebelumnya yang
+    // kadang tidak mencerminkan baris baru.
     let studentsInClass = [];
     if (currentClass) {
-      const { data, error } = await supabase
-        .from("students")
-        .select(
-          "student_id, class_students!inner(class_id), classes!inner(class_name)",
-        )
-        .eq("classes.class_name", currentClass);
-      if (!error) studentsInClass = data || [];
+      const classRec = await sbSelect(
+        "classes",
+        { class_name: currentClass },
+        "class_id",
+      );
+      const classId = classRec.length > 0 ? classRec[0].class_id : null;
+      if (classId) {
+        const csRows = await sbSelect(
+          "class_students",
+          { class_id: classId },
+          "student_id",
+        );
+        studentsInClass = csRows || [];
+      }
+    }
+
+    // Kelas lain tempat tiap kartu terdaftar (untuk info "ada di kelas lain").
+    const scannedStudentIds = state.sessionData.scannedList
+      .map((item) => {
+        const s = allStudents.find((st) => st.rfid_uid === item.uid);
+        return s ? s.student_id : null;
+      })
+      .filter((id) => id !== null);
+
+    const otherClassMap = {}; // student_id -> [class_name, ...]
+    if (scannedStudentIds.length > 0) {
+      const { data: ocRows } = await supabase
+        .from("class_students")
+        .select("student_id, classes(class_name)")
+        .in("student_id", scannedStudentIds);
+      (ocRows || []).forEach((r) => {
+        const name = r.classes && r.classes.class_name;
+        if (!name) return;
+        if (!otherClassMap[r.student_id]) otherClassMap[r.student_id] = [];
+        otherClassMap[r.student_id].push(name);
+      });
     }
 
     const mappedList = state.sessionData.scannedList.map((item) => {
@@ -84,14 +117,21 @@ router.get(
         );
         if (!isInClass) isWrongClass = true;
       }
+      const otherClasses = student
+        ? (otherClassMap[student.student_id] || []).filter(
+            (c) => c !== currentClass,
+          )
+        : [];
       return {
         id: item.id,
         uid: item.uid,
         time: item.time || "",
+        studentId: student ? student.student_id : null,
         name: student ? student.name : "Tidak Terdaftar",
         nim: student ? student.nim : "-",
         isRegistered: !!student,
         isWrongClass,
+        otherClasses,
       };
     });
 

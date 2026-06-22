@@ -28,8 +28,15 @@ function isAsset(url) {
   );
 }
 
+// Lewati GET ke endpoint API (mis. polling /api/realtime-data tiap beberapa
+// detik) agar terminal tidak penuh oleh log berulang.
+function isApiGet(method, url) {
+  return method === "GET" && /^\/api\//.test(url);
+}
+
 function requestLogger(req, res, next) {
   if (isAsset(req.originalUrl)) return next();
+  if (isApiGet(req.method, req.originalUrl)) return next();
 
   const start = process.hrtime.bigint();
   res.on("finish", () => {

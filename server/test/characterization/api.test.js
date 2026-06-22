@@ -259,6 +259,42 @@ test("/api/realtime-data: mahasiswa beda kelas -> isWrongClass true", async () =
   }
 });
 
+test("TC-API-10 realtime-data: uid tak terdaftar -> isRegistered false", async () => {
+  const ctx = await loadApp({
+    seed(sb) {
+      sb.seed("classes", [{ class_id: 10, class_name: "K1" }]);
+    },
+  });
+  try {
+    await ctx.mqtt.deliver("kelas/alat/rfid", { action: "tap_rfid", uid: "TIDAK-ADA" });
+    const res = await ctx.request("GET", "/api/realtime-data?kelas=K1");
+    const row = res.json().scannedList.find((x) => x.uid === "TIDAK-ADA");
+    assert.equal(row.isRegistered, false);
+    assert.equal(row.name, "Tidak Terdaftar");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("TC-API-11 upload-audio-sd kelas tak ditemukan -> 200 + warning, tetap tersimpan", async () => {
+  const ctx = await loadApp({ seed: seedAdmin });
+  try {
+    const res = await ctx.requestMultipart("POST", "/api/upload-audio-sd", {
+      fields: { nama_file: "DSN_2_1.wav", target_kelas: "KELAS-GHOST" },
+      file: { filename: "DSN_2_1.wav" },
+    });
+    assert.equal(res.status, 200);
+    const j = res.json();
+    assert.equal(j.success, true);
+    assert.match(j.warning || "", /tidak ditemukan/i);
+    assert.ok(j.audio_file_path, "tetap mengembalikan URL audio tersimpan");
+    // Tidak ada question dibuat karena kelas tak ada
+    assert.equal(ctx.supabase.rows("questions").length, 0);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("/api/realtime-logs tanpa kelas -> logs kosong; dengan data -> ada entri", async () => {
   const ctx = await loadApp({
     seed(sb) {

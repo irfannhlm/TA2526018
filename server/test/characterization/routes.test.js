@@ -188,11 +188,20 @@ test("/dosen/update-settings: timer -> set_timer, threshold -> set_threshold", a
 
     await ctx.request("POST", "/dosen/update-settings", {
       cookie,
-      form: { threshold: "agak_bising", current_class: "K1" },
+      form: { threshold: "bising", current_class: "K1" },
     });
     p = ctx.mqtt.lastPublished(PERINTAH);
     assert.equal(p.payload.perintah, "set_threshold");
     assert.equal(p.payload.nilai, 400);
+
+    // Threshold custom: nilai diambil dari threshold_custom
+    await ctx.request("POST", "/dosen/update-settings", {
+      cookie,
+      form: { threshold: "custom", threshold_custom: "555", current_class: "K1" },
+    });
+    p = ctx.mqtt.lastPublished(PERINTAH);
+    assert.equal(p.payload.perintah, "set_threshold");
+    assert.equal(p.payload.nilai, 555);
   } finally {
     await ctx.close();
   }

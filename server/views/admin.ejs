@@ -29,7 +29,7 @@
         };
       })();
     </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet"/>
@@ -52,6 +52,7 @@
             color: var(--text-dark);
             overflow-x: hidden;
             min-height: 100vh;
+            min-height: 100dvh;
         }
 
         .sidebar {
@@ -443,10 +444,10 @@
                                             </span>
                                         </td>
                                         <td class="text-end pe-4">
-                                            <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" onclick="openEditClassModal('<%= c.id %>', '<%= c.name %>', '<%= c.code %>', `<%= (c.lecturer || '').replace(/`/g, '') %>`, '<%= c.lecturer_user_id || "" %>')">
+                                            <button class="btn btn-sm btn-light text-secondary rounded-circle me-1" data-id="<%= c.id %>" data-name="<%= c.name %>" data-code="<%= c.code %>" data-lecturer="<%= c.lecturer || '' %>" data-lecturer-user-id="<%= c.lecturer_user_id || '' %>" onclick="openEditClassModal(this)">
                                                 <i class="fas fa-pen"></i>
                                             </button>
-                                            <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" onclick="confirmDeleteClass('<%= c.id %>', '<%= c.name %>')">
+                                            <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" data-id="<%= c.id %>" data-name="<%= c.name %>" onclick="confirmDeleteClass(this)">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </td>
@@ -596,7 +597,8 @@
                                   <% } else { %>
                                     <button type="button"
                                       class="scan-rfid-btn btn btn-sm rounded-pill px-3 fw-semibold d-inline-flex align-items-center gap-1 <%= anyDeviceOnline ? 'scan-on' : 'scan-off' %>"
-                                      onclick="startRfidScan('<%= s.student_id %>', '<%= s.name %>')"
+                                      data-id="<%= s.student_id %>" data-name="<%= s.name %>"
+                                      onclick="startRfidScan(this)"
                                       <%= anyDeviceOnline ? '' : 'disabled' %>>
                                       <i class="fas fa-wifi"></i> Scan
                                     </button>
@@ -604,10 +606,10 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2">
-                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="openEditModal('<%= s.student_id %>', '<%= s.name %>', '<%= s.nim %>', '<%= s.rfid_uid %>')">
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" data-id="<%= s.student_id %>" data-name="<%= s.name %>" data-nim="<%= s.nim %>" data-rfid="<%= s.rfid_uid %>" onclick="openEditModal(this)">
                                             <i class="fas fa-pen"></i>
                                         </button>
-                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" onclick="confirmDeleteStudent('<%= s.student_id %>', '<%= s.name %>')">
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" data-id="<%= s.student_id %>" data-name="<%= s.name %>" onclick="confirmDeleteStudent(this)">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -1010,7 +1012,8 @@
           new bootstrap.Modal(document.getElementById('addModal')).show();
       }
 
-      function openEditModal(id, name, nim, rfid) {
+      function openEditModal(el) {
+        const { id, name, nim, rfid } = el.dataset;
         const listModalEl = document.getElementById('listModal');
         const listModal = bootstrap.Modal.getInstance(listModalEl);
         if(listModal) listModal.hide();
@@ -1018,7 +1021,7 @@
         document.getElementById("editId").value = id;
         document.getElementById("editName").value = name;
         document.getElementById("editNim").value = nim;
-        document.getElementById("editRfid").value = rfid;
+        document.getElementById("editRfid").value = rfid || '';
         setTimeout(() => {
             new bootstrap.Modal(document.getElementById("editModal")).show();
         }, 300);
@@ -1028,7 +1031,9 @@
       let __rfidScanTimer = null;
       let __rfidScanActive = false;
 
-      async function startRfidScan(studentId, name) {
+      async function startRfidScan(el) {
+        const studentId = el.dataset.id;
+        const name = el.dataset.name;
         if (__rfidScanActive) return;
         __rfidScanActive = true;
 
@@ -1052,7 +1057,7 @@
 
         Swal.fire({
           title: 'Menunggu Scan Kartu',
-          html: `Tempelkan kartu RFID untuk <strong>${name}</strong> ke alat...`,
+          html: `Tempelkan kartu RFID untuk <strong>${escHtml(name)}</strong> ke alat...`,
           icon: 'info',
           showConfirmButton: false,
           showCancelButton: true,
@@ -1085,7 +1090,7 @@
                 await Swal.fire({
                   icon: 'success',
                   title: 'RFID Tersimpan',
-                  html: `Kartu <span class="font-monospace">${uid}</span> dipasang untuk <strong>${name}</strong>.`,
+                  html: `Kartu <span class="font-monospace">${uid}</span> dipasang untuk <strong>${escHtml(name)}</strong>.`,
                   timer: 1800,
                   showConfirmButton: false
                 });
@@ -1243,7 +1248,8 @@
         }, 1500);
       }
 
-      function openEditClassModal(id, name, code, lecturer, lecturerUserId) {
+      function openEditClassModal(el) {
+          const { id, name, code, lecturer, lecturerUserId } = el.dataset;
           document.getElementById("editClassId").value = id;
           document.getElementById("editClassName").value = name;
           document.getElementById("editClassCode").value = code;
@@ -1260,7 +1266,9 @@
       }
 
       // Konfirmasi hapus mahasiswa via SweetAlert (pilih: kelas saja / database)
-      function confirmDeleteStudent(id, name) {
+      function confirmDeleteStudent(el) {
+          const id = el.dataset.id;
+          const name = el.dataset.name;
           // Tutup modal list dulu
           const listModalEl = document.getElementById('listModal');
           const listModal = bootstrap.Modal.getInstance(listModalEl);
@@ -1269,7 +1277,7 @@
           setTimeout(() => {
               Swal.fire({
                   title: 'Hapus Mahasiswa',
-                  html: `Pilih cara menghapus <strong>${name}</strong>:<br><br>
+                  html: `Pilih cara menghapus <strong>${escHtml(name)}</strong>:<br><br>
                          <div style="text-align:left;font-size:0.86rem;line-height:1.5;">
                            <div class="mb-2"><strong>Hapus dari Kelas Saja</strong><br><span class="text-muted">Mahasiswa dikeluarkan dari kelas ini. Data &amp; RFID-nya tetap ada di database dan kelas lain.</span></div>
                            <div><strong>Hapus dari Database</strong><br><span class="text-muted">Record mahasiswa dihapus permanen dari seluruh sistem. Tidak bisa dibatalkan.</span></div>
@@ -1289,7 +1297,7 @@
                   } else if (result.isDenied) {
                       Swal.fire({
                           title: 'Yakin Hapus dari Database?',
-                          html: `<strong>${name}</strong> akan dihapus <strong>permanen</strong> dari seluruh sistem.<br><br><small class="text-danger">⚠️ Aksi ini TIDAK BISA dibatalkan.</small>`,
+                          html: `<strong>${escHtml(name)}</strong> akan dihapus <strong>permanen</strong> dari seluruh sistem.<br><br><small class="text-danger">⚠️ Aksi ini TIDAK BISA dibatalkan.</small>`,
                           icon: 'warning',
                           showCancelButton: true,
                           confirmButtonColor: '#d32f2f',
@@ -1305,10 +1313,12 @@
       }
 
       // Konfirmasi hapus kelas via SweetAlert
-      function confirmDeleteClass(id, name) {
+      function confirmDeleteClass(el) {
+          const id = el.dataset.id;
+          const name = el.dataset.name;
           Swal.fire({
               title: 'Hapus Kelas?',
-              html: `Kelas <strong>${name}</strong> beserta seluruh mahasiswanya akan dihapus permanen.<br><small class="text-muted">Aksi ini tidak bisa dibatalkan.</small>`,
+              html: `Kelas <strong>${escHtml(name)}</strong> beserta seluruh mahasiswanya akan dihapus permanen.<br><small class="text-muted">Aksi ini tidak bisa dibatalkan.</small>`,
               icon: 'warning',
               showCancelButton: true,
               confirmButtonColor: '#d81b60',

@@ -108,18 +108,48 @@ router.get(
 
     const allStudents = await sbSelect("students");
 
+    // Untuk kartu yang terdaftar tapi bukan di kelas ini, cari nama kelas lain
+    // tempat mahasiswa itu terdaftar (agar dosen tahu asal kartunya).
+    const scannedStudentIds = state.sessionData.scannedList
+      .map((item) => {
+        const s = allStudents.find((st) => st.rfid_uid === item.uid);
+        return s ? s.student_id : null;
+      })
+      .filter((id) => id !== null);
+
+    const otherClassMap = {}; // student_id -> [class_name, ...]
+    if (scannedStudentIds.length > 0) {
+      const { data: ocRows } = await supabase
+        .from("class_students")
+        .select("student_id, classes(class_name)")
+        .in("student_id", scannedStudentIds);
+      (ocRows || []).forEach((r) => {
+        const name = r.classes && r.classes.class_name;
+        if (!name) return;
+        if (!otherClassMap[r.student_id]) otherClassMap[r.student_id] = [];
+        otherClassMap[r.student_id].push(name);
+      });
+    }
+
     const mappedSessionList = state.sessionData.scannedList.map((item) => {
       const student = allStudents.find((s) => s.rfid_uid === item.uid);
       const isWrongClass = student
         ? !studentsInClass.find((x) => x.student_id === student.student_id)
         : false;
+      const otherClasses = student
+        ? (otherClassMap[student.student_id] || []).filter(
+            (c) => c !== currentClass,
+          )
+        : [];
       return {
         id: item.id,
         uid: item.uid,
+        studentId: student ? student.student_id : null,
         name: student ? student.name : "Tidak Terdaftar",
         nim: student ? student.nim : "-",
         isRegistered: !!student,
         isWrongClass,
+        otherClasses,
       };
     });
 
@@ -262,7 +292,8 @@ router.post(
   requireRole(ROLES.DOSEN, ROLES.ADMIN),
   validate({ body: updateSettingsSchema }),
   asyncHandler((req, res) => {
-    const { status, mode, timer, threshold, current_class } = req.body;
+    const { status, mode, timer, threshold, threshold_custom, current_class } =
+      req.body;
     if (status) state.sessionData.status = status;
     if (mode) state.sessionData.mode = mode;
     if (timer) {
@@ -272,16 +303,29 @@ router.post(
         durasi_detik: state.sessionData.maxTime,
       });
     }
-    if (threshold && THRESHOLD_VALUES[threshold] !== undefined) {
-      state.sessionData.threshold = threshold;
-      publishCommand({
-        perintah: "set_threshold",
-        nilai: THRESHOLD_VALUES[threshold],
-      });
+    let thresholdSent = false;
+    if (threshold) {
+      let nilai;
+      if (threshold === "custom") {
+        const customVal = parseInt(threshold_custom);
+        if (Number.isInteger(customVal) && customVal > 0) {
+          nilai = customVal;
+          state.sessionData.threshold = "custom";
+          state.sessionData.thresholdCustom = customVal;
+        }
+      } else if (THRESHOLD_VALUES[threshold] !== undefined) {
+        nilai = THRESHOLD_VALUES[threshold];
+        state.sessionData.threshold = threshold;
+        state.sessionData.thresholdCustom = null;
+      }
+      if (nilai !== undefined) {
+        publishCommand({ perintah: "set_threshold", nilai });
+        thresholdSent = true;
+      }
     }
     // Popup konfirmasi "terkirim" hanya untuk pengiriman ke alat (timer /
     // ambang kebisingan), bukan perubahan status/mode sesi.
-    if (req.session && (timer || threshold)) {
+    if (req.session && (timer || thresholdSent)) {
       req.session.flashSuccess = timer
         ? "Durasi bicara berhasil dikirim ke alat."
         : "Ambang kebisingan ruangan berhasil dikirim ke alat.";
@@ -528,6 +572,29 @@ router.post(
           }
         }
       } catch (err) {}
+    } else if (action === "add_to_class" && current_class) {
+      // Mahasiswa sudah terdaftar di kelas lain; tautkan ke kelas ini.
+      try {
+        const sid = toInt(Array.isArray(student_id) ? student_id[0] : student_id);
+        const clsRows = await sbSelect(
+          "classes",
+          { class_name: current_class },
+          "class_id",
+        );
+        if (sid && sid > 0 && clsRows.length > 0) {
+          const classId = clsRows[0].class_id;
+          const existing = await sbSelect("class_students", {
+            student_id: sid,
+            class_id: classId,
+          });
+          if (existing.length === 0) {
+            await sbInsert("class_students", {
+              student_id: sid,
+              class_id: classId,
+            });
+          }
+        }
+      } catch (err) {}
     } else if (action === "add_date" && current_class) {
       try {
         const { data: logs } = await supabase
@@ -621,6 +688,51 @@ router.post(
       success: true,
       message: "Permintaan sync audio WAV dikirim ke alat.",
     });
+  }),
+);
+
+// POLLING: scan kartu terbaru sejak id tertentu (untuk assign RFID dari
+// daftar kelas). Sama seperti versi admin — sumbernya state global yang
+// diisi handler MQTT, jadi dosen & admin berbagi antrean scan yang sama.
+router.get(
+  "/dosen/last-scan",
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  asyncHandler(async (req, res) => {
+    const since = parseInt(req.query.since || "0", 10) || 0;
+    const baru = state.sessionData.scannedList.filter((s) => s.id > since);
+    const scan =
+      baru.length > 0 ? baru.reduce((a, b) => (a.id > b.id ? a : b)) : null;
+    res.json({
+      counter: state.scanCounter,
+      scan: scan ? { id: scan.id, uid: scan.uid } : null,
+    });
+  }),
+);
+
+// ASSIGN UID HASIL SCAN KE MAHASISWA (RFID yang tadinya kosong)
+router.post(
+  "/dosen/assign-rfid",
+  requireRole(ROLES.DOSEN, ROLES.ADMIN),
+  asyncHandler(async (req, res) => {
+    const { student_id, uid } = req.body;
+    const sid = toInt(student_id);
+    if (!sid || !uid) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Data tidak lengkap." });
+    }
+    const used = await sbSelect("students", { rfid_uid: uid });
+    if (used.some((s) => s.student_id !== sid)) {
+      return res.status(409).json({
+        ok: false,
+        message: "Kartu RFID ini sudah dipakai mahasiswa lain.",
+      });
+    }
+    await sbUpdate("students", { student_id: sid }, { rfid_uid: uid });
+    state.sessionData.scannedList = state.sessionData.scannedList.filter(
+      (s) => s.uid !== uid,
+    );
+    res.json({ ok: true });
   }),
 );
 
