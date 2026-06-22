@@ -595,6 +595,7 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
     size_t terkirim = 0;
     unsigned long lastPrint = millis();
     unsigned long lastLcdUpdate = 0;
+    unsigned long lastMqttKeep = millis();
 
     while (f.available()) {
         size_t baca = f.read(chunkBuf, CHUNK);
@@ -627,6 +628,15 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
                 (unsigned int)terkirim, (unsigned int)ukuranFile,
                 ukuranFile > 0 ? ((float)terkirim / ukuranFile * 100.0f) : 0.0f);
             lastPrint = millis();
+        }
+
+        // Jaga koneksi MQTT tetap hidup selama upload panjang (keepAlive 15s).
+        // mqttClient memakai espClient yang TERPISAH dari httpClient di sini,
+        // jadi memanggil loop() tidak mengganggu byte stream upload. Tanpa ini
+        // sesi MQTT putus saat upload >~15s dan status "selesai" gagal terkirim.
+        if (millis() - lastMqttKeep >= 3000) {
+            lastMqttKeep = millis();
+            if (mqttClient.connected()) mqttClient.loop();
         }
     }
 
@@ -664,6 +674,11 @@ static int kirimAudioHTTP(const String& namaFile, const String& targetKelas, int
                 Serial.printf("HTTP %d untuk: %s\n", httpCode, namaFile.c_str());
                 break;
             }
+        }
+        // Tetap servis MQTT selama menunggu respons server (bisa sampai 15s).
+        if (millis() - lastMqttKeep >= 3000) {
+            lastMqttKeep = millis();
+            if (mqttClient.connected()) mqttClient.loop();
         }
         delay(10);
     }
@@ -1092,6 +1107,8 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
 
     Serial.printf("📦 Total audio: %d file\n", total);
     lcdSyncMsg("AUDIO DITEMUKAN", "TOTAL: " + String(total) + " FILE");
+    // Beri tahu web jumlah file audio agar progress bar mulai bergerak.
+    kirimStatusSync("progress", "Menyiapkan audio...", total, 0);
     delay(600);
 
     for (int i = 0; i < total; i++) {
@@ -1123,6 +1140,10 @@ void prosesSinkronisasiAudio(const String& targetKelas) {
 
             berhasil++;
             Serial.printf("🗑️  Progress: %d/%d\n", berhasil, total);
+            // Laporkan progress ke web (handler memetakan "progress" -> loading).
+            kirimStatusSync("progress",
+                "Audio terkirim " + String(berhasil) + "/" + String(total),
+                total, berhasil);
         } else {
             Serial.printf("❌ Gagal upload: %s (HTTP %d)\n", nama.c_str(), httpCode);
 

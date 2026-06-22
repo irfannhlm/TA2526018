@@ -656,16 +656,12 @@ router.post(
       return res
         .status(500)
         .json({ success: false, message: "Gagal menghubungi alat." });
-    // Susul perintah sync WAV beberapa detik kemudian.
-    setTimeout(() => {
-      publishCommand({
-        perintah: "request_sync_wav",
-        target_kelas: current_class,
-      });
-    }, 2000);
+    // Hanya memicu fase TXT. Fase WAV dipicu terpisah oleh web (lewat
+    // /dosen/request-wav-sync) SETELAH fase TXT selesai, agar progress kedua
+    // fase terlihat sebagai satu proses dan tidak menutup modal di tengah.
     res.json({
       success: true,
-      message: "Permintaan sync metadata & audio dikirim ke alat.",
+      message: "Permintaan sync metadata (TXT) dikirim ke alat.",
     });
   }),
 );

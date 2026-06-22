@@ -1453,6 +1453,76 @@
         }
       }
 
+      // Update bar + teks info saat status "loading" (satu bar gabungan).
+      function renderSyncLoading(s, contextLabel) {
+        const bar  = document.getElementById('swal-sync-bar');
+        const info = document.getElementById('swal-sync-info');
+        const pct = s.total > 0 ? Math.round((s.berhasil / s.total) * 100) : 15;
+        if (bar)  bar.style.width = pct + '%';
+        if (info) info.innerHTML  =
+          s.total > 0
+            ? `<i class="fas fa-spinner fa-spin me-1"></i> ${contextLabel} ${s.berhasil} / ${s.total}...`
+            : `<i class="fas fa-spinner fa-spin me-1"></i> ${s.pesan || contextLabel + '...'}`;
+      }
+
+      // Polling /api/sync-status sampai "settle" (done/error/cancelled).
+      // Resolve dengan objek status terakhir; tidak menampilkan modal apa pun
+      // (pemanggil yang memutuskan), agar bisa dirangkai antar-fase.
+      function pollSyncUntilSettled(contextLabel) {
+        return new Promise((resolve) => {
+          stopSyncPolling();
+          syncPollInterval = setInterval(async () => {
+            try {
+              const res = await fetch('/api/sync-status', { cache: 'no-store' });
+              if (!res.ok) return;
+              const s = await res.json();
+              if (s.state === 'loading') {
+                renderSyncLoading(s, contextLabel);
+              } else if (s.state === 'done' || s.state === 'error' || s.state === 'cancelled') {
+                stopSyncPolling();
+                resolve(s);
+              }
+            } catch (e) { /* silent, coba lagi di tick berikutnya */ }
+          }, 2000); // polling tiap 2 detik
+        });
+      }
+
+      // Kirim perintah sync ke ESP. Return true bila server menerima.
+      async function triggerSync(endpoint) {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({ current_class: CURRENT_CLASS })
+        });
+        const data = await res.json();
+        return !!(data && data.success);
+      }
+
+      // Tampilkan modal gagal/dibatalkan dari status sync.
+      function showSyncFailure(s) {
+        stopSyncPolling();
+        if (s.state === 'cancelled') {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Sinkronisasi Dibatalkan',
+            text: s.pesan || 'Proses dihentikan oleh perangkat.',
+            confirmButtonColor: '#d81b60',
+            confirmButtonText: 'Tutup',
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Sinkronisasi Gagal',
+            html: `
+              <div class="text-muted mb-2">${s.pesan || 'Terjadi kesalahan pada perangkat.'}</div>
+              ${s.total > 0 ? `<div class="text-muted small">Progress terakhir: ${s.berhasil} / ${s.total} file</div>` : ''}
+            `,
+            confirmButtonColor: '#d81b60',
+            confirmButtonText: 'Tutup',
+          });
+        }
+      }
+
       async function confirmAudioSync() {
         const result = await Swal.fire({
           title: 'Minta File Rekaman',
@@ -1467,10 +1537,7 @@
 
         if (!result.isConfirmed) return;
 
-        // Reset status di server lalu kirim request ke ESP
-        await fetch('/api/sync-status/reset', { method: 'POST' });
-
-        // Tampilkan loading Swal (tidak bisa ditutup user)
+        // Tampilkan loading Swal (satu bar untuk seluruh proses TXT + WAV)
         Swal.fire({
           title: '<i class="fas fa-satellite-dish me-2" style="color:#d81b60;"></i>Menghubungi Perangkat',
           html: `
@@ -1486,93 +1553,55 @@
           didOpen: () => Swal.showLoading(),
         });
 
-        // Kirim request ke ESP32
         try {
-          const res = await fetch('/dosen/request-audio-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ current_class: CURRENT_CLASS })
-          });
-          const data = await res.json();
-          if (!data.success) {
+          // ---------- FASE 1: METADATA (TXT) ----------
+          await fetch('/api/sync-status/reset', { method: 'POST' });
+          if (!(await triggerSync('/dosen/request-audio-sync'))) {
             stopSyncPolling();
-            Swal.fire({ icon: 'error', title: 'Gagal Mengirim!', text: data.message || 'Tidak dapat menghubungi perangkat.', confirmButtonColor: '#d81b60' });
+            Swal.fire({ icon: 'error', title: 'Gagal Mengirim!', text: 'Tidak dapat menghubungi perangkat.', confirmButtonColor: '#d81b60' });
             return;
           }
+          const txt = await pollSyncUntilSettled('Metadata');
+          if (txt.state !== 'done') { showSyncFailure(txt); return; }
+
+          // ---------- FASE 2: AUDIO (WAV) ----------
+          await fetch('/api/sync-status/reset', { method: 'POST' });
+          if (!(await triggerSync('/dosen/request-wav-sync'))) {
+            stopSyncPolling();
+            Swal.fire({ icon: 'error', title: 'Gagal Mengirim!', text: 'Tidak dapat memicu sinkronisasi audio.', confirmButtonColor: '#d81b60' });
+            return;
+          }
+          const wav = await pollSyncUntilSettled('Audio');
+          if (wav.state !== 'done') { showSyncFailure(wav); return; }
+
+          // ---------- SELESAI: jumlah gabungan TXT + WAV ----------
+          const totalAll    = (txt.total || 0)    + (wav.total || 0);
+          const berhasilAll = (txt.berhasil || 0) + (wav.berhasil || 0);
+          const bar = document.getElementById('swal-sync-bar');
+          if (bar) bar.style.width = '100%';
+          Swal.fire({
+            icon: 'success',
+            title: 'Sinkronisasi Selesai!',
+            html: `
+              <div class="text-muted mb-2">Semua file (metadata & audio) berhasil diterima dari perangkat.</div>
+              <div class="d-flex justify-content-center gap-4 mt-3">
+                <div class="text-center">
+                  <div style="font-size:1.8rem;font-weight:700;color:#d81b60;">${totalAll}</div>
+                  <div class="text-muted small">Total File</div>
+                </div>
+                <div class="text-center">
+                  <div style="font-size:1.8rem;font-weight:700;color:#2e7d32;">${berhasilAll}</div>
+                  <div class="text-muted small">Berhasil</div>
+                </div>
+              </div>
+            `,
+            confirmButtonColor: '#d81b60',
+            confirmButtonText: 'Tutup',
+          });
         } catch (e) {
           stopSyncPolling();
           Swal.fire({ icon: 'error', title: 'Error!', text: 'Tidak dapat terhubung ke server.', confirmButtonColor: '#d81b60' });
-          return;
         }
-
-        // Mulai polling status sync dari server
-        stopSyncPolling();
-        syncPollInterval = setInterval(async () => {
-          try {
-            const res = await fetch('/api/sync-status', { cache: 'no-store' });
-            if (!res.ok) return;
-            const s = await res.json();
-
-            const bar  = document.getElementById('swal-sync-bar');
-            const info = document.getElementById('swal-sync-info');
-
-            if (s.state === 'loading') {
-              // Hitung progress bar
-              const pct = s.total > 0 ? Math.round((s.berhasil / s.total) * 100) : 15;
-              if (bar)  bar.style.width  = pct + '%';
-              if (info) info.innerHTML   =
-                s.total > 0
-                  ? `<i class="fas fa-spinner fa-spin me-1"></i> Mengunduh file ${s.berhasil} / ${s.total}...`
-                  : `<i class="fas fa-spinner fa-spin me-1"></i> ${s.pesan || 'Sedang memproses...'}`;
-
-            } else if (s.state === 'done') {
-              stopSyncPolling();
-              Swal.fire({
-                icon: 'success',
-                title: 'Sinkronisasi Selesai!',
-                html: `
-                  <div class="text-muted mb-2">Semua file berhasil diterima dari perangkat.</div>
-                  <div class="d-flex justify-content-center gap-4 mt-3">
-                    <div class="text-center">
-                      <div style="font-size:1.8rem;font-weight:700;color:#d81b60;">${s.total}</div>
-                      <div class="text-muted small">Total File</div>
-                    </div>
-                    <div class="text-center">
-                      <div style="font-size:1.8rem;font-weight:700;color:#2e7d32;">${s.berhasil}</div>
-                      <div class="text-muted small">Berhasil</div>
-                    </div>
-                  </div>
-                  ${s.pesan ? `<div class="mt-3 text-muted" style="font-size:0.82rem;">${s.pesan}</div>` : ''}
-                `,
-                confirmButtonColor: '#d81b60',
-                confirmButtonText: 'Tutup',
-              });
-
-            } else if (s.state === 'error') {
-              stopSyncPolling();
-              Swal.fire({
-                icon: 'error',
-                title: 'Sinkronisasi Gagal',
-                html: `
-                  <div class="text-muted mb-2">${s.pesan || 'Terjadi kesalahan pada perangkat.'}</div>
-                  ${s.total > 0 ? `<div class="text-muted small">Progress terakhir: ${s.berhasil} / ${s.total} file</div>` : ''}
-                `,
-                confirmButtonColor: '#d81b60',
-                confirmButtonText: 'Tutup',
-              });
-
-            } else if (s.state === 'cancelled') {
-              stopSyncPolling();
-              Swal.fire({
-                icon: 'warning',
-                title: 'Sinkronisasi Dibatalkan',
-                text: s.pesan || 'Proses dihentikan oleh perangkat.',
-                confirmButtonColor: '#d81b60',
-                confirmButtonText: 'Tutup',
-              });
-            }
-          } catch (e) { /* silent */ }
-        }, 2000); // polling tiap 2 detik
       }
 
       // =========================================================
