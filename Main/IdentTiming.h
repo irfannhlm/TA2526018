@@ -1,4 +1,4 @@
-// IdentTiming.h — Final, Serial Monitor only
+// IdentTiming.h
 // Pengukur kecepatan identifikasi RFID
 // T1 = scanUID() return non-empty
 // T2 = tepat sebelum buzzer/state change

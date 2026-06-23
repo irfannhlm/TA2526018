@@ -171,8 +171,8 @@ static const unsigned long RECORDING_THROW_TAIL_TRIM_MS  = 700UL; // tangkapan (
 static const unsigned long RECORDING_MANUAL_TAIL_TRIM_MS = 600UL; // klik + 300ms CLICK_EVALUATE_MS sebelum loop berhenti
 
 static const unsigned long VAD_IMPACT_MUTE_MS = 320UL;
-static const unsigned long VAD_RECORD_MIN_SILENCE_MS = 600UL;
-static const unsigned long VAD_RECORD_SPEECH_CONFIRM_MS = 160UL;
+static const unsigned long VAD_RECORD_MIN_SILENCE_MS = 1350UL;
+static const unsigned long VAD_RECORD_SPEECH_CONFIRM_MS = 200UL;
 
 static int16_t recordingGainBuffer[RECORDING_CAPTURE_SAMPLES];
 
@@ -949,7 +949,7 @@ float processAudioBufferVAD(
         hpf_prev_in = sample;
         hpf_prev_out = filtered;
 
-        // Hard limiter untuk mencegah clipping overflow saat konversi ke int16.
+        // Hard limiter untuk mencegah clipping overflow
         if (filtered > 32700) filtered = 32700;
         if (filtered < -32700) filtered = -32700;
 

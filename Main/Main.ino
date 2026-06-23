@@ -1321,12 +1321,12 @@ void loop() {
             }
 
             // CEK 3: Apakah dia sudah bicara di sesi lokal SAAT INI
-            // else if (cekHistory(idKartu)) {
-            //   identTimer_stop(DEC_INVALID);
-            //   playBuzzer(2, 80, 80);
-            //   stateTimer = millis();
-            //   state = INVALID; 
-            // } 
+            else if (cekHistory(idKartu)) {
+              // identTimer_stop(DEC_INVALID);
+              playBuzzer(2, 80, 80);
+              stateTimer = millis();
+              state = INVALID; 
+            } 
 
             // LOLOS SEMUA CEK: Izinkan Merekam
             else {

@@ -853,12 +853,12 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         sdAckBatalkan = true;
     }
     else if (perintah == "set_timer") {
-        int durasi_detik = doc["durasi_detik"] | 0;
+        float durasi_menit = doc["durasi_detik"] | 0.0f;   // baca sebagai float, bukan int
 
-        Serial.printf("⏱️ set_timer diterima: %d detik\n", durasi_detik);
+        Serial.printf("⏱️ set_timer diterima: %.2f menit\n", durasi_menit);
 
-        if (durasi_detik > 0) {
-            maxRecordMs = durasi_detik * 1000UL;
+        if (durasi_menit > 0.0f) {
+            maxRecordMs = (unsigned long)(durasi_menit * 60.0f * 1000.0f);
 
             Preferences prefs;
             prefs.begin("catch_note", false);
