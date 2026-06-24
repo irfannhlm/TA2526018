@@ -35,7 +35,7 @@ bool isWifiPortalActive() {
 void bukaPortal() {
 
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("CatchNote");
+  WiFi.softAP("CatchNote1");
   IPAddress apIP = WiFi.softAPIP();
   dnsServer.start(DNS_PORT, "*", apIP);
 

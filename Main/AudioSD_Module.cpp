@@ -164,7 +164,7 @@ static const float VAD_THUMP_PEAK_MULT  = 30.0f;
 static const float VAD_THUMP_ZCR_MAX    = 0.070f;
 static const float VAD_THUMP_CREST_MAX  = 3.5f;
 static const float VAD_HIGH_ZCR_THRESHOLD_MULT = 1.8f;
-static const float RECORDING_WAV_GAIN = 3.0f;
+static const float RECORDING_WAV_GAIN = 2.0f;
 
 // Tail trim: potong noise di ekor rekaman (gedebuk tangkapan / klik tombol stop manual)
 static const unsigned long RECORDING_THROW_TAIL_TRIM_MS  = 700UL; // tangkapan (gedebuk) bisa memantul/lag queue

@@ -358,7 +358,7 @@ void masukModeDebug() {
   delay(300);
 
   lcd.clear();
-  lcdPrint16(0, "WIFI: CatchNote");
+  lcdPrint16(0, "WIFI: CatchNote1");
   lcdPrint16(1, "IP: 192.168.4.1");
 
   bukaPortal(); 
